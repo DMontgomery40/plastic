@@ -350,7 +350,7 @@ def main() -> None:
     import torch  # noqa
 
     from plastic.backends.qwen import QwenBackend, _checkpoint_digest
-    from plastic.harness.calibrate import CalibrationIncomplete, calibrate_qwen
+    from plastic.harness.calibrate import CalibrationCheckpointError, CalibrationIncomplete, calibrate_qwen
     from plastic.harness.config import HarnessConfig
     from plastic.store import ArtifactStore
 
@@ -390,6 +390,11 @@ def main() -> None:
         cal = calibrate_qwen(store, mid, [r["prompt"] for r in split["fit"]], cusum_prompts=[r["prompt"] for r in split["cusum"]],
                              target_fpr=0.01, max_new_tokens=args.max_new_tokens, seed=seed, device=args.device,
                              deadline=deadline, checkpoint_path=ckpt_path, corpus_hash=manifest["corpus_hash"])
+    except CalibrationCheckpointError as err:
+        # an existing checkpoint is for a different config/corpus or is corrupt: it is preserved, not
+        # overwritten. Point --out at a fresh directory (or remove the stale file) to start clean.
+        print(f"[oppoint] calibration checkpoint conflict: {err}")
+        return
     except CalibrationIncomplete as inc:
         status = {"calibration_incomplete": True, "phase": inc.phase,
                   "fit": [inc.fit_used, inc.fit_requested], "cusum": [inc.cusum_used, inc.cusum_requested],

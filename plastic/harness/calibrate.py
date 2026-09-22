@@ -413,9 +413,47 @@ class CalibrationIncomplete(Exception):
         )
 
 
+class CalibrationCheckpointError(Exception):
+    """Raised when a checkpoint at ``checkpoint_path`` is present but incompatible (different model,
+    corpus, seed or config), unreadable, or malformed. The existing file is left UNTOUCHED so the
+    incremental work it may hold is never lost to an overwrite; an explicit fresh run must point at a
+    different ``checkpoint_path`` (or remove the stale one deliberately)."""
+
+
 def _stable_hash(obj: Any) -> str:
     """Order-sensitive digest of a JSON-able structure (lists keep order, dict keys are sorted)."""
     return hashlib.sha256(json.dumps(obj, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+
+def _validate_checkpoint(st: dict[str, Any], path: str, identity: str, fit_requested: int, cusum_requested: int) -> None:
+    """Reject an incompatible or malformed checkpoint BEFORE any write, so a stale/corrupt file is
+    preserved rather than silently overwritten or trusted. Covers identity, phase, counter types and
+    ranges, requested-count consistency, and the carried state a mid-CUSUM resume requires."""
+    def bad(msg: str) -> None:
+        raise CalibrationCheckpointError(
+            f"checkpoint at {path} {msg}; refusing to overwrite it. Use a fresh checkpoint_path "
+            f"(or remove the stale file deliberately).")
+
+    if st.get("identity") != identity:
+        bad("is for a different model/corpus/seed/config (identity mismatch)")
+    if st.get("phase") not in ("fit", "cusum"):
+        bad(f"has an invalid phase {st.get('phase')!r}")
+    if not isinstance(st.get("records"), list):
+        bad("has a malformed records list")
+    for key in ("fit_used", "cusum_used", "n_transactions", "fit_requested", "cusum_requested"):
+        v = st.get(key)
+        if not isinstance(v, int) or isinstance(v, bool) or v < 0:
+            bad(f"has a non-integer/negative {key}={v!r}")
+    if st["fit_requested"] != fit_requested or st["cusum_requested"] != cusum_requested:
+        bad(f"has inconsistent requested counts (fit {st['fit_requested']} vs {fit_requested}, "
+            f"cusum {st['cusum_requested']} vs {cusum_requested})")
+    fit_used, cusum_used, phase = int(st["fit_used"]), int(st["cusum_used"]), st["phase"]
+    if fit_used > fit_requested or cusum_used > cusum_requested:
+        bad(f"has out-of-range counters (fit {fit_used}/{fit_requested}, cusum {cusum_used}/{cusum_requested})")
+    if phase == "fit" and cusum_used != 0:
+        bad(f"is in the fit phase but records cusum_used={cusum_used}")
+    if phase == "cusum" and cusum_used > 0 and st.get("runner_state") is None:
+        bad("is mid-CUSUM (cusum_used>0) but is missing the carried runner state")
 
 
 def _calibration_identity(*, model_signature: str, seed: int, gen: dict[str, Any], target_fpr: float,
@@ -462,16 +500,23 @@ def _collect_calibration_records(runner, tok, prompts: list[str], cusum_prompts:
     With a ``checkpoint_path`` a deadline persists progress and raises ``CalibrationIncomplete``;
     without one it breaks and returns partial records — the existing un-checkpointed behavior."""
     fit_requested, cusum_requested = len(prompts), len(cusum_prompts)
-    st = _ckpt_load(checkpoint_path, log=log) if checkpoint_path else None
-    if st is not None and st.get("identity") != identity:
-        log("[calibrate] checkpoint identity mismatch (different model/corpus/config); starting fresh")
-        st = None
+    st = None
+    if checkpoint_path and os.path.exists(checkpoint_path):
+        st = _ckpt_load(checkpoint_path, log=log)
+        if st is None:  # present but unreadable/corrupt: preserve it, never overwrite blindly
+            raise CalibrationCheckpointError(
+                f"checkpoint at {checkpoint_path} is unreadable/corrupt; refusing to overwrite it. "
+                f"Move it aside or use a fresh checkpoint_path.")
+        _validate_checkpoint(st, checkpoint_path, identity, fit_requested, cusum_requested)
     if st is None:
         phase, records, fit_used, cont, cusum_used = "fit", [], 0, [], 0
     else:
         phase = str(st["phase"])
         records, fit_used = list(st["records"]), int(st["fit_used"])
         cont, cusum_used = list(st["cont"]), int(st["cusum_used"])
+        # restore the transaction counter so resumed records keep the SAME global indices as an
+        # uninterrupted run (reset() deliberately does not clear it, so a fresh process starts at 0)
+        runner.n_transactions = int(st["n_transactions"])
 
     def _chat(prompt: str, salt: int) -> None:
         runner.transactions = []
@@ -485,6 +530,7 @@ def _collect_calibration_records(runner, tok, prompts: list[str], cusum_prompts:
         _ckpt_save(checkpoint_path, {
             "identity": identity, "phase": phase, "records": records, "fit_used": fit_used,
             "cont": cont, "cusum_used": cusum_used, "runner_state": runner_state,
+            "n_transactions": int(runner.n_transactions),
             "fit_requested": fit_requested, "cusum_requested": cusum_requested,
         })
 
@@ -517,14 +563,10 @@ def _collect_calibration_records(runner, tok, prompts: list[str], cusum_prompts:
 
     # ---- CUSUM: one CONTINUOUS multi-turn chat (no reset); resume restores the runner state ----
     if phase == "cusum" and cusum_used > 0:
-        rs = st.get("runner_state") if st is not None else None
-        if rs is not None:
-            runner.load_state_dict(rs)
-        else:  # a cusum checkpoint without carried state cannot preserve continuity: restart cleanly
-            runner.reset()
-            cont, cusum_used = [], 0
+        runner.load_state_dict(st["runner_state"])  # validated present above; carries n_transactions too
     else:
-        runner.reset()
+        runner.reset()  # fresh CUSUM (fit just completed, or resuming the phase-transition checkpoint);
+        # reset() preserves n_transactions, so the CONTINUOUS records keep counting on from the fit pass
     while cusum_used < cusum_requested:
         if _stop("cusum", runner_state=(runner.state_dict() if cusum_used > 0 else None)):
             break
