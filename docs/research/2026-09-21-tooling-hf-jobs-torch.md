@@ -70,8 +70,8 @@ Docker-image route (image has torch+CUDA preinstalled, so startup is fast):
 hf jobs run --flavor l4x1 --timeout 2h --secrets HF_TOKEN --detach \
   -v hf://buckets/DMontgomery40/ttt-runs:/out \
   pytorch/pytorch:2.12.1-cuda12.6-cudnn9-devel \
-  bash -lc 'git clone https://github.com/DMontgomery40/ttt_ssm_eval.git /w && cd /w && pip install -q -e . \
-            && python -m ttt.text_lm.train --corpus README.md --device cuda --steps 2000 --out /out/$JOB_ID'
+  bash -lc 'git clone https://github.com/DMontgomery40/plastic.git /w && cd /w && pip install -q -e . \
+            && python -m plastic.cli train text --data /out/data/wikitext --artifacts-root /out/artifacts --device cuda --steps 2000'
 ```
 
 uv-script route (default image `ghcr.io/astral-sh/uv:python3.12-bookworm`; the local file is uploaded to a temporary repo at submit time and shipped into the container):

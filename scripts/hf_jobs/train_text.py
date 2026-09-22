@@ -32,7 +32,7 @@ def main() -> None:
     t0 = time.time()
     os.environ.setdefault("PIP_BREAK_SYSTEM_PACKAGES", "1")  # Debian-managed Python inside the container
     src_dir = os.environ.get("SRC_DIR", "")
-    repo_url = os.environ.get("REPO_URL", "https://github.com/DMontgomery40/ttt_ssm_eval.git")
+    repo_url = os.environ.get("REPO_URL", "https://github.com/DMontgomery40/plastic.git")
     repo_ref = os.environ.get("REPO_REF", "fuse")
     out_dir = os.environ.get("OUT_DIR", "/out")
     corpus = os.environ.get("CORPUS", "wikitext")

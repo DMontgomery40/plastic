@@ -125,26 +125,62 @@ def thresholds_from_records(records: list[dict[str, Any]], *, target_fpr: float)
     return thresholds, achievable
 
 
-def calibrated_cusum_h(records: list[dict[str, Any]], reference: dict[str, list[float]], *, k: float, h_min: float) -> float | None:
-    """Largest two-sided CUSUM statistic reached on the calibration stream (z against the
-    fixed reference), scaled up: the in-control stream must not alarm."""
+def calibrated_cusum_h(
+    records: list[dict[str, Any]], reference: dict[str, list[float]], *, k: float, h_min: float, target_fpr: float
+) -> tuple[float, float] | None:
+    """Calibrate the CUSUM alarm threshold as a benign run-length, not a walk endpoint.
+
+    The two-sided CUSUM resets to zero every time it alarms, so ``h`` controls the *rate*
+    at which the in-control stream alarms — not the peak it reaches. We replay the benign
+    reference z-sequence (of ``log_delta_norm``) through the real ``Cusum(k, h)`` for a grid
+    of candidate ``h``, count alarms, and return the smallest ``h`` whose benign per-chunk
+    alarm rate is at or below ``target_fpr``, together with that achieved rate. This is the
+    same order-statistic discipline the per-chunk thresholds use, so ``cusum_h`` means what
+    the rest of the calibration means. (The old heuristic took ``1.25 * peak`` of a
+    never-resetting walk, which is not a quantile of anything and let a benign continuous
+    stream alarm within tens of chunks.)
+    """
     from plastic.harness.stats import Cusum, robust_z
 
     ref = reference.get("log_delta_norm")
     if not ref:
         return None
-    c = Cusum(k, float("inf"))
-    peak = 0.0
+    zs: list[float] = []
     for r in records:
         v = r.get("log_delta_norm")
         if v is None:
             continue
         z = robust_z(float(v), ref)
-        if z is None:
+        if z is not None:
+            zs.append(float(z))
+    if not zs:
+        return None
+    n = len(zs)
+
+    def alarm_rate(h: float) -> float:
+        c = Cusum(k, h)
+        return sum(1 for z in zs if c.update(z)) / n
+
+    # Upper bound for the search: the peak of a never-resetting walk can never be exceeded
+    # by the resetting statistic, so no candidate above it can help.
+    s_hi = s_lo = peak = 0.0
+    for z in zs:
+        s_hi = max(0.0, s_hi + z - k)
+        s_lo = max(0.0, s_lo - z - k)
+        peak = max(peak, s_hi, s_lo)
+    hi = max(float(h_min), peak + 1.0)
+    # Smallest h on a fine grid whose benign alarm rate is within target.
+    steps = 200
+    best_h, best_rate = hi, alarm_rate(hi)
+    for i in range(steps + 1):
+        h = float(h_min) + (hi - float(h_min)) * i / steps
+        if h < float(h_min):
             continue
-        c.update(z)
-        peak = max(peak, c.s_hi, c.s_lo)
-    return max(float(h_min), 1.25 * peak + 0.5)
+        rate = alarm_rate(h)
+        if rate <= target_fpr:
+            best_h, best_rate = h, rate
+            break
+    return best_h, best_rate
 
 
 def calibrate_from_runner(
@@ -202,9 +238,9 @@ def calibrate_from_runner(
         if vals:
             baseline[key.replace("_before", "")] = sum(vals) / len(vals)
     thresholds, achievable = thresholds_from_records(records, target_fpr=target_fpr)
-    h = calibrated_cusum_h(records, reference, k=runner.hcfg.cusum_k, h_min=runner.hcfg.cusum_h)
-    if h is not None:
-        thresholds["cusum_h"] = h
+    ch = calibrated_cusum_h(records, reference, k=runner.hcfg.cusum_k, h_min=runner.hcfg.cusum_h, target_fpr=target_fpr)
+    if ch is not None:
+        thresholds["cusum_h"], achievable["cusum_h"] = ch
     return Calibration(
         model_signature=model_signature,
         n_chunks=len(records),

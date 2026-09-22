@@ -47,7 +47,7 @@ Non-goals:
 
 ## 3. Naming
 
-Repo and package: **`plastic`**. Rationale: the codebase already calls learnable inference-time state "plastic weights"; the word names both the architecture (weights that change at test time) and the thing the harness governs. "Test-time training" and "state space model" stay in the repo description, README title line, and GitHub topics for discoverability. GitHub repo `DMontgomery40/ttt_ssm_eval` is renamed to `DMontgomery40/plastic` in the final milestone (GitHub redirects the old URL); the local remote is updated; the local directory is not moved during the session.
+Repo and package: **`plastic`**. Rationale: the codebase already calls learnable inference-time state "plastic weights"; the word names both the architecture (weights that change at test time) and the thing the harness governs. "Test-time training" and "state space model" stay in the repo description, README title line, and GitHub topics for discoverability. GitHub repo `DMontgomery40/ttt_ssm_eval` was renamed to `DMontgomery40/plastic` in the final milestone (GitHub redirects the old URL); the local remote was updated; the local directory was not moved.
 
 Language rules: no "legacy", "v1", "backward compatibility", or schema-version fields. Compatibility is guarded only by `model_signature = sha256(config JSON || checkpoint bytes)` on session load.
 

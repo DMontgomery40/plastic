@@ -1,6 +1,25 @@
 {
-  "schema_version": 1,
   "sessions": {
+    "phys_1790052474": {
+      "budget_used": 0.0,
+      "commits": 0,
+      "created_at_unix": 1790052474,
+      "domain": "physics",
+      "forked_at_pos": null,
+      "model_id": "phys_mps_3k",
+      "n_transactions": 2,
+      "parent_session_id": null,
+      "pos": 128,
+      "projects": 0,
+      "read_only": false,
+      "read_only_reason": null,
+      "readonly": 0,
+      "rollbacks": 2,
+      "root_session_id": "phys_1790052474",
+      "scales": 0,
+      "session_id": "phys_1790052474",
+      "updated_at_unix": 1790052478
+    },
     "s1": {
       "created_at_unix": 1768677456,
       "env_mode": "linear",
