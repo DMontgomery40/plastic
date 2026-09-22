@@ -504,3 +504,31 @@ def calibrate_qwen(
     log(f"[calibrate] qwen {model_id}: {len(signals)} chunks ({prompt_chunks} prompt, {gen_chunks} generation); "
         + "thresholds: " + ", ".join(f"{k}={v:.4g}" for k, v in thresholds.items()))
     return cal
+
+
+def summarize_operating_point(transactions: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Per-source decision breakdown of a set of chat transactions.
+
+    Splits chunks by source — ``prompt`` (user tokens only) vs ``generation`` (any model-source
+    tokens; the chat protocol flushes the prompt before generation, so no chunk mixes the two) — and
+    reports, for each, the count of every decision kind, the number of interventions
+    (rollback/scale/project), and the intervention rate. The two sources are reported SEPARATELY and
+    never pooled, so a prompt-side operating point stays distinguishable from a generation-side one.
+    This is a measurement over recorded decisions, not a calibrated-performance or safety claim.
+    """
+    kinds = ("commit", "rollback", "scale", "project", "readonly")
+    out: dict[str, dict[str, Any]] = {
+        src: {"chunks": 0, "interventions": 0, "intervention_rate": None, **{k: 0 for k in kinds}}
+        for src in ("prompt", "generation")
+    }
+    for tx in transactions:
+        src = "generation" if tx.get("sources", {}).get("model", 0) > 0 else "prompt"
+        kind = tx["decision"]["kind"]
+        rec = out[src]
+        rec["chunks"] += 1
+        rec[kind] = rec.get(kind, 0) + 1
+        if kind in ("rollback", "scale", "project"):
+            rec["interventions"] += 1
+    for rec in out.values():
+        rec["intervention_rate"] = (rec["interventions"] / rec["chunks"]) if rec["chunks"] else None
+    return out

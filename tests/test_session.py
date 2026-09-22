@@ -191,3 +191,23 @@ def test_session_summary_surfaces_backend_and_signals(text_model):
     assert summ["backend"] == "plastic"
     assert tuple(summ["signals_available"]) == STAT_SIGNALS
     assert summ["calibration"] == "absent"  # this fixture registers no calibration
+
+
+def test_summarize_operating_point_separates_prompt_and_generation():
+    # per-source decision breakdown: prompt (user-only) vs generation (any model source), reported
+    # separately, with interventions = rollback/scale/project.
+    from plastic.harness.calibrate import summarize_operating_point
+
+    txns = [
+        {"sources": {"user": 8, "model": 0}, "decision": {"kind": "commit"}},
+        {"sources": {"user": 5, "model": 0}, "decision": {"kind": "rollback"}},
+        {"sources": {"user": 0, "model": 8}, "decision": {"kind": "commit"}},
+        {"sources": {"user": 0, "model": 2}, "decision": {"kind": "scale"}},
+        {"sources": {"user": 0, "model": 4}, "decision": {"kind": "readonly"}},
+    ]
+    rep = summarize_operating_point(txns)
+    assert rep["prompt"]["chunks"] == 2 and rep["prompt"]["interventions"] == 1 and rep["prompt"]["intervention_rate"] == 0.5
+    assert rep["generation"]["chunks"] == 3 and rep["generation"]["interventions"] == 1  # scale only
+    assert rep["generation"]["commit"] == 1 and rep["generation"]["scale"] == 1 and rep["generation"]["readonly"] == 1
+    empty = summarize_operating_point([])
+    assert empty["prompt"]["chunks"] == 0 and empty["prompt"]["intervention_rate"] is None
