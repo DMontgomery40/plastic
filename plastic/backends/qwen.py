@@ -20,6 +20,7 @@ sessions stay isolated.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import threading
 import types
@@ -29,6 +30,16 @@ from pathlib import Path
 from typing import Any
 
 import torch
+
+# Bumped when the persisted cache layout changes, so a session saved under an older layout is
+# rejected on load rather than silently mis-reconstructed.
+_CACHE_SCHEMA = "qwen-cache-v1"
+# Checkpoint files that define the model, tokenizer and chat template — hashed for the session
+# identity so a session saved under a different checkpoint/tokenizer/template is refused on load.
+_IDENTITY_FILES = (
+    "config.json", "chat_template.jinja", "tokenizer.json", "tokenizer_config.json",
+    "vocab.json", "model.safetensors.index.json",
+)
 
 # A genuine freeze zeroes the gated-delta kernel's write (beta) and log-decay (g) so the recurrent
 # memory stays exactly constant while conv/attention/position advance — matching plastic's
@@ -87,6 +98,28 @@ def _scaled(scale: float):
         _tls.beta_scale = prev
 
 
+def _checkpoint_digest(checkpoint_dir: str) -> str:
+    """A content digest of the checkpoint's defining files (config, tokenizer, chat template, and the
+    weight files) — computed ONCE at load, never per state operation. It binds a session's identity
+    to the actual model/tokenizer content, so loading a session saved under a different checkpoint,
+    a changed tokenizer, or an edited chat template is refused (ASTRA-066). The weight files are
+    included so same-shaped different weights are distinguished; this reads them once (~seconds)."""
+    p = Path(checkpoint_dir)
+    weights = sorted(f.name for f in p.glob("*.safetensors"))
+    h = hashlib.sha256()
+    for name in list(_IDENTITY_FILES) + weights:
+        f = p / name
+        if not f.exists():
+            h.update(f"MISSING:{name}\n".encode())
+            continue
+        fh = hashlib.sha256()
+        with open(f, "rb") as fp:
+            for block in iter(lambda: fp.read(1 << 20), b""):
+                fh.update(block)
+        h.update(f"{name}:{f.stat().st_size}:{fh.hexdigest()}\n".encode())
+    return h.hexdigest()
+
+
 @dataclass
 class QwenState:
     """A harness-facing wrapper over Qwen's native cache (recurrent + KV) at a position."""
@@ -114,13 +147,15 @@ class QwenState:
 class QwenBackend:
     """Loads the official Qwen3.5 checkpoint unchanged and drives it through its native cache."""
 
-    def __init__(self, model, tokenizer, config, *, device: torch.device) -> None:
+    def __init__(self, model, tokenizer, config, *, device: torch.device, checkpoint_digest: str | None = None) -> None:
         self.model = model
         self.tokenizer = tokenizer
         self.config = config
         self.device = device
         self.dtype = next(model.parameters()).dtype
         self.vocab_size = int(config.vocab_size)
+        self.checkpoint_digest = checkpoint_digest  # content digest for the session-identity check
+        self._schema_cache: list[tuple] | None = None
         # Overlapping GPU work aborts the MPS runtime (Metal command-buffer assertion, exit 134,
         # ASTRA-053), and the thread-local freeze flag does not make concurrent forwards safe. All
         # model/cache/probe execution on this shared backend is serialized through one lock, with
@@ -181,7 +216,7 @@ class QwenBackend:
         model.requires_grad_(False)
         model.to(dev)
         tok = AutoTokenizer.from_pretrained(p, local_files_only=True)
-        return cls(model, tok, cfg, device=dev)
+        return cls(model, tok, cfg, device=dev, checkpoint_digest=_checkpoint_digest(checkpoint_dir))
 
     # ------------------------------------------------------------------ tokenization
     def encode(self, text: str) -> list[int]:
@@ -274,19 +309,90 @@ class QwenBackend:
 
     # ------------------------------------------------------------------ persistence
     def _identity(self) -> dict[str, Any]:
-        """A compatibility signature for save/load: a session saved under one checkpoint/tokenizer
-        must be rejected on load under a different one. Derived from the config and tokenizer, so two
-        backends loaded from the same checkpoint match and a different model does not."""
+        """The compatibility signature stamped into a saved session and checked on load. It binds to
+        the actual checkpoint/tokenizer/chat-template CONTENT (``checkpoint_digest``, hashed once at
+        load) — not just dimensions — so same-shaped different weights or an edited chat template are
+        refused, plus the Transformers runtime and the cache-layout schema so a format change is
+        rejected rather than mis-reconstructed (ASTRA-066). The dimensions stay as a fast secondary
+        signal. A backend built without a digest (never via ``load``) reports it as ``None``."""
+        import transformers
+
         c = self.config
         return {
             "backend": "qwen",
+            "checkpoint_digest": self.checkpoint_digest,
+            "cache_schema": _CACHE_SCHEMA,
+            "transformers_version": str(transformers.__version__),
             "vocab_size": int(c.vocab_size),
             "num_hidden_layers": int(getattr(c, "num_hidden_layers", 0)),
             "hidden_size": int(getattr(c, "hidden_size", 0)),
-            "linear_num_value_heads": int(getattr(c, "linear_num_value_heads", 0)),
-            "linear_key_head_dim": int(getattr(c, "linear_key_head_dim", 0)),
             "tokenizer_vocab": int(getattr(self.tokenizer, "vocab_size", 0)),
         }
+
+    def _schema(self) -> list[tuple]:
+        """The expected per-layer cache structure of THIS backend, derived once from a fresh
+        ``init_state`` and cached: an ordered list of ``("linear", recurrent_shape, recurrent_dtype,
+        conv_shape)`` and ``("dynamic",)`` descriptors. Loads are validated against this trusted
+        reference — never against payload-supplied counts, which an attacker controls (ASTRA-066)."""
+        if self._schema_cache is None:
+            st = self.init_state()
+            schema: list[tuple] = []
+            for layer in st.cache.layers:
+                rs = getattr(layer, "recurrent_states", None)
+                if rs is not None and 0 in rs and rs[0] is not None:
+                    r = rs[0]
+                    c = getattr(layer, "conv_states", {}).get(0)
+                    schema.append(("linear", tuple(r.shape), r.dtype, None if c is None else tuple(c.shape)))
+                else:
+                    schema.append(("dynamic",))
+            self._schema_cache = schema
+        return self._schema_cache
+
+    def _validate_cache(self, cache) -> None:
+        """Refuse a malformed persisted cache clearly, rather than letting a bad payload fail on the
+        next forward (ASTRA-066). Checks the layer count and kinds against the trusted schema; each
+        linear layer's recurrent unit is present, correctly shaped and typed, with a present conv;
+        each dynamic layer carries no recurrent unit and consistent-length K/V; a position-zero cache
+        has all-zero recurrent memory; and every stored tensor is finite."""
+        schema = self._schema()
+        layers = getattr(cache, "layers", None)
+        if layers is None or len(layers) != len(schema):
+            raise ValueError(f"Qwen state layer count {None if layers is None else len(layers)} != expected {len(schema)}")
+        kv_lengths: list[int] = []
+        for idx, (layer, spec) in enumerate(zip(layers, schema)):
+            if spec[0] == "linear":
+                rs = getattr(layer, "recurrent_states", None)
+                if not rs or rs.get(0) is None:
+                    raise ValueError(f"layer {idx}: missing an initialized recurrent unit")
+                r = rs[0]
+                if tuple(r.shape) != spec[1] or r.dtype != spec[2]:
+                    raise ValueError(f"layer {idx}: recurrent shape/dtype {tuple(r.shape)}/{r.dtype} != expected {spec[1]}/{spec[2]}")
+                cs = getattr(layer, "conv_states", None)
+                if not cs or cs.get(0) is None:
+                    raise ValueError(f"layer {idx}: missing conv state")
+                if spec[3] is not None and tuple(cs[0].shape) != spec[3]:
+                    raise ValueError(f"layer {idx}: conv shape {tuple(cs[0].shape)} != expected {spec[3]}")
+            else:  # dynamic (full-attention) layer
+                if getattr(layer, "recurrent_states", None) is not None:
+                    raise ValueError(f"layer {idx}: expected a full-attention layer, found a recurrent one")
+                k, v = getattr(layer, "keys", None), getattr(layer, "values", None)
+                if (k is None) != (v is None):
+                    raise ValueError(f"layer {idx}: inconsistent attention K/V (one present, one absent)")
+                if k is not None:
+                    if k.shape[-2] != v.shape[-2]:
+                        raise ValueError(f"layer {idx}: K/V length mismatch {k.shape[-2]} != {v.shape[-2]}")
+                    kv_lengths.append(int(k.shape[-2]))
+        if len(set(kv_lengths)) > 1:
+            raise ValueError(f"inconsistent attention KV lengths across layers: {sorted(set(kv_lengths))}")
+        # a cache with no KV is position-zero; its recurrent memory must be exactly zero (a warm state
+        # with KV stripped would otherwise masquerade as position-zero)
+        if not kv_lengths:
+            for idx, layer in enumerate(layers):
+                rs = getattr(layer, "recurrent_states", None)
+                if rs and rs.get(0) is not None and int(torch.count_nonzero(rs[0])) != 0:
+                    raise ValueError(f"layer {idx}: position-zero cache (no KV) with non-zero recurrent memory")
+        if not self.is_finite(QwenState(cache)):
+            raise ValueError("persisted Qwen state contains non-finite values")
 
     @staticmethod
     def _map_cache_tensors(cache, fn) -> None:
@@ -325,10 +431,12 @@ class QwenBackend:
         }
 
     def load_state_dict(self, data: dict[str, Any]) -> QwenState:
-        """Reconstruct a session state, rejecting an incompatible or malformed persisted state rather
-        than loading it silently. The identity must match this backend's checkpoint/tokenizer, the
-        layer/recurrent counts must match what was saved, and no recurrent unit may be missing — a
-        persisted state that lost an initialized memory unit is refused (ASTRA-063)."""
+        """Reconstruct a session state, refusing an incompatible or malformed persisted state rather
+        than loading it silently. The identity (checkpoint/tokenizer/template content + runtime +
+        schema) must match this backend; the cache is validated against the trusted structural schema
+        and for finiteness; and the validated cache is **deep-copied** before device mapping so the
+        returned live state never aliases or mutates the saved payload — repeated loads and the fork
+        helper (which reuses the committed payload for working) produce independent states (ASTRA-066)."""
         if not isinstance(data, dict) or data.get("backend") != "qwen":
             raise ValueError("not a Qwen backend state")
         if data.get("identity") != self._identity():
@@ -336,21 +444,9 @@ class QwenBackend:
         cache = data.get("cache")
         if cache is None:
             raise ValueError("Qwen state has no cache")
-        layers = getattr(cache, "layers", [])
-        if len(layers) != data.get("num_layers"):
-            raise ValueError(f"Qwen state layer count {len(layers)} != saved {data.get('num_layers')}")
-        n_recurrent = 0
-        for layer in layers:
-            rs = getattr(layer, "recurrent_states", None)
-            if rs is None:
-                continue
-            for v in rs.values():
-                if v is None:
-                    raise ValueError("persisted Qwen state is missing an initialized recurrent unit")
-                n_recurrent += 1
-        if n_recurrent != data.get("recurrent_leaves"):
-            raise ValueError(f"Qwen state recurrent-unit count {n_recurrent} != saved {data.get('recurrent_leaves')}")
+        self._validate_cache(cache)
         with self._serialized():
+            cache = copy.deepcopy(cache)  # independent live state; never alias/mutate the saved payload
             self._map_cache_tensors(cache, lambda t: t.to(self.device))
         return QwenState(cache)
 

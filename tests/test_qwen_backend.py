@@ -223,31 +223,98 @@ def test_state_dict_round_trips_through_save_load(backend):
     assert (ref - got).abs().max().item() == 0.0
 
 
+def test_load_state_dict_independence_and_fork(backend):
+    # ASTRA-066 P1: load must return an independent live state, never alias/mutate the saved payload,
+    # or a fork (whose working reuses the committed payload) loses its rollback snapshot.
+    from plastic.harness.transaction import fork_state_dict
+
+    ids = backend.encode("A state for the fork independence and repeated-load persistence checks here.")
+    st = backend.init_state()
+    _, st = backend.process(ids[:8], st)
+    sd = backend.state_dict(st)
+
+    # two loads of the SAME payload are independent: advancing one does not touch the other
+    a = backend.load_state_dict(sd)
+    b = backend.load_state_dict(sd)
+    pre_b = [t.clone() for t in b.recurrent_leaves()]
+    _, a = backend.process(ids[8:10], a)
+    assert a.position == st.position + 2 and b.position == st.position
+    assert all(torch.equal(x, y) for x, y in zip(b.recurrent_leaves(), pre_b))
+    # the saved payload itself is not consumed/mutated by a load
+    c = backend.load_state_dict(sd)
+    assert c.position == st.position
+
+    # the runner fork helper reuses the committed payload for working; loading it must give
+    # independent committed/working so a working forward does not advance committed
+    forked = fork_state_dict({"committed": sd, "working": sd, "anchor": sd})
+    committed = backend.load_state_dict(forked["committed"])
+    working = backend.load_state_dict(forked["working"])
+    pre_committed = [t.clone() for t in committed.recurrent_leaves()]
+    _, working = backend.process(ids[8:11], working)
+    assert working.position == st.position + 3 and committed.position == st.position
+    assert all(torch.equal(x, y) for x, y in zip(committed.recurrent_leaves(), pre_committed))
+
+
 def test_load_state_dict_rejects_incompatible_and_malformed(backend):
     ids = backend.encode("A short state for the persistence rejection checks here today please.")
     st = backend.init_state()
     _, st = backend.process(ids[:6], st)
 
-    # an incompatible identity (different checkpoint/tokenizer) is refused
-    bad = backend.state_dict(st)
-    bad["identity"] = {**bad["identity"], "vocab_size": bad["identity"]["vocab_size"] + 1}
-    with pytest.raises(ValueError, match="incompatible"):
-        backend.load_state_dict(bad)
+    def fresh():
+        return backend.state_dict(st)
 
-    # a persisted state missing an initialized recurrent unit is refused, not silently skipped
-    malformed = backend.state_dict(st)
-    for layer in malformed["cache"].layers:
-        rs = getattr(layer, "recurrent_states", None)
-        if rs:
-            for i in list(rs):
-                rs[i] = None
-            break
-    with pytest.raises(ValueError, match="missing an initialized recurrent unit"):
-        backend.load_state_dict(malformed)
+    def first_linear(cache):
+        return next(l for l in cache.layers if getattr(l, "recurrent_states", None) is not None)
 
     # a non-Qwen payload is refused
     with pytest.raises(ValueError, match="not a Qwen"):
         backend.load_state_dict({"backend": "plastic"})
+
+    # ASTRA-066 P2: content identity — a different checkpoint digest (weights/tokenizer/template) is
+    # refused even at matching dimensions, and so is a stale dimension
+    bad = fresh()
+    bad["identity"] = {**bad["identity"], "checkpoint_digest": "deadbeef"}
+    with pytest.raises(ValueError, match="incompatible"):
+        backend.load_state_dict(bad)
+    bad = fresh()
+    bad["identity"] = {**bad["identity"], "vocab_size": bad["identity"]["vocab_size"] + 1}
+    with pytest.raises(ValueError, match="incompatible"):
+        backend.load_state_dict(bad)
+
+    # ASTRA-066 P3: malformed structures are refused against the trusted schema, not payload counts
+    m = fresh()  # missing recurrent unit
+    first_linear(m["cache"]).recurrent_states[0] = None
+    with pytest.raises(ValueError, match="missing an initialized recurrent unit"):
+        backend.load_state_dict(m)
+
+    m = fresh()  # wrong recurrent shape
+    l = first_linear(m["cache"])
+    l.recurrent_states[0] = l.recurrent_states[0].reshape(1, -1)
+    with pytest.raises(ValueError, match="recurrent shape/dtype"):
+        backend.load_state_dict(m)
+
+    m = fresh()  # absent conv state
+    first_linear(m["cache"]).conv_states[0] = None
+    with pytest.raises(ValueError, match="missing conv state"):
+        backend.load_state_dict(m)
+
+    m = fresh()  # reordered layer kinds
+    m["cache"].layers[0], m["cache"].layers[19] = m["cache"].layers[19], m["cache"].layers[0]
+    with pytest.raises(ValueError):
+        backend.load_state_dict(m)
+
+    m = fresh()  # non-finite recurrent value
+    first_linear(m["cache"]).recurrent_states[0][0, 0, 0, 0] = float("nan")
+    with pytest.raises(ValueError, match="non-finite"):
+        backend.load_state_dict(m)
+
+    m = fresh()  # a warm state with KV stripped masquerading as position-zero (nonzero recurrent)
+    for layer in m["cache"].layers:
+        if getattr(layer, "keys", None) is not None:
+            layer.keys = None
+            layer.values = None
+    with pytest.raises(ValueError, match="position-zero"):
+        backend.load_state_dict(m)
 
 
 def test_forward_beta_scale_and_freeze_semantics(backend):
