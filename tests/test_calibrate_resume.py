@@ -211,6 +211,7 @@ def test_corrupt_checkpoint_is_rejected_and_preserved(tmp_path):
     ({"cusum_requested": 9}, "inconsistent cusum_requested"),
     ({"cusum_used": 1, "runner_state": None}, "mid-CUSUM missing carried state"),
     ({"phase": "fit", "cusum_used": 1}, "fit phase with cusum_used>0"),
+    ({"fit_used": 1}, "CUSUM phase with incomplete fit (cross-phase, ASTRA-092)"),
     ({"n_transactions": -1}, "negative counter"),
     ({"records": "notalist"}, "malformed records"),
     ({"fit_used": True}, "boolean is not a valid counter"),

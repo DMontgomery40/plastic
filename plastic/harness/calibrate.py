@@ -452,6 +452,10 @@ def _validate_checkpoint(st: dict[str, Any], path: str, identity: str, fit_reque
         bad(f"has out-of-range counters (fit {fit_used}/{fit_requested}, cusum {cusum_used}/{cusum_requested})")
     if phase == "fit" and cusum_used != 0:
         bad(f"is in the fit phase but records cusum_used={cusum_used}")
+    if phase == "cusum" and fit_used != fit_requested:
+        # the CUSUM pass only begins once the fit pass is COMPLETE; a cusum-phase checkpoint with an
+        # unfinished fit would silently skip the missing fit turns (ASTRA-092 cross-phase case)
+        bad(f"is in the CUSUM phase but the fit pass is incomplete (fit {fit_used}/{fit_requested})")
     if phase == "cusum" and cusum_used > 0 and st.get("runner_state") is None:
         bad("is mid-CUSUM (cusum_used>0) but is missing the carried runner state")
 
