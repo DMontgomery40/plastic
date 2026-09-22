@@ -30,6 +30,9 @@ class Calibration:
     model_signature: str = ""
     n_chunks: int = 0
     reference: dict[str, list[float]] = field(default_factory=dict)
+    # log_delta_norm from a continuous benign session; the CUSUM signal is standardized against
+    # this (not ``reference``, which is reset-every-N and biases a cross-chunk statistic).
+    cusum_reference: list[float] = field(default_factory=list)
     thresholds: dict[str, float] = field(default_factory=dict)
     achievable_fpr: dict[str, float] = field(default_factory=dict)
     canary_baseline: dict[str, float] = field(default_factory=dict)
@@ -42,6 +45,7 @@ class Calibration:
             "model_signature": self.model_signature,
             "n_chunks": self.n_chunks,
             "reference": {k: [float(x) for x in v] for k, v in self.reference.items()},
+            "cusum_reference": [float(x) for x in self.cusum_reference],
             "thresholds": {k: float(v) for k, v in self.thresholds.items()},
             "achievable_fpr": {k: float(v) for k, v in self.achievable_fpr.items()},
             "canary_baseline": {k: float(v) for k, v in self.canary_baseline.items()},
@@ -55,6 +59,7 @@ class Calibration:
             model_signature=str(d.get("model_signature", "")),
             n_chunks=int(d.get("n_chunks", 0)),
             reference={k: list(v) for k, v in d.get("reference", {}).items()},
+            cusum_reference=[float(x) for x in d.get("cusum_reference", [])],
             thresholds={k: float(v) for k, v in d.get("thresholds", {}).items()},
             achievable_fpr={k: float(v) for k, v in d.get("achievable_fpr", {}).items()},
             canary_baseline={k: float(v) for k, v in d.get("canary_baseline", {}).items()},
@@ -125,34 +130,24 @@ def thresholds_from_records(records: list[dict[str, Any]], *, target_fpr: float)
     return thresholds, achievable
 
 
-def calibrated_cusum_h(
-    records: list[dict[str, Any]], reference: dict[str, list[float]], *, k: float, h_min: float, target_fpr: float
-) -> tuple[float, float] | None:
+def calibrated_cusum_h(zs: list[float], *, k: float, h_min: float, target_fpr: float) -> tuple[float, float] | None:
     """Calibrate the CUSUM alarm threshold as a benign run-length, not a walk endpoint.
 
     The two-sided CUSUM resets to zero every time it alarms, so ``h`` controls the *rate*
-    at which the in-control stream alarms — not the peak it reaches. We replay the benign
-    reference z-sequence (of ``log_delta_norm``) through the real ``Cusum(k, h)`` for a grid
-    of candidate ``h``, count alarms, and return the smallest ``h`` whose benign per-chunk
-    alarm rate is at or below ``target_fpr``, together with that achieved rate. This is the
-    same order-statistic discipline the per-chunk thresholds use, so ``cusum_h`` means what
-    the rest of the calibration means. (The old heuristic took ``1.25 * peak`` of a
-    never-resetting walk, which is not a quantile of anything and let a benign continuous
-    stream alarm within tens of chunks.)
-    """
-    from plastic.harness.stats import Cusum, robust_z
+    at which the in-control stream alarms — not the peak it reaches. Given a benign z-sequence
+    ``zs`` (centered on its own regime, see the caller), we replay it through the real
+    ``Cusum(k, h)`` for a grid of candidate ``h``, count alarms, and return the smallest ``h``
+    whose benign per-chunk alarm rate is at or below ``target_fpr``, together with that achieved
+    rate. This is the same order-statistic discipline the per-chunk thresholds use.
 
-    ref = reference.get("log_delta_norm")
-    if not ref:
-        return None
-    zs: list[float] = []
-    for r in records:
-        v = r.get("log_delta_norm")
-        if v is None:
-            continue
-        z = robust_z(float(v), ref)
-        if z is not None:
-            zs.append(float(z))
+    Two mistakes this avoids. (1) The old heuristic took ``1.25 * peak`` of a never-resetting
+    walk, which is not a quantile of anything and let a benign continuous stream alarm within
+    tens of chunks. (2) ``zs`` must come from a *continuous* benign session and be standardized
+    against a reference from that same continuous regime: a CUSUM fed a signal whose benign mean
+    is nonzero ratchets and has no valid ``h``, whatever this function returns.
+    """
+    from plastic.harness.stats import Cusum
+
     if not zs:
         return None
     n = len(zs)
@@ -174,13 +169,42 @@ def calibrated_cusum_h(
     best_h, best_rate = hi, alarm_rate(hi)
     for i in range(steps + 1):
         h = float(h_min) + (hi - float(h_min)) * i / steps
-        if h < float(h_min):
-            continue
         rate = alarm_rate(h)
         if rate <= target_fpr:
             best_h, best_rate = h, rate
             break
-    return best_h, best_rate
+    # Zero alarms over n benign chunks means "rate <= ~1/n at this sample size", not exactly 0 —
+    # report the finite-sample resolution floor, the same way the conformal achievable rates do.
+    return best_h, max(best_rate, 1.0 / (n + 1))
+
+
+def _continuous_cusum_vals(runner, stream_iter, *, n: int, k_signal: str = "log_delta_norm") -> list[float]:
+    """Collect ``n`` chunks of a benign signal from a single continuous (never-reset) session.
+
+    The CUSUM signal must be standardized against a reference from this same continuous regime:
+    the per-chunk reset-every-N reference biases it (mature sessions write less than the
+    fresh-heavy reference), so the CUSUM would ratchet on benign text. These raw values become
+    the calibration's ``cusum_reference`` and the live runner standardizes against them."""
+    runner.flush()
+    while runner.transactions:
+        runner.transactions.pop(0)
+    runner.reset()
+    vals: list[float] = []
+    while len(vals) < n:
+        try:
+            item = next(stream_iter)
+        except StopIteration:
+            break  # a finite stream (tests): calibrate on what the continuous pass could gather
+        if isinstance(item, tuple):
+            runner.feed_physics(item[0], item[1])
+        else:
+            runner.feed_tokens(list(item), source="user")
+        while runner.transactions:
+            rec = runner.transactions.pop(0)
+            v = rec["signals"].get(k_signal)
+            if v is not None:
+                vals.append(float(v))
+    return vals[:n]
 
 
 def calibrate_from_runner(
@@ -205,7 +229,8 @@ def calibrate_from_runner(
         raise ValueError("calibration requires a runner in log_only mode")
     records: list[dict[str, Any]] = []
     since_reset = 0
-    for item in stream:
+    stream_iter = iter(stream)
+    for item in stream_iter:
         if isinstance(item, tuple):
             runner.feed_physics(item[0], item[1])
         else:
@@ -238,13 +263,32 @@ def calibrate_from_runner(
         if vals:
             baseline[key.replace("_before", "")] = sum(vals) / len(vals)
     thresholds, achievable = thresholds_from_records(records, target_fpr=target_fpr)
-    ch = calibrated_cusum_h(records, reference, k=runner.hcfg.cusum_k, h_min=runner.hcfg.cusum_h, target_fpr=target_fpr)
-    if ch is not None:
-        thresholds["cusum_h"], achievable["cusum_h"] = ch
+    # The CUSUM is a cross-chunk statistic, so it is calibrated on a separate CONTINUOUS benign
+    # session with its own reference — not the reset-every-N reference above, which biases the
+    # signal and makes the alarm ratchet on benign text. See _continuous_cusum_z.
+    cusum_reference: list[float] = []
+    if "log_delta_norm" in reference:
+        from plastic.harness.stats import robust_z
+
+        n_cont = min(len(records), 256)
+        vals = _continuous_cusum_vals(runner, stream_iter, n=n_cont)
+        ch = None
+        if len(vals) >= 16:  # enough of a continuous session to calibrate a cross-chunk statistic
+            zc = [z for z in (robust_z(v, vals) for v in vals) if z is not None]
+            ch = calibrated_cusum_h(zc, k=runner.hcfg.cusum_k, h_min=runner.hcfg.cusum_h, target_fpr=target_fpr)
+        if ch is not None:
+            thresholds["cusum_h"], achievable["cusum_h"] = ch
+            # the live runner standardizes the CUSUM signal against this same continuous regime
+            cusum_reference = vals
+        else:
+            # no continuous session available (a short/finite stream): keep the config default
+            # threshold and no continuous reference, so the runner falls back to its default CUSUM.
+            thresholds["cusum_h"] = float(runner.hcfg.cusum_h)
     return Calibration(
         model_signature=model_signature,
         n_chunks=len(records),
         reference=reference,
+        cusum_reference=cusum_reference,
         thresholds=thresholds,
         achievable_fpr=achievable,
         canary_baseline=baseline,

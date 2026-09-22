@@ -41,7 +41,7 @@ from plastic.harness.signals import (
     delta_norms,
     summarize_memory_signals,
 )
-from plastic.harness.stats import Cusum, SignalHistory
+from plastic.harness.stats import Cusum, SignalHistory, robust_z
 from plastic.model.memory import MemorySignals
 from plastic.model.state import SessionState
 
@@ -239,7 +239,14 @@ class TransactionRunner:
             sig.cusum_alarm = False
             return sig, deltas, g
         sig.z = compute_z(sig, reference=(self.calibration.reference if self.calibration else None), history=self.history)
-        z_ld = sig.z.get("log_delta_norm")
+        # The CUSUM is a cross-chunk statistic calibrated on a continuous benign session, so it
+        # standardizes log_delta_norm against that continuous-regime reference — not the
+        # reset-every-N per-chunk reference, which biases it and makes the alarm ratchet.
+        cref = self.calibration.cusum_reference if self.calibration else None
+        if cref and len(cref) >= 8:
+            z_ld = robust_z(float(sig.log_delta_norm), cref)
+        else:
+            z_ld = sig.z.get("log_delta_norm")
         sig.cusum_alarm = self.cusum.update(z_ld) if (self.hcfg.enable_stats and z_ld is not None) else False
         return sig, deltas, g
 

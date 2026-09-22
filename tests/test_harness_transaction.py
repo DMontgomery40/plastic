@@ -293,6 +293,64 @@ def test_calibration_from_runner_and_fpr(tmp_path):
     assert gated / total <= 0.35, (gated, total)
 
 
+def test_calibrated_cusum_h_holds_benign_alarm_rate():
+    # The CUSUM alarm threshold is a run-length: on a centered benign z-sequence the calibrated h
+    # must keep the per-chunk alarm rate at or below target, and replaying at h reproduces it.
+    from plastic.harness.calibrate import calibrated_cusum_h
+    from plastic.harness.stats import Cusum
+
+    g = torch.Generator().manual_seed(0)
+    zc = torch.randn(3000, generator=g).tolist()  # centered, unit-scale benign statistic
+    got = calibrated_cusum_h(zc, k=0.5, h_min=5.0, target_fpr=0.01)
+    assert got is not None
+    h, rate = got
+    assert h >= 5.0 and rate <= 0.01 + 1e-9
+    c = Cusum(0.5, h)
+    alarms = sum(1 for z in zc if c.update(z))
+    assert alarms / len(zc) <= 0.01 + 1e-9
+    # A biased signal (nonzero benign mean) needs a strictly higher threshold to hold the same
+    # finite-stream rate — it would still ratchet on a longer stream. This is exactly the bias a
+    # shared reset-every-N reference induces, and why the CUSUM gets its own continuous reference.
+    zb = [z - 0.7 for z in zc]
+    hb, _ = calibrated_cusum_h(zb, k=0.5, h_min=5.0, target_fpr=0.01)
+    assert hb > h
+
+
+def test_continuous_cusum_reference_is_gathered_and_centers_the_signal(tmp_path):
+    # calibrate_from_runner must gather a continuous-regime CUSUM reference (not the reset-every-N
+    # per-chunk reference) and the live runner must standardize the CUSUM signal against it, so a
+    # benign continuous session does not ratchet the alarm.
+    cfg, lm = _lm(chunk=8, layers=2)
+    suite = _fake_suite(cfg)
+
+    def stream():
+        s = 0
+        while True:  # infinite benign generator so the continuous pass can reach maturity
+            yield _ids(32, seed=s)
+            s += 1
+
+    r = TransactionRunner(lm, cfg, log_only(HarnessConfig(enable_projection=False)), suite=suite, device=CPU)
+    cal = calibrate_from_runner(r, stream(), n_chunks=128, model_signature="sig", target_fpr=0.02, reset_every=8)
+    assert len(cal.cusum_reference) >= 16 and "cusum_h" in cal.thresholds and "cusum_h" in cal.achievable_fpr
+    # survives serialization
+    cal.save(str(tmp_path))
+    back = Calibration.load(str(tmp_path))
+    assert back.cusum_reference == cal.cusum_reference
+    # The property that fixes the false latch: standardized against its own continuous reference,
+    # the CUSUM signal on a fresh benign session is centered (median z ~ 0), so the two-sided CUSUM
+    # does not ratchet. Against the reset-every-N per-chunk reference it drifted persistently to one
+    # side, which is what drove the benign read-only latch.
+    from plastic.harness.stats import robust_z
+
+    r2 = TransactionRunner(lm, cfg, log_only(HarnessConfig(enable_projection=False)), calibration=back, suite=suite, device=CPU)
+    for s in range(40):
+        r2.feed_tokens(_ids(8, seed=7000 + s))
+    zs = [robust_z(t["signals"]["log_delta_norm"], back.cusum_reference) for t in r2.transactions]
+    zs = sorted(z for z in zs if z is not None)
+    median = zs[len(zs) // 2]
+    assert abs(median) < 0.6, median
+
+
 def test_read_only_chunks_do_not_feed_statistics():
     cfg, lm = _lm()
     r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)
