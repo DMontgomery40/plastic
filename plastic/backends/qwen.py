@@ -317,6 +317,42 @@ class QwenBackend:
             )
             return list(torch.autograd.grad(loss, leaves))
 
+    # ------------------------------------------------------------------ canaries (frozen)
+    def _probe_nll(self, ids: list[int], state: QwenState) -> float:
+        """Frozen continuation NLL of a probe from ``state`` — the probe is read, never learned
+        (β=0, g=0), and it runs on a fresh clone so the measured session is untouched."""
+        logits, _ = self.process(ids, self.clone(state), freeze=True)  # (len, vocab)
+        tgt = torch.tensor(ids[1:], dtype=torch.long, device=self.device)
+        return float(torch.nn.functional.cross_entropy(logits[:-1], tgt))
+
+    def score_suite(self, state: QwenState, suite: Any) -> dict[str, float]:
+        """Mean coherence and poison probe NLL from read-only clones of ``state`` (freeze=True), so
+        the session state is never mutated — the same contract as plastic's ``score_suite``. An
+        empty probe set, or one with no scorable (length ≥ 2) probe, scores ``nan``."""
+        out: dict[str, float] = {}
+        for name in ("coherence", "poison"):
+            probes = getattr(suite, name, None) or []
+            losses = [self._probe_nll([int(t) for t in p], state) for p in probes if len(p) >= 2]
+            out[name] = float(sum(losses) / len(losses)) if losses else float("nan")
+        return out
+
+    def canary_gradient(self, state: Any, suite: Any) -> list[torch.Tensor]:
+        """∂(coherence-probe NLL)/∂(recurrent leaves) at ``state``, frozen — the projection
+        direction, summed over the coherence probes (they share the same underlying state, matching
+        plastic's batch sum). Returns 18 correctly-shaped zero tensors when there is no coherence
+        probe, so the harness never skips its first projection."""
+        leaves0 = state.recurrent_leaves()
+        total: list[torch.Tensor] | None = None
+        for p in getattr(suite, "coherence", None) or []:
+            ids = [int(t) for t in p]
+            if len(ids) < 2:
+                continue
+            g = self.recurrent_grad(state, ids[:-1], ids[1:])
+            total = g if total is None else [a + b for a, b in zip(total, g)]
+        if total is None:
+            return [torch.zeros_like(t) for t in leaves0]
+        return [t.detach() for t in total]
+
     @torch.no_grad()
     def apply_projected(self, working: QwenState, committed: QwenState, projected: list[torch.Tensor]) -> None:
         """Write a corrected per-unit delta onto ``working``'s recurrent memory for the project

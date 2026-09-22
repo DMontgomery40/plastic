@@ -186,6 +186,40 @@ def test_is_finite_covers_recurrent_conv_and_kv(backend):
     assert injected and not backend.is_finite(st_k)
 
 
+def test_score_suite_is_read_only_and_gradient_is_defined(backend):
+    ids = backend.encode("A benign sentence serving as coherence material for the canary suite here.")
+    st = backend.init_state()
+    _, st = backend.process(ids[:6], st)
+
+    class _Suite:  # duck-typed CanarySuite (text): token-id probes
+        domain = "text"
+        coherence = [ids[:8], ids[2:12]]
+        poison = [list(range(10, 26))]
+
+    suite = _Suite()
+    scores = backend.score_suite(st, suite)
+    assert set(scores) == {"coherence", "poison"}
+    assert all(isinstance(v, float) and v == v and v > 0 for v in scores.values())
+    # scoring is read-only: the session's recurrent memory is unchanged
+    pre = [t.clone() for t in st.recurrent_leaves()]
+    backend.score_suite(st, suite)
+    assert all(torch.equal(a, b) for a, b in zip(st.recurrent_leaves(), pre))
+    # gradient: 18 finite leaves aligned with state_delta/recurrent_leaves, nonzero for real probes
+    g = backend.canary_gradient(st, suite)
+    assert len(g) == 18 and all(torch.isfinite(x).all() for x in g)
+    assert any(x.abs().max().item() > 0 for x in g)
+
+    class _Empty:
+        domain = "text"
+        coherence: list = []
+        poison: list = []
+
+    # no coherence probe -> a zero gradient of the correct shape (the harness still projects)
+    z = backend.canary_gradient(st, _Empty())
+    assert len(z) == 18 and all(int(torch.count_nonzero(x)) == 0 for x in z)
+    assert scores["coherence"] != scores["poison"]  # sanity: the two sets score differently
+
+
 def test_apply_projected_overwrites_recurrent_from_committed(backend):
     ids = backend.encode("Enough tokens for two chunks to make a projection overwrite check here.")
     n = len(ids)
