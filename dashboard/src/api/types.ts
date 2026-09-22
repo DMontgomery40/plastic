@@ -266,6 +266,13 @@ export interface TransactionRecord {
   signals: ChunkSignals;
   /** ACCEPTED: measured on the committed state, after the decision. */
   accepted: AcceptedMetrics;
+  // token counts by source in this chunk: `user` = prompt tokens, `model` = generated tokens
+  // (INCLUDING the turn-closure tokens, not only sampled output). The prompt flushes before
+  // generation, so a chunk is all-user or all-model, never mixed.
+  sources?: { user: number; model: number };
+  // whether this chunk was permitted to learn at all. read-only / ineligible is NOT a rollback and
+  // NOT evidence of a damaging update -- it is a chunk the policy did not let write.
+  eligible?: boolean;
   read_only: boolean;
   read_only_reason: string | null;
   seconds: number;
@@ -279,15 +286,28 @@ export interface CusumState {
   alarms: number;
 }
 
+// Plastic reports per-layer S/h norms; a pretrained backend (Qwen) reports per-memory-unit recurrent
+// norms instead. All optional so a summary carries whichever shape its backend produced.
 export interface StateNorms {
-  s_norm: number[];
-  h_norm: number[];
-  s_norm_total: number;
-  h_norm_total: number;
+  s_norm?: number[];
+  h_norm?: number[];
+  s_norm_total?: number;
+  h_norm_total?: number;
+  recurrent_norm?: number[];
+  recurrent_norm_total?: number;
 }
 
+// The session's ACTUAL calibration state as reported by Session.summary(), distinct from whether the
+// model has a saved calibration artifact: only 'installed' means the thresholds gate this session.
+// A rejected artifact exists but was refused (built for a different checkpoint, or unsigned).
+export type CalibrationStatus =
+  | 'installed'
+  | 'absent'
+  | 'rejected_unsigned'
+  | 'rejected_signature_mismatch';
+
 // TransactionRunner.summary() returns the ten required keys; Session.summary()
-// adds session_id / model_id / domain. Both shapes satisfy this interface.
+// adds session_id / model_id / domain, plus the backend/calibration/signals fields below.
 export interface RunnerSummary {
   pos: number;
   pending: number;
@@ -302,6 +322,16 @@ export interface RunnerSummary {
   session_id?: string;
   model_id?: string;
   domain?: Domain;
+  // Session.summary() (never the bare runner summary) adds these: which backend drives the session,
+  // whether a persisted calibration was actually installed/rejected/absent ON THIS SESSION, and the
+  // decision signals this backend can produce. Optional, so a plain RunnerSummary need not carry them.
+  backend?: string;
+  calibration?: CalibrationStatus;
+  signals_available?: string[];
+  // EFFECTIVE generation-write policy: model-source (generated) tokens are write-eligible when the
+  // backend writes that source (Qwen's recurrent state does) OR learn_from_generation overrides it.
+  // The read_only latch suppresses all writes regardless. Write-eligible is not retained learning.
+  writes_generation?: boolean;
 }
 
 // -------------------------------------------------------------------- sessions
@@ -348,6 +378,10 @@ export interface TraceRecord {
 export interface SessionDetail {
   meta: SessionMeta;
   summary: RunnerSummary;
+  // the calibration the session ACTUALLY loaded and verified at open (null if none is installed),
+  // not the model's current saved artifact -- active policy lines/rates must come from this so a
+  // same-model artifact replaced by a separate process is never shown as what the runner uses.
+  calibration: CalibrationSummary | null;
   lineage: string[];
   transactions: TransactionRecord[];
   trace: TraceRecord[];
@@ -365,9 +399,24 @@ export interface LayerState {
   drift_from_anchor: number;
 }
 
+// A pretrained backend (Qwen) has no per-head S/h shape; its state is per-memory-unit recurrent
+// norms and drift. Norms/drift are nullable: a failed or missing measurement is unavailable, never
+// rendered as a measured zero.
+export interface RecurrentUnit {
+  index: number;
+  recurrent_norm: number | null;
+  drift_from_anchor: number | null;
+}
+
 export interface SessionState {
-  layers: LayerState[];
+  // 'plastic' carries `layers`; 'recurrent' carries `units` + `recurrent_norm_total`. Both optional so
+  // existing plastic-shape access stays valid; `kind` (absent on older payloads) selects the renderer.
+  kind?: 'plastic' | 'recurrent';
   pos: number;
+  layers?: LayerState[];
+  units?: RecurrentUnit[];
+  recurrent_norm_total?: number | null;
+  backend?: string;
 }
 
 export interface ChatResult {

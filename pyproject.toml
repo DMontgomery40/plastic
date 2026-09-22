@@ -22,6 +22,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+pretrained = [
+    "transformers==5.17.0",
+]
 dev = [
     "pytest>=9.0",
     "hypothesis>=6.100",

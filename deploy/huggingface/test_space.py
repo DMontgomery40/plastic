@@ -26,7 +26,7 @@ def test_expensive_or_unbounded_mutations_are_closed(path):
         assert client.post(path, json={}).status_code == 403
 
 
-@pytest.mark.parametrize('path', ['/api/health', '/api/models', '/api/models/lm_wikitext_l4', '/api/sessions', '/api/sessions/demo_text/state', '/api/train/jobs', '/api/data'])
+@pytest.mark.parametrize('path', ['/api/health', '/api/models', '/api/models/lm_wikitext_l4', '/api/models/qwen3_5_0_8b', '/api/models/qwen3_5_0_8b/log', '/api/sessions', '/api/sessions/demo_text/state', '/api/train/jobs', '/api/data'])
 def test_existing_dashboard_reads_work(path):
     with TestClient(fake_app()) as client:
         assert client.get(path).status_code == 200
@@ -136,4 +136,50 @@ def test_public_notice_survives_real_dashboard_body_attributes(tmp_path, body_ta
         page = client.get('/')
         assert 'public and shared' in page.text
         assert 'Do not enter private information' in page.text
+        assert 'Qwen3.5-0.8B' in page.text
+        assert 'observational guard: no rollback protection' in page.text
         assert page.text.index('public and shared') < page.text.index('id="root"')
+
+
+def test_pretrained_demo_registers_native_sessions_and_preserves_existing_state(tmp_path, monkeypatch):
+    from plastic.backends import qwen
+    from plastic.config import ModelConfig
+    from plastic.model.lm import build_model
+    from plastic.store import ArtifactStore
+    from deploy.huggingface.pretrained import CHECKPOINT_DIGEST, MODEL_ID, prepare_pretrained_sessions
+    monkeypatch.setattr(qwen, '_checkpoint_digest', lambda _: CHECKPOINT_DIGEST)
+    store = ArtifactStore(str(tmp_path / 'store'))
+    cfg = ModelConfig(domain='physics', d_model=8, n_heads=1, n_layers=1, chunk=4)
+    store.save_checkpoint('phys_mps_3k', cfg, build_model(cfg), step=1)
+    store.register_model('phys_mps_3k', {'domain': 'physics'})
+    prepare_pretrained_sessions(store, tmp_path / 'checkpoint')
+    meta = store.load_session_meta('demo_text')
+    assert meta['model_id'] == MODEL_ID
+    assert meta['harness']['log_only'] is True
+    assert meta['harness']['freeze_on_alarm'] is False
+    assert meta['harness']['learn_from_generation'] is True
+    assert store.load_model_record(MODEL_ID)['backend'] == 'qwen'
+    prepare_pretrained_sessions(store, tmp_path / 'checkpoint')
+    assert store.load_session_meta('demo_text') == meta
+    assert len(store.list_sessions()) == 2
+
+
+@pytest.mark.parametrize('mismatch', ['checkpoint', 'model', 'controls'])
+def test_pretrained_demo_refuses_incompatible_artifacts_or_sessions(tmp_path, monkeypatch, mismatch):
+    from plastic.backends import qwen
+    from plastic.harness.config import HarnessConfig
+    from plastic.store import ArtifactStore
+    from deploy.huggingface.pretrained import CHECKPOINT_DIGEST, MODEL_ID, prepare_pretrained_sessions
+    monkeypatch.setattr(qwen, '_checkpoint_digest', lambda _: 'changed' if mismatch == 'checkpoint' else CHECKPOINT_DIGEST)
+    store = ArtifactStore(str(tmp_path / 'store'))
+    if mismatch != 'checkpoint':
+        mid = 'old_model' if mismatch == 'model' else MODEL_ID
+        store.register_model(mid, {'backend': 'qwen', 'checkpoint_digest': CHECKPOINT_DIGEST})
+        store.create_session('demo_text', model_id=mid, domain='text', harness_cfg=HarnessConfig())
+    before = store.load_session_meta('demo_text') if store.session_exists('demo_text') else None
+    with pytest.raises(ValueError):
+        prepare_pretrained_sessions(store, tmp_path / 'checkpoint')
+    if before is not None:
+        assert store.load_session_meta('demo_text') == before
+    else:
+        assert not store.list_sessions()

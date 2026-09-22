@@ -274,11 +274,48 @@ def test_transactions_paging(api):
 
 def test_state(api):
     body = api.client.get("/api/sessions/t1/state").json()
+    assert body["kind"] == "plastic"  # the toy per-layer S/h shape, discriminated for the client
     assert body["pos"] > 0 and len(body["layers"]) == 2
     layer = body["layers"][0]
     assert len(layer["s_norm_per_head"]) == 2 and layer["h_norm"] >= 0.0
     assert len(layer["singular_values"]) == 2 and len(layer["singular_values"][0]) <= 8
     assert layer["drift_from_anchor"] >= 0.0
+
+
+def test_state_payload_native_backend_has_no_plastic_layers():
+    # ASTRA-081 #5: a pretrained (Qwen) session's committed state has no per-layer S/h shape, so the
+    # /state route must return an honest recurrent payload instead of a 500 (committed.layers) or
+    # fabricated tensors. Driven with a fake session so it needs no model/isolated deps.
+    import torch
+
+    from plastic.api.service import state_payload
+
+    class _QwenLikeState:  # no `.layers`, exactly like QwenState
+        pass
+
+    class _FakeBackend:
+        def state_norms(self, _s):
+            return {"recurrent_norm": [1.5, 2.0], "recurrent_norm_total": 2.5}
+
+        def state_delta(self, _a, _b):
+            return [torch.tensor([3.0, 4.0]), torch.tensor([0.0])]  # per-unit norms 5.0, 0.0
+
+    class _FakeRunner:
+        committed = _QwenLikeState()
+        anchor = _QwenLikeState()
+        pos = 12
+        backend = _FakeBackend()
+
+    class _FakeSession:
+        runner = _FakeRunner()
+        backend_kind = "qwen"
+
+    body = state_payload(_FakeSession())
+    assert body["kind"] == "recurrent" and body["backend"] == "qwen" and body["pos"] == 12
+    assert body["recurrent_norm_total"] == 2.5
+    assert [u["recurrent_norm"] for u in body["units"]] == [1.5, 2.0]
+    assert body["units"][0]["drift_from_anchor"] == 5.0 and body["units"][1]["drift_from_anchor"] == 0.0
+    assert "layers" not in body  # never the plastic shape, never fabricated S/h tensors
 
 
 def test_fork(api):
@@ -440,3 +477,107 @@ def test_model_summary_exposes_sleep_field():
     assert out["type"] == "sleep_consolidation" and out["parent_model_id"] == "base"
     # a model without a sleep record reports None, not a fabricated value
     assert model_summary(store, {"model_id": "m2", "domain": "text"})["sleep"] is None
+
+
+def test_state_payload_native_missing_or_failed_drift_is_null():
+    # ASTRA-094: a failed / missing / nonfinite measurement is null (unavailable), never a measured
+    # zero; a genuine zero is preserved. Driven with fakes, no model.
+    import torch
+
+    from plastic.api.service import state_payload
+
+    class _QwenLikeState:
+        pass
+
+    def _sess(norms, delta):
+        class _Backend:
+            def state_norms(self, _s):
+                return norms
+
+            def state_delta(self, _a, _b):
+                if isinstance(delta, Exception):
+                    raise delta
+                return delta
+
+        class _Runner:
+            committed = _QwenLikeState()
+            anchor = _QwenLikeState()
+            pos = 5
+            backend = _Backend()
+
+        class _Session:
+            runner = _Runner()
+            backend_kind = "qwen"
+
+        return _Session()
+
+    # state_delta raises -> every drift null, but the recurrent norms are still reported
+    body = state_payload(_sess({"recurrent_norm": [1.0, 2.0], "recurrent_norm_total": 3.0}, RuntimeError("boom")))
+    assert [u["drift_from_anchor"] for u in body["units"]] == [None, None]
+    assert [u["recurrent_norm"] for u in body["units"]] == [1.0, 2.0]
+
+    # a short delta list -> the unmatched unit is null; a genuine zero drift is preserved as 0.0
+    body = state_payload(_sess({"recurrent_norm": [1.0, 2.0, 3.0], "recurrent_norm_total": 4.0},
+                               [torch.tensor([0.0]), torch.tensor([4.0])]))
+    assert [u["drift_from_anchor"] for u in body["units"]] == [0.0, 4.0, None]
+
+    # an absent total is null, not zero
+    body = state_payload(_sess({"recurrent_norm": [1.0]}, [torch.tensor([2.0])]))
+    assert body["recurrent_norm_total"] is None
+
+    # nonfinite norm / total / drift are all null
+    body = state_payload(_sess({"recurrent_norm": [float("inf")], "recurrent_norm_total": float("nan")},
+                               [torch.tensor([float("inf")])]))
+    assert body["units"][0]["recurrent_norm"] is None
+    assert body["units"][0]["drift_from_anchor"] is None
+    assert body["recurrent_norm_total"] is None
+
+
+def test_session_detail_exposes_loaded_calibration_not_replaced_artifact(api):
+    # ASTRA-096 #2: a session's active calibration is the one it verified at open, not the model's
+    # CURRENT saved artifact. A separate calibration process replacing the artifact same-model must
+    # not change what the open session (and its running policy) uses or what the UI labels active.
+    from plastic.harness.calibrate import Calibration
+
+    mid = api.text
+    api.client.post(f"/api/models/{mid}/calibrate",
+                    json={"data_dir": api.data, "chunks": 16, "fisher_chunks": 2, "fpr": 0.1})
+    model_dir = api.store.model_dir(mid)
+
+    sid = api.client.post("/api/sessions", json={"model_id": mid, "session_id": "cal_identity"}).json()["session_id"]
+    detail = api.client.get(f"/api/sessions/{sid}").json()
+    assert detail["summary"]["calibration"] == "installed"
+    assert detail["calibration"] is not None
+    loaded_thresholds = detail["calibration"]["thresholds"]
+    assert loaded_thresholds  # the session exposes its loaded calibration's thresholds
+
+    # a SEPARATE calibration process replaces the saved artifact with a valid same-signature one whose
+    # thresholds differ (bumped by 100); the model signature is unchanged so it is still "installable"
+    replacement = Calibration.load(model_dir)
+    replacement.thresholds = {k: (None if v is None else float(v) + 100.0) for k, v in replacement.thresholds.items()}
+    replacement.save(model_dir)
+
+    model_after = api.client.get(f"/api/models/{mid}").json()
+    assert model_after["calibration"]["thresholds"] != loaded_thresholds  # the model detail shows the replacement
+
+    # the OPEN session still exposes the calibration it actually loaded, not the replacement
+    detail_after = api.client.get(f"/api/sessions/{sid}").json()
+    assert detail_after["summary"]["calibration"] == "installed"
+    assert detail_after["calibration"]["thresholds"] == loaded_thresholds
+    assert detail_after["calibration"]["thresholds"] != model_after["calibration"]["thresholds"]
+
+
+def test_session_summary_reports_effective_generation_write_policy(api):
+    # ASTRA-101: writes_generation is the EFFECTIVE policy (backend source capability OR
+    # learn_from_generation). A plastic session freezes generation by default; the flag makes it
+    # write-eligible. (Qwen's generation writes regardless -- that path is model-gated.)
+    sid = api.client.post("/api/sessions", json={"model_id": api.text}).json()["session_id"]
+    body = api.client.get(f"/api/sessions/{sid}").json()
+    assert body["summary"]["backend"] == "plastic"
+    assert body["summary"]["writes_generation"] is False  # default: generation frozen read-only
+
+    sid2 = api.client.post(
+        "/api/sessions", json={"model_id": api.text, "harness": {"learn_from_generation": True}}
+    ).json()["session_id"]
+    body2 = api.client.get(f"/api/sessions/{sid2}").json()
+    assert body2["summary"]["writes_generation"] is True  # the override makes generation write-eligible

@@ -1,7 +1,7 @@
 // Formatting helpers. Every number that reaches the screen goes through one of
 // these, so a null or a NaN from the API renders as a dash instead of "NaN".
 
-import type { DecisionKind } from '../api/types';
+import type { CalibrationStatus, DecisionKind, TransactionRecord } from '../api/types';
 
 /**
  * The single token for "there is no value here". Never render a missing metric
@@ -25,6 +25,106 @@ export const NO_VALID_PAYLOADS = 'no valid payloads';
 /** True for a real, finite number. The API can send null or NaN for several signals. */
 export function isNum(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
+}
+
+/**
+ * How a session's calibration status should read, and — crucially — whether it is ACTIVE. Only an
+ * installed calibration gates the session: a rejected artifact (different model / unsigned) or an
+ * absent one must never draw active policy threshold lines or claim active rates. `active` is the
+ * single gate a caller uses to suppress those. A missing status (a loaded summary without the field)
+ * reads as unknown, never as "not calibrated" — the caller distinguishes a failed/loading fetch,
+ * which is not a status at all, by whether the summary itself is present.
+ */
+export interface CalibrationDisplay {
+  active: boolean;
+  label: string;
+  detail: string;
+}
+
+export function calibrationDisplay(status: CalibrationStatus | string | null | undefined): CalibrationDisplay {
+  switch (status) {
+    case 'installed':
+      return { active: true, label: 'Installed', detail: 'Calibrated thresholds are active for this session.' };
+    case 'absent':
+      return {
+        active: false,
+        label: 'Not calibrated',
+        detail: 'No calibration is installed, so the policy falls back to robust z-scores and no thresholds are drawn.',
+      };
+    case 'rejected_signature_mismatch':
+      return {
+        active: false,
+        label: 'Rejected: different model',
+        detail: 'A saved calibration exists but was built for a different checkpoint, so it is not installed on this session.',
+      };
+    case 'rejected_unsigned':
+      return {
+        active: false,
+        label: 'Rejected: unsigned',
+        detail: 'A saved calibration exists but is unsigned, so it is not installed on this session.',
+      };
+    default:
+      return { active: false, label: 'Unknown', detail: 'Calibration status is unavailable for this session.' };
+  }
+}
+
+/**
+ * The single rendering decision for a session's calibration, folding the session's status together
+ * with whether the model detail (which carries the threshold artifact) has actually loaded. This is
+ * one source of truth so the status tile, the signals-panel subtitle and the rates panel can never
+ * contradict each other (an installed session must not simultaneously read "installed" and "not
+ * calibrated" while its model detail is still loading; a rejected artifact must not read "not
+ * calibrated"). Only the 'active' mode draws threshold lines / active rates; the fallback-to-robust-z
+ * statement is asserted only when the session status actually establishes it (absent), or as a
+ * distinct, honest reason for rejected / unknown — never for installed-but-details-pending.
+ */
+export type CalibrationRenderMode = 'active' | 'installed_pending' | 'rejected' | 'absent' | 'unknown';
+
+export interface CalibrationView {
+  mode: CalibrationRenderMode;
+  drawThresholds: boolean;
+  signalsSubtitle: string;
+  inactive: { title: string; detail: string } | null; // for the rates panel when it is not active
+}
+
+export function calibrationView(
+  status: CalibrationStatus | string | null | undefined,
+  modelLoaded: boolean,
+  hasThresholds: boolean,
+): CalibrationView {
+  const d = calibrationDisplay(status);
+  const fallback = ' The policy falls back to robust z-scores over the session’s own history.';
+  if (status === 'installed') {
+    if (modelLoaded && hasThresholds) {
+      return {
+        mode: 'active',
+        drawThresholds: true,
+        signalsSubtitle: 'Dashed lines are the calibrated thresholds installed on this session.',
+        inactive: null,
+      };
+    }
+    return {
+      mode: 'installed_pending',
+      drawThresholds: false,
+      signalsSubtitle: 'A calibration is installed on this session; its threshold details are loading or unavailable.',
+      inactive: {
+        title: 'Calibration installed; threshold details are loading or unavailable.',
+        detail: 'The installed thresholds have not loaded, so target and achievable rates are not shown yet. This is not the same as an uncalibrated session.',
+      },
+    };
+  }
+  if (status === 'absent') {
+    return { mode: 'absent', drawThresholds: false, signalsSubtitle: d.detail + fallback,
+      inactive: { title: 'This session is not calibrated.', detail: d.detail } };
+  }
+  if (status === 'rejected_signature_mismatch' || status === 'rejected_unsigned') {
+    return { mode: 'rejected', drawThresholds: false, signalsSubtitle: d.detail + fallback,
+      inactive: { title: `${d.label}; not active on this session.`, detail: d.detail } };
+  }
+  // unknown status does NOT establish which policy is active (unlike a rejected calibration, which is
+  // known not installed), so it must not assert the robust-z fallback -- only report the uncertainty
+  return { mode: 'unknown', drawThresholds: false, signalsSubtitle: d.detail,
+    inactive: { title: 'Calibration status is unavailable for this session.', detail: d.detail } };
 }
 
 export function fmt(v: unknown, decimals = 4): string {
@@ -168,4 +268,61 @@ export function fmtValidOnly(v: number | null | undefined, decimals = 4): string
 /** A valid-only fraction, with the same null semantics. */
 export function fmtValidOnlyPercent(v: number | null | undefined, decimals = 0): string {
   return isNum(v) ? fmtPercent(v, decimals) : NO_VALID_PAYLOADS;
+}
+
+/**
+ * How this session treats GENERATED tokens, from the EFFECTIVE write policy rather than the raw
+ * learn_from_generation flag: model-source tokens are write-eligible when the backend writes that
+ * source (Qwen's recurrent state does, even with the flag off) OR the flag overrides it. Write-
+ * eligible means each chunk transacts and may be rolled back or scaled -- it is NOT guaranteed
+ * retained learning. A read-only latch suppresses all writes, so the caller passes that through.
+ */
+export function generationLearningCopy(generationWriteEligible: boolean | null | undefined, readOnly: boolean): string {
+  // a KNOWN read-only latch wins over an unknown capability: report the latch, do not affirm any
+  // eligibility while the whole effective policy is unavailable (ASTRA-104)
+  if (readOnly) {
+    return 'The session is currently read-only, so no chunk writes: every chunk transacts as read-only.';
+  }
+  if (generationWriteEligible == null) {
+    return 'The effective write policy for this session is not available yet.';
+  }
+  const prompt = 'Prompt tokens are write-eligible';
+  if (generationWriteEligible) {
+    return `${prompt}, and generated tokens (including turn-closure tokens) are also write-eligible — each chunk is subject to the harness decision and a write can still be rolled back or scaled, not guaranteed retained.`;
+  }
+  return `${prompt}; generated tokens are read-only in this session (not write-eligible).`;
+}
+
+export interface SourceBucket {
+  chunks: number;
+  eligible: number;
+  interventions: number;
+  tokens: number;
+}
+export interface SourceAccounting {
+  user: SourceBucket;
+  model: SourceBucket;
+}
+
+/**
+ * Per-source chunk accounting for a turn. A chunk is user-source (prompt) or model-source
+ * (generation) -- the prompt flushes before generation so a chunk never mixes the two. Interventions
+ * (rollback / scale / project) and the eligible DENOMINATOR are reported per source: readonly and
+ * ineligible chunks are not interventions, and model-source token counts include turn-closure tokens,
+ * not only sampled output.
+ */
+export function sourceAccounting(transactions: readonly TransactionRecord[]): SourceAccounting {
+  const zero = (): SourceBucket => ({ chunks: 0, eligible: 0, interventions: 0, tokens: 0 });
+  const acc: SourceAccounting = { user: zero(), model: zero() };
+  const intervention: Record<string, boolean> = { rollback: true, scale: true, project: true };
+  for (const tx of transactions) {
+    const s = tx.sources ?? { user: 0, model: 0 };
+    const isModel = (s.model ?? 0) > 0;
+    const bucket = isModel ? acc.model : acc.user;
+    bucket.chunks += 1;
+    bucket.tokens += isModel ? s.model ?? 0 : s.user ?? 0;
+    if (tx.eligible) bucket.eligible += 1;
+    if (intervention[tx.decision.kind]) bucket.interventions += 1;
+  }
+  return acc;
 }

@@ -10,7 +10,12 @@ import {
 import { canaryPanelState } from '../components/tabs/SessionTab';
 import { maxUnprotectedDamage } from '../components/tabs/RedTeamTab';
 import { bestHeldoutLoss } from '../components/tabs/TrainTab';
-import { countsFromSession, interventionRate } from '../components/panels/RatePanel';
+import {
+  countsFromSession,
+  eligibleRejectionRate,
+  interventionRate,
+  rateSummaryText,
+} from '../components/panels/RatePanel';
 import {
   NO_VALID_PAYLOADS,
   UNAVAILABLE,
@@ -226,6 +231,7 @@ const RUNNER: RunnerSummary = {
 const SESSION_DETAIL: SessionDetail = {
   meta: { ...SESSION_A, harness: {} as SessionDetail['meta']['harness'], model_signature: 'abc123' },
   summary: RUNNER,
+  calibration: null,
   lineage: ['s1'],
   transactions: [TRANSACTION],
   trace: [],
@@ -588,14 +594,50 @@ describe('missing values never read as measurements', () => {
   });
 });
 
-describe('observed intervention rate', () => {
-  it('counts every non-commit decision, not just rollbacks', () => {
-    const rate = interventionRate({ n_transactions: 10, commits: 6, rollbacks: 1, scales: 2, projects: 1, readonly: 0 });
-    expect(rate).toBeCloseTo(0.4);
+describe('observed rejection rate', () => {
+  it('counts rollback, scale and project as interventions but never readonly', () => {
+    // readonly chunks committed as observations; they must not inflate the rate
+    const counts = { n_transactions: 10, commits: 5, rollbacks: 1, scales: 2, projects: 1, readonly: 1 };
+    expect(interventionRate(counts)).toBeCloseTo(0.4); // 4 of 10 chunks
+    expect(eligibleRejectionRate(counts)).toBeCloseTo(4 / 9); // 4 of 9 eligible updates
+  });
+
+  it('does not read an all-generated session as fully intervened', () => {
+    // one committed prompt, four read-only generated chunks
+    const counts = { n_transactions: 5, commits: 1, rollbacks: 0, scales: 0, projects: 0, readonly: 4 };
+    expect(interventionRate(counts)).toBe(0); // nothing was actually intervened
+    expect(eligibleRejectionRate(counts)).toBe(0); // the one eligible update was accepted
+    const text = rateSummaryText(counts);
+    expect(text).not.toContain('intervened');
+    expect(text).not.toContain('100');
+    expect(text).toBe('0.0% rejected');
+  });
+
+  it('reports the rejection rate as unavailable, never 0%, when nothing proposed a write', () => {
+    const counts = { n_transactions: 4, commits: 0, rollbacks: 0, scales: 0, projects: 0, readonly: 4 };
+    expect(eligibleRejectionRate(counts)).toBeNull();
+    expect(interventionRate(counts)).toBe(0);
+    // the compact summary must not label a pure-observation session as intervened
+    expect(rateSummaryText(counts)).toBe(UNAVAILABLE);
+    expect(rateSummaryText(counts)).not.toContain('intervened');
+  });
+
+  it('counts an actual rollback among the eligible chunks', () => {
+    const counts = { n_transactions: 8, commits: 5, rollbacks: 2, scales: 0, projects: 0, readonly: 1 };
+    expect(eligibleRejectionRate(counts)).toBeCloseTo(2 / 7); // 2 of 7 eligible updates
+    expect(interventionRate(counts)).toBeCloseTo(0.25); // 2 of 8 chunks
+  });
+
+  it('handles a mixed session with every decision kind', () => {
+    const counts = { n_transactions: 10, commits: 4, rollbacks: 1, scales: 2, projects: 1, readonly: 2 };
+    expect(eligibleRejectionRate(counts)).toBeCloseTo(0.5); // 4 of 8 eligible updates
+    expect(interventionRate(counts)).toBeCloseTo(0.4); // 4 of 10 chunks
   });
 
   it('is unavailable rather than zero when nothing has run', () => {
-    expect(interventionRate({ n_transactions: 0, commits: 0, rollbacks: 0, scales: 0, projects: 0, readonly: 0 })).toBeNull();
+    const empty = { n_transactions: 0, commits: 0, rollbacks: 0, scales: 0, projects: 0, readonly: 0 };
+    expect(interventionRate(empty)).toBeNull();
+    expect(eligibleRejectionRate(empty)).toBeNull();
   });
 
   it('reads the counts off a session summary', () => {
@@ -607,7 +649,9 @@ describe('observed intervention rate', () => {
       projects: 0,
       readonly: 0,
     });
+    // no readonly here, so both denominators agree: 2 of 8
     expect(interventionRate(countsFromSession(SESSION_A))).toBeCloseTo(0.25);
+    expect(eligibleRejectionRate(countsFromSession(SESSION_A))).toBeCloseTo(0.25);
   });
 });
 

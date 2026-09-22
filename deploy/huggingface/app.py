@@ -11,7 +11,7 @@ import re
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-MODELS = ('lm_wikitext_l4', 'phys_mps_3k')
+MODELS = ('qwen3_5_0_8b', 'lm_wikitext_l4', 'phys_mps_3k')
 SESSIONS = ('demo_text', 'demo_physics')
 MAX_BODY = 8192
 
@@ -65,10 +65,10 @@ class PublicDemoGate:
 
         reads = ('/api/health', '/api/models', '/api/sessions', '/api/train/jobs', '/api/data', '/api/redteam')
         session_read = re.fullmatch(r'/api/sessions/(demo_text|demo_physics)(?:/(state|transactions))?', path)
-        model_read = re.fullmatch(r'/api/(models|train)/(lm_wikitext_l4|phys_mps_3k)(?:/log)?', path)
+        model_read = re.fullmatch(r'/api/(models|train)/(qwen3_5_0_8b|lm_wikitext_l4|phys_mps_3k)(?:/log)?', path)
         if method in ('GET', 'HEAD'):
             if path not in reads and not session_read and not model_read:
-                return await reject(404, 'This public demo exposes only its two published models and shared sessions.')
+                return await reject(404, 'This public demo exposes only its published models and shared sessions.')
             return await self.app(scope, receive, send)
         action_match = re.fullmatch(r'/api/sessions/(demo_text|demo_physics)/(chat|physics|reset|resume)', path)
         if method != 'POST' or not action_match:
@@ -113,8 +113,11 @@ class PublicDemoGate:
 
 
 NOTICE = '''<aside class="bg-surface-overlay text-ink-primary border-b border-edge text-sm px-5 py-3">
-<strong>Plastic · live research demo · free CPU</strong><br>
-Start in Sessions: open <strong>demo_physics</strong> to compare predictions, or <strong>demo_text</strong> for next-token generation.
+<strong>Qwen3.5-0.8B · pretrained chat · free CPU</strong><br>
+Open <strong>Chat</strong> with <strong>demo_text</strong> and ask a question.
+Text uses native context updates with an <strong>observational guard: no rollback protection</strong>.
+The turn-boundary retention policy is experimental and is not enabled here.
+The optional <strong>demo_physics</strong> session keeps the Plastic research model.<br>
 These two sessions are <strong>public and shared</strong>; prompts and outputs are visible to other visitors. Do not enter private information.
 Runs are limited to 128 generated tokens or 256 physics steps. Reset a session to start fresh; restart clears all demo activity.
 Training, calibration, red-team jobs, and creating/forking/deleting sessions are local-only features.<br>
@@ -144,9 +147,11 @@ def main():
     import torch
     import uvicorn
     from deploy.huggingface.prepare import prepare_store
+    from deploy.huggingface.pretrained import prepare_pretrained_sessions
     torch.set_num_threads(2)
     root = os.environ.get('ARTIFACTS_ROOT', '/tmp/plastic-demo')
-    prepare_store(Path('.'), Path(root), seed_sessions=True)
+    store = prepare_store(Path('.'), Path(root), seed_sessions=False)
+    prepare_pretrained_sessions(store, Path(os.environ.get('QWEN_CHECKPOINT', '/opt/qwen')))
     app = create_demo(root, os.environ.get('DASHBOARD_DIST', 'dashboard/dist'))
     uvicorn.run(app, host='0.0.0.0', port=int(os.environ.get('PORT', '7860')), access_log=False)
 

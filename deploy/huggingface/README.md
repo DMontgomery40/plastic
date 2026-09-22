@@ -24,8 +24,10 @@ push is a backup and does not trigger deployment. To retry delivery, use the wor
 
 The Space serves the existing React dashboard and Python model API on one port.
 The deployment adapter adds a visible public-session notice and restricts the API
-to bounded operations on `demo_text` and `demo_physics`. The research implementation
-in `plastic/` is unchanged.
+to bounded operations on `demo_text` and `demo_physics`. The text session uses the pinned official Qwen3.5-0.8B checkpoint through the
+existing native backend. It is **log-only / observational**: proposed context
+updates are recorded and retained, without rollback protection. The optional
+physics session keeps the original Plastic model and harness.
 
 Both sessions are shared by all visitors. Prompts and outputs are public; storage
 is disposable and resets when the Space restarts. Chat permits up to 1,024 prompt
@@ -34,7 +36,8 @@ runs at a time. Sessions reaching position 4,096 need an explicit reset. Trainin
 calibration, red-team execution, consolidation, and session creation/forking/deletion
 are disabled in the Space; use the local project for those workflows.
 
-The published `text/` and `physics/` folders supply checkpoints, tokenizers, saved
+The published `text/` and `physics/` folders preserve the original research
+checkpoints, tokenizers, saved
 calibration/canaries/Fisher references, and training logs. `prepare.py` verifies
 manifest checksums before registering them and refuses to overwrite changed files.
 Saved calibration is an operating point, not a promise of a policy-level false-positive
@@ -43,15 +46,18 @@ rate or adversarial robustness.
 ## Run locally from the complete Hugging Face download
 
 ```bash
-uv sync --extra dev
+uv sync --extra dev --extra pretrained
+uv run python -m deploy.huggingface.pretrained --download artifacts/qwen
 npm --prefix dashboard ci
 npm --prefix dashboard run build
-uv run python -m deploy.huggingface.app
+QWEN_CHECKPOINT=artifacts/qwen uv run python -m deploy.huggingface.app
 ```
 
 Open `http://localhost:7860`. The Space adapter defaults to `/tmp/plastic-demo` for
 its disposable store. `ARTIFACTS_ROOT`, `DASHBOARD_DIST`, and `PORT` override these
-settings. This adapter is for a public sandbox, not private multi-user hosting.
+settings. `QWEN_CHECKPOINT` selects the downloaded pinned checkpoint (the Docker
+image uses `/opt/qwen`). Use a fresh artifact store when switching an older demo
+from the research text checkpoint to Qwen; incompatible sessions are refused. This adapter is for a public sandbox, not private multi-user hosting.
 
 ## Run the unrestricted development dashboard
 
@@ -74,4 +80,6 @@ npm --prefix dashboard run build
 
 The Space uses `Dockerfile` copied from this directory at publication time, port
 7860, and Hugging Face's free `cpu-basic` hardware. No paid inference service or
-training job is needed. Its build installs CPU PyTorch and compiles the React UI.
+training job is needed. Its build installs CPU PyTorch and Transformers 5.17.0, downloads the pinned
+official Qwen checkpoint, and compiles the React UI. The public text session is
+`qwen3_5_0_8b`; the old `text/` weights remain available for research reproduction.

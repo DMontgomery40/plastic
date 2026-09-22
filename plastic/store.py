@@ -142,6 +142,16 @@ class ArtifactStore:
         return dict(rec)
 
     def model_exists(self, model_id: str) -> bool:
+        # backend-aware readiness: a pretrained backend (Qwen) is registered with an EXTERNAL
+        # checkpoint directory, not a local plastic checkpoint.pt/config, so requiring those would
+        # wrongly report a valid Qwen model as absent (a 404 from the session/model/redteam/sleep
+        # routes). It exists if its record is present and its checkpoint directory is on disk.
+        rec = self._load_index()["models"].get(model_id)
+        if rec is not None and rec.get("backend", "plastic") != "plastic":
+            cd = rec.get("checkpoint_dir")
+            return bool(cd) and os.path.isdir(cd)
+        # a plastic model (or a raw checkpoint saved without a registry record) exists iff its local
+        # checkpoint.pt and config are on disk — unchanged from the original file-based check
         return os.path.exists(self.checkpoint_path(model_id)) and os.path.exists(self.config_path(model_id))
 
     # ---- checkpoints ----
@@ -186,6 +196,13 @@ class ArtifactStore:
         return cfg, model, {"step": int(ckpt.get("step", 0)), "extra": dict(ckpt.get("extra", {}))}
 
     def model_signature(self, model_id: str) -> str:
+        # A pretrained-backend model (Qwen) has no local plastic checkpoint/config to hash; its
+        # signature is its backend and the content digest recorded at registration (the same digest
+        # QwenBackend binds a saved session to), so a session created against one checkpoint is
+        # refused if the registered checkpoint content changes.
+        rec = self._load_index()["models"].get(model_id, {})
+        if rec.get("backend") and rec.get("backend") != "plastic":
+            return f"{rec['backend']}:{rec.get('checkpoint_digest') or rec.get('checkpoint_dir') or model_id}"
         cfg = self.load_config(model_id)
         h = hashlib.sha256()
         h.update(cfg.signature_material().encode("utf-8"))
@@ -306,7 +323,16 @@ class SessionStoreMixin:
             root_id = str(parent.get("root_session_id", parent_session_id))
             forked_at = parent.get("pos", 0)
         now = int(time.time())
-        committed_pos = int((runner_state or {}).get("committed", {}).get("pos", 0)) if runner_state else 0
+
+        def _committed_pos(rs: dict[str, Any] | None) -> int:
+            # prefer the backend-independent cursor; fall back to a plastic state's serialized 'pos'
+            if not rs:
+                return 0
+            if "committed_pos" in rs:
+                return int(rs["committed_pos"])
+            return int(rs.get("committed", {}).get("pos", rs.get("working", {}).get("pos", 0)))
+
+        committed_pos = _committed_pos(runner_state)
         if parent_session_id is not None:
             forked_at = committed_pos  # a fork starts from the parent's committed state
         meta: dict[str, Any] = {
@@ -320,7 +346,7 @@ class SessionStoreMixin:
             "created_at_unix": now,
             "updated_at_unix": now,
             "harness": harness_cfg.to_dict() if hasattr(harness_cfg, "to_dict") else dict(harness_cfg),
-            "pos": 0 if runner_state is None else int(runner_state.get("committed", {}).get("pos", runner_state.get("working", {}).get("pos", 0))),
+            "pos": committed_pos,
             "n_transactions": 0,
             "commits": 0,
             "rollbacks": 0,

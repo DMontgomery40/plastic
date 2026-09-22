@@ -157,7 +157,7 @@ export function HarnessDiagram() {
     { label: 'scale', color: '#f0b429', note: 'reprocess with beta scaled' },
     { label: 'project', color: '#58a6ff', note: 'remove the canary-aligned part of the delta' },
     { label: 'rollback', color: '#ff6b6b', note: 'reprocess frozen: read, do not learn' },
-    { label: 'readonly', color: '#94a3b4', note: 'budget spent or alarm latched' },
+    { label: 'readonly', color: '#94a3b4', note: 'observation: no write proposed (generation, spent budget, or latched alarm)' },
   ];
 
   return (

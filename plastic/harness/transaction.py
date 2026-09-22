@@ -9,7 +9,10 @@ CUSUM, budget), asks the policy for a decision, and applies it:
 - scale:    working := committed, the chunk is reprocessed with β scaled, committed := working
 - project:  the multi-layer S delta is projected against the coherence-canary gradient;
             if too much of it is removed the decision falls back to rollback
-- readonly: as rollback, for a session whose budget is exhausted or whose alarm is latched
+- readonly: an observation, not an intervention — a chunk that proposed no write (its tokens
+            were learning-ineligible, e.g. generation, or the session is read-only from a spent
+            budget or latched alarm). Its already-frozen state is committed directly; nothing
+            was rejected, so it must not be counted as an intervention.
 
 Outputs already produced inside a chunk are not retracted. Everything the
 runner decides is logged with every signal that informed it.
@@ -25,9 +28,10 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
+from plastic.backends.plastic import PlasticBackend
 from plastic.config import ModelConfig
 from plastic.harness.calibrate import Calibration
-from plastic.harness.canary import CanarySuite, canary_gradient, score_suite
+from plastic.harness.canary import CanarySuite
 from plastic.harness.config import HarnessConfig
 from plastic.harness.fisher import fisher_norm
 from plastic.harness.policy import Decision, decide
@@ -58,6 +62,7 @@ class TransactionRunner:
         calibration: Calibration | None = None,
         suite: CanarySuite | None = None,
         device: torch.device | str = "cpu",
+        backend: Any = None,
     ) -> None:
         self.model = model
         self.cfg = model_cfg
@@ -68,10 +73,13 @@ class TransactionRunner:
         self.L = int(model_cfg.chunk)
         self.domain = model_cfg.domain
         self.fisher = calibration.fisher if calibration is not None else None
+        # a pretrained backend (e.g. QwenBackend) may be supplied directly; otherwise the native
+        # model is wrapped. model_cfg still carries the chunk size and domain either way.
+        self.backend = backend if backend is not None else PlasticBackend(model, model_cfg, device=self.device)
 
-        self.committed: SessionState = model.init_state(1, self.device)
-        self.working: SessionState = self.committed.clone()
-        self.anchor: SessionState = self.committed.clone()
+        self.committed: SessionState = self.backend.init_state()
+        self.working: SessionState = self.backend.clone(self.committed)
+        self.anchor: SessionState = self.backend.clone(self.committed)
         self.pending: list[Any] = []
         self.pending_targets: list[Tensor] = []
         self.pending_sources: list[str] = []
@@ -98,19 +106,23 @@ class TransactionRunner:
     # ------------------------------------------------------------------ feeding
     @property
     def pos(self) -> int:
-        return int(self.working.pos)
+        return self.backend.position(self.working)
 
     def _forward_segment(self, freeze: bool, beta_scale: float, items: list[Any]) -> tuple[Tensor, list[MemorySignals]]:
-        if self.domain == "text":
-            x = torch.tensor([items], dtype=torch.long, device=self.device)
-        else:
-            x = torch.stack([torch.as_tensor(r, dtype=torch.float32) for r in items]).unsqueeze(0).to(self.device)
-        with torch.no_grad():
-            out, self.working, signals = self.model(x, self.working, mode="chunk", freeze=freeze, beta_scale=beta_scale)
-        return out[0], [s.detach() for s in signals]
+        out, self.working, signals = self.backend.forward(items, self.working, freeze=freeze, beta_scale=beta_scale)
+        return out, signals
 
     def _token_freeze(self, source: str) -> bool:
-        return self.read_only or (source == "model" and not self.hcfg.learn_from_generation)
+        # An explicit session read-only (spent budget / latched alarm / requested freeze) always wins.
+        # Otherwise the backend declares whether this source writes: plastic freezes generation
+        # read-only (writes_for_source("model") is False) unless learn_from_generation; Qwen's
+        # generation writes its recurrent state (writes_for_source True) and is never frozen by
+        # default — those native writes are accounted, not treated as free observations.
+        if self.read_only:
+            return True
+        if self.backend.writes_for_source(source):
+            return False
+        return not self.hcfg.learn_from_generation
 
     def feed_tokens(self, ids: list[int], *, source: Source = "user") -> Tensor | None:
         if self.domain != "text":
@@ -172,7 +184,7 @@ class TransactionRunner:
     # ------------------------------------------------------------------ transaction
     def _reprocess(self, *, freeze: bool, beta_scale: float) -> None:
         """Rebuild ``working`` from ``committed`` by replaying the pending inputs."""
-        self.working = self.committed.clone()
+        self.working = self.backend.clone(self.committed)
         new_signals: list[list[MemorySignals]] = []
         items = self.pending
         sources = self.pending_sources
@@ -194,19 +206,25 @@ class TransactionRunner:
         n = len(self.pending)
         losses = [x for x in self.pending_loss if x is not None]
         chunk_loss = float(sum(losses) / len(losses)) if losses else float("nan")
-        mem = summarize_memory_signals([s for group in self.pending_signals for s in group])
-        deltas = self.working.s_delta(self.committed)
+        # A backend whose kernel exposes no per-token memory signals (Qwen) returns empty signal
+        # groups; those memory-derived signals are carried as None (never summarized to zero/NaN).
+        mem_signals = [s for group in self.pending_signals for s in group]
+        mem = summarize_memory_signals(mem_signals) if mem_signals else {
+            "surprise_mean": None, "surprise_max": None, "beta_mean": None,
+            "alpha_mean": None, "write_norm_sum": None,
+        }
+        deltas = self.backend.state_delta(self.working, self.committed)
         dnorm, per_layer = delta_norms(deltas)
         fisher_update = fisher_norm(deltas, self.fisher) if self.fisher is not None else None
-        fisher_drift = fisher_norm(self.working.s_delta(self.anchor), self.fisher) if self.fisher is not None else None
+        fisher_drift = fisher_norm(self.backend.state_delta(self.working, self.anchor), self.fisher) if self.fisher is not None else None
         before = after = {}
         g: list[Tensor] | None = None
         alignment = None
         if self.suite is not None:
-            before = score_suite(self.model, self.committed, self.suite, device=self.device)
-            after = score_suite(self.model, self.working, self.suite, device=self.device)
+            before = self.backend.score_suite(self.committed, self.suite)
+            after = self.backend.score_suite(self.working, self.suite)
             if self.hcfg.enable_projection:
-                g = canary_gradient(self.model, self.committed, self.suite, device=self.device)
+                g = self.backend.canary_gradient(self.committed, self.suite)
                 alignment = cosine(deltas, g)
         sig = ChunkSignals(
             pos_start=self.pos - n,
@@ -258,7 +276,7 @@ class TransactionRunner:
         decision; these are measured on the final ``committed`` state after it, so a rollback
         reports an accepted delta of zero and a scale reports the delta it actually kept.
         """
-        accepted_delta = delta_norms(self.committed.s_delta(pre_committed))[0]
+        accepted_delta = delta_norms(self.backend.state_delta(self.committed, pre_committed))[0]
         acc: dict[str, Any] = {
             "delta_norm": accepted_delta,
             "budget_charge": self.budget_used - budget_before,
@@ -266,7 +284,7 @@ class TransactionRunner:
             "budget_remaining": (None if self.hcfg.budget_session is None else self.hcfg.budget_session - self.budget_used),
         }
         if self.suite is not None:
-            after = score_suite(self.model, self.committed, self.suite, device=self.device)
+            after = self.backend.score_suite(self.committed, self.suite)
             acc["canary_coherence_after"] = after["coherence"]
             acc["canary_poison_after"] = after["poison"]
             acc["canary_delta_coherence"] = (
@@ -286,12 +304,19 @@ class TransactionRunner:
             if self._alarm_cooldown_left == 0:
                 self.read_only = False
                 self.read_only_reason = None
-        pre_committed = self.committed.clone()
+        pre_committed = self.backend.clone(self.committed)
         budget_before = self.budget_used
         sig, deltas, g = self._measure()
         thresholds = self.calibration.thresholds if self.calibration is not None else None
-        decision = decide(sig, self.hcfg, thresholds, read_only=self.read_only)
-        applied = self._apply(decision, sig, deltas, g)
+        if not self.pending_eligible:
+            # No token in this chunk was permitted to learn (a read-only session, or generated /
+            # ineligible tokens): it proposed no write, so it is an observation, not an intervention.
+            # Commit its already-frozen state directly — no threshold decision, and no redundant
+            # frozen replay — and record it read-only rather than as a spurious rollback.
+            decision = applied = self._commit_observed()
+        else:
+            decision = decide(sig, self.hcfg, thresholds, read_only=self.read_only)
+            applied = self._apply(decision, sig, deltas, g)
         accepted = self._accepted_metrics(pre_committed, budget_before, sig)
         if (
             self.hcfg.enable_budget
@@ -322,6 +347,14 @@ class TransactionRunner:
             "requested": decision.to_dict(),
             "signals": sig.to_dict(),  # PROPOSED: measured on the provisional state before the decision
             "accepted": accepted,      # ACCEPTED: measured on the committed state after the decision
+            # source and eligibility are recorded independently of the decision kind, so a chat turn's
+            # prompt (a user/eligible write) and its generation (Qwen: native model writes) can be
+            # reported and calibrated separately rather than pooled into one intervention rate.
+            "sources": {
+                "user": self.pending_sources.count("user"),
+                "model": self.pending_sources.count("model"),
+            },
+            "eligible": self.pending_eligible,
             "read_only": self.read_only,
             "read_only_reason": self.read_only_reason,
             "seconds": time.time() - t0,
@@ -355,35 +388,37 @@ class TransactionRunner:
         return abs(cap - remaining) <= 1e-12 * max(1.0, remaining)
 
     def _candidate_delta_norm(self) -> float:
-        return delta_norms(self.working.s_delta(self.committed))[0]
-
-    @staticmethod
-    def _finite(state: SessionState) -> bool:
-        """Every tensor that would be committed or restored must be finite."""
-        for l in state.layers:
-            tensors = [l.h, l.S, l.M, l.conv_ssm, l.conv_mem]
-            if l.chunk is not None:
-                tensors += [l.chunk.A, l.chunk.Bv, l.chunk.alpha_sum]
-            for t in tensors:
-                if t is not None and not bool(torch.isfinite(t).all()):
-                    return False
-        return True
+        return delta_norms(self.backend.state_delta(self.working, self.committed))[0]
 
     def _accept(self, kind: str, reasons: list[str], scale: float) -> Decision:
         self.budget_used += self._candidate_delta_norm()
-        self.committed = self.working.clone()
+        self.committed = self.backend.clone(self.working)
         return Decision(kind, reasons, scale)  # type: ignore[arg-type]
+
+    def _commit_observed(self) -> Decision:
+        """Commit a chunk that proposed no write (read-only / learning-ineligible) as an
+        observation, not an intervention. Its working state is already the frozen result of the
+        pending inputs (activation advanced, memory unchanged), so it is committed directly — no
+        rejection, no frozen replay. If reading the inputs produced a non-finite state, fall back
+        to the last good state and latch read-only."""
+        if not self.backend.is_finite(self.working):
+            self.working = self.backend.clone(self.committed)
+            self.read_only = True
+            self.read_only_reason = "nonfinite_frozen_recompute"
+            return Decision("rollback", ["nonfinite_frozen_recompute"])
+        self.committed = self.backend.clone(self.working)
+        return Decision("readonly", ["session_read_only" if self.read_only else "learning_ineligible"])
 
     def _reject_frozen(self, kind: str, reasons: list[str]) -> Decision:
         """Refuse the chunk as training signal: recompute it frozen and commit that."""
         self._reprocess(freeze=True, beta_scale=1.0)
-        if not self._finite(self.working):
+        if not self.backend.is_finite(self.working):
             # even reading the chunk produced non-finite state: keep the last good state and stop learning
-            self.working = self.committed.clone()
+            self.working = self.backend.clone(self.committed)
             self.read_only = True
             self.read_only_reason = "nonfinite_frozen_recompute"
             return Decision("rollback", reasons + ["nonfinite_frozen_recompute"])
-        self.committed = self.working.clone()
+        self.committed = self.backend.clone(self.working)
         return Decision(kind, reasons)  # type: ignore[arg-type]
 
     def _apply(self, decision: Decision, sig: ChunkSignals, deltas: list[Tensor], g: list[Tensor] | None) -> Decision:
@@ -391,7 +426,7 @@ class TransactionRunner:
         kind = decision.kind
         if kind in ("rollback", "readonly"):
             return self._reject_frozen(kind, reasons)
-        if not self._finite(self.working) or not math.isfinite(sig.delta_norm):
+        if not self.backend.is_finite(self.working) or not math.isfinite(sig.delta_norm):
             return self._reject_frozen("rollback", reasons + ["nonfinite_candidate"])
         if self.hcfg.log_only:
             # observation only: the reference trajectory must be the ungated one
@@ -414,17 +449,18 @@ class TransactionRunner:
                     return self._reject_frozen("rollback", reasons + ["budget_exhausted"])
                 scale_p = cap / norm_p  # a shrunk delta keeps the half-space constraint (eps >= 0)
                 reasons.append(f"budget_scaled_projection(scale={scale_p:.3g})")
-            for layer, base, d in zip(self.working.layers, self.committed.layers, projected):
-                layer.S = base.S + scale_p * d.to(base.S.device)
-            if not self._finite(self.working):
+            # both applies derive from the unscaled ``projected`` — scale_p is applied here, never
+            # compounded onto an already-scaled working state (the recheck below re-multiplies the
+            # accumulated scale_p against the original delta).
+            self.backend.apply_projected(self.working, self.committed, [scale_p * d for d in projected])
+            if not self.backend.is_finite(self.working):
                 return self._reject_frozen("rollback", reasons + ["nonfinite_candidate"])
             if cap is not None:
                 # recheck the representable stored difference, not the ideal delta
                 actual = self._candidate_delta_norm()
                 if actual > cap * (1.0 + 1e-6) and actual > 0.0:
                     scale_p *= (cap / actual) * 0.999
-                    for layer, base, d in zip(self.working.layers, self.committed.layers, projected):
-                        layer.S = base.S + scale_p * d.to(base.S.device)
+                    self.backend.apply_projected(self.working, self.committed, [scale_p * d for d in projected])
                     actual = self._candidate_delta_norm()
                     reasons.append(f"budget_recheck(scale={scale_p:.3g},delta={actual:.4g})")
                 if actual > cap * (1.0 + 1e-6):
@@ -451,7 +487,7 @@ class TransactionRunner:
             if self._cap_is_session_remaining(cap):
                 self._exhausted = True
             return self._reject_frozen("rollback", reasons)
-        if not self._finite(self.working):
+        if not self.backend.is_finite(self.working):
             return self._reject_frozen("rollback", reasons + ["nonfinite_candidate"])
         return self._accept("scale" if scale != 1.0 else "commit", reasons, scale)
 
@@ -464,9 +500,9 @@ class TransactionRunner:
         self._exhausted = False
 
     def reset(self) -> None:
-        self.committed = self.model.init_state(1, self.device)
-        self.working = self.committed.clone()
-        self.anchor = self.committed.clone()
+        self.committed = self.backend.init_state()
+        self.working = self.backend.clone(self.committed)
+        self.anchor = self.backend.clone(self.committed)
         self.pending, self.pending_targets, self.pending_sources = [], [], []
         self.pending_loss, self.pending_signals = [], []
         self.pending_eligible = False
@@ -482,9 +518,14 @@ class TransactionRunner:
     # ------------------------------------------------------------------ persistence
     def state_dict(self) -> dict[str, Any]:
         return {
-            "committed": self.committed.state_dict(),
-            "working": self.working.state_dict(),
-            "anchor": self.anchor.state_dict(),
+            # backend-independent cursors for lineage/display metadata (a backend's serialized state
+            # need not carry a readable position — Qwen's does not), so the store never digs into a
+            # backend-specific 'pos' field.
+            "committed_pos": self.backend.position(self.committed),
+            "working_pos": self.backend.position(self.working),
+            "committed": self.backend.state_dict(self.committed),
+            "working": self.backend.state_dict(self.working),
+            "anchor": self.backend.state_dict(self.anchor),
             "pending": [p.clone() if torch.is_tensor(p) else int(p) for p in self.pending],
             "pending_targets": [t.clone() for t in self.pending_targets],
             "pending_sources": list(self.pending_sources),
@@ -505,9 +546,9 @@ class TransactionRunner:
         }
 
     def load_state_dict(self, d: dict[str, Any]) -> None:
-        self.committed = SessionState.from_state_dict(d["committed"]).to(self.device)
-        self.working = SessionState.from_state_dict(d["working"]).to(self.device)
-        self.anchor = SessionState.from_state_dict(d["anchor"]).to(self.device)
+        self.committed = self.backend.load_state_dict(d["committed"])
+        self.working = self.backend.load_state_dict(d["working"])
+        self.anchor = self.backend.load_state_dict(d["anchor"])
         self.pending = [p.clone() if torch.is_tensor(p) else int(p) for p in d.get("pending", [])]
         self.pending_targets = [t.clone() for t in d.get("pending_targets", [])]
         self.pending_sources = list(d.get("pending_sources", []))
@@ -539,8 +580,8 @@ class TransactionRunner:
             "read_only_reason": self.read_only_reason,
             "n_transactions": self.n_transactions,
             "cusum": self.cusum.state(),
-            "state_norms": self.committed.norms(),
-            "drift_from_anchor": delta_norms(self.committed.s_delta(self.anchor))[0],
+            "state_norms": self.backend.state_norms(self.committed),
+            "drift_from_anchor": delta_norms(self.backend.state_delta(self.committed, self.anchor))[0],
         }
 
 
@@ -548,7 +589,12 @@ def fork_state_dict(d: dict[str, Any]) -> dict[str, Any]:
     """The runner state a fork starts from: the parent's committed state, no pending inputs,
     the harness history and controls carried over, and a fresh transaction count."""
     committed = d.get("committed", {})
+    # a fork starts from the parent's committed state, so working == committed and both cursors equal
+    # the parent's committed cursor (backend-independent; Qwen's serialized state carries no 'pos')
+    committed_pos = int(d.get("committed_pos", committed.get("pos", 0) if isinstance(committed, dict) else 0))
     out = {
+        "committed_pos": committed_pos,
+        "working_pos": committed_pos,
         "committed": committed,
         "working": committed,
         "anchor": d.get("anchor", committed),

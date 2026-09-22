@@ -1,9 +1,9 @@
 # Plastic
 
 - **[Try the live Hugging Face playground](https://huggingface.co/spaces/dmontgomery40/plastic)** —
-  generate text continuations, inspect proposed and accepted memory updates and
-  transaction decisions, or compare adaptive and frozen predictions in the optional
-  physics demo. Runs on free CPU; the small text model produces rough continuations.
+  chat with pretrained **Qwen3.5-0.8B**, inspect its native context updates and
+  transaction records, or try the optional physics benchmark. Runs on free CPU.
+  Text uses an **observational guard, with no rollback protection**.
 - **[Get the models and complete project on Hugging Face](https://huggingface.co/dmontgomery40/plastic/tree/main)** —
   download trained weights, configurations, saved evaluations, and the frontend and
   backend source to run the playground locally or build your own experiments.
@@ -14,33 +14,44 @@
   [research notes](https://github.com/DMontgomery40/plastic/tree/main/docs/research)
   alongside the complete recorded commit history.
 
-**Watch a small model learn from a sequence—and inspect what it keeps.**
+**Chat with a pretrained model—and inspect its changing context.**
 
 Plastic is a research workbench for models with memory that changes during inference.
 It combines a selective state-space recurrence, gradient-updated fast memory, and an
 external harness that can accept, scale, project, or roll back a proposed memory update.
-The same model core handles text prediction and a 2D physics task with hidden friction.
+The research model core handles text prediction and a 2D physics task with hidden friction.
+The live text playground uses the separate pretrained Qwen backend: its recurrent
+state carries context; this is not the original meta-trained fast-weight research model.
+The experimental turn-boundary retention policy is not enabled in the public demo.
+
+## Start with pretrained chat
+
+1. Open the [live playground](https://huggingface.co/spaces/dmontgomery40/plastic).
+2. Select **demo_text** and open **Chat**.
+3. Ask a question, such as `Denver is in what state? Answer in one short sentence.`
+4. Inspect the completion and transaction records. Text runs in native/log-only mode:
+   context updates are retained, and guard observations do not reject them.
+
+The model is the official [Qwen3.5-0.8B](https://huggingface.co/Qwen/Qwen3.5-0.8B)
+checkpoint, pinned to revision `2fc06364715b967f1860aea9cf38778875588b17`.
+Its text backbone has 752,393,024 parameters. It is pretrained, can make factual
+errors, and runs on shared free CPU, so longer replies take time. This release
+makes no claim of safety protection or useful learned adaptation for Qwen.
+
+Both demo sessions are **public and shared**. Prompts and outputs are visible to
+other visitors; do not enter private information. Reset a session to start fresh.
+Use the local project for private sessions, training, and larger experiments.
+
+### Optional physics benchmark
+
+Select **demo_physics**, open **Physics**, choose friction and a seed, and click
+**Run episode**. Compare base, frozen, and adaptive prediction errors on the same
+trajectory, then inspect retained updates in **Session**. Hidden friction is not
+an input to the research model.
 
 ![Plastic physics dashboard: prediction errors and accepted memory updates](assets/public-demo-physics.png)
 
-*The working CPU dashboard, shown locally. The charts show one interactive run, not the saved held-out evaluation below.*
-
-## Start with the physics demo
-
-1. Open the live dashboard and select **demo_physics** in the session picker.
-2. Open **Physics**, choose friction and a seed, and click **Run episode**.
-3. Compare base, frozen, and adaptive prediction errors on the same trajectory.
-4. Open **Session** to inspect the proposed memory changes and what the harness accepted.
-
-The model receives observations, actions, and a reset flag. It does not receive the
-friction value you choose. A lower adaptive prediction error shows useful online
-adaptation on that run; the transaction log tells you which updates were retained.
-
-To try text, select **demo_text**, open **Chat**, and enter a short continuation prompt
-such as `The history of computing`. This is a 6.85M-parameter next-token model trained
-from scratch, so expect rough continuations rather than assistant-style answers.
-
-The hosted demo has two **public, shared sessions**. Prompts and outputs are visible to other visitors; do not enter private information. Runs are bounded to keep the CPU demo responsive. Use the local project for private sessions, training, and larger experiments.
+*The CPU research dashboard shown locally; one interactive run, not the saved evaluation below.*
 
 ## What is in the project?
 
@@ -55,12 +66,13 @@ The hosted demo has two **public, shared sessions**. Prompts and outputs are vis
 | Tests | Check state semantics, equivalence, persistence, and interface contracts | [tests/](tests/) |
 | Public demo deployment | Run the bounded CPU demo or import checkpoints locally | [deploy/huggingface/](deploy/huggingface/) |
 
-The Hugging Face **Files** tab contains this source snapshot plus both trained models:
+The Hugging Face **Files** tab contains this source snapshot plus both original research checkpoints:
 [text/](https://huggingface.co/dmontgomery40/plastic/tree/main/text) and
 [physics/](https://huggingface.co/dmontgomery40/plastic/tree/main/physics).
 Each model includes weights, configuration, saved evaluation, training logs, harness
 reference artifacts, a checksum manifest, and a loading example. GitHub holds the
-ongoing development history. The linked Space runs the actual frontend and backend.
+ongoing development history. The linked Space runs the actual frontend and backend, and downloads the pinned
+Qwen checkpoint from its official repository during the Docker build.
 
 ## Run everything locally, without training first
 
@@ -95,12 +107,12 @@ For training, calibration, CLI sessions, red-team experiments, and the full rese
 contracts, see the [user guide](docs/user-guide.md). The [deployment guide](deploy/huggingface/README.md)
 explains the public demo's limits and how to run it yourself.
 
-## What the saved models demonstrate
+## What the original research checkpoints demonstrate
 
 | Checkpoint | Parameters | Saved held-out metric | Writes enabled | Writes disabled |
 | --- | ---: | --- | ---: | ---: |
 | Physics | 3.56M | Observation-delta MSE | 0.00012885 | 0.20873034 |
-| Text | 6.85M | NLL, nats/token | 3.4704 | 5.0151 |
+| Research text (not hosted chat) | 6.85M | NLL, nats/token | 3.4704 | 5.0151 |
 
 These are single-run evaluation records, covering 131,072 physics target elements
 and 131,072 text tokens. Disabling writes uses `beta_scale=0`; retention still runs.

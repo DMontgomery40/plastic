@@ -109,6 +109,11 @@ def calibration_payload(cal: Calibration) -> dict[str, Any]:
         "reference_sizes": {k: len(v) for k, v in cal.reference.items()},
         "target_fpr": float(cal.target_fpr),
         "created_at_unix": int(cal.created_at_unix),
+        # the MODEL-compatibility signature this calibration was built against (it identifies the model,
+        # not distinct calibration content -- two calibrations of the same model share it). The session
+        # detail is truthful about the active artifact because it serves the calibration the runner
+        # actually loaded, not because this signature distinguishes content (ASTRA-096 #2 / ASTRA-100).
+        "model_signature": cal.model_signature or None,
     }
 
 
@@ -207,10 +212,60 @@ def transactions_page(store: ArtifactStore, session_id: str, *, limit: int, offs
     return {"total": len(items), "items": items[offset : offset + limit]}
 
 
+def _finite_or_none(x: Any) -> float | None:
+    """A real finite float, or None for a missing/non-numeric/nonfinite value — so a failed or absent
+    measurement renders as unavailable, never as a measured zero (ASTRA-094)."""
+    try:
+        f = float(x)
+    except (TypeError, ValueError):
+        return None
+    return f if math.isfinite(f) else None
+
+
+def _native_state_payload(session: Any) -> dict[str, Any]:
+    """State view for a pretrained Protocol backend (Qwen): honest per-memory-unit recurrent norms
+    and drift-from-anchor over the backend's own memory units, with a ``kind`` discriminator so the
+    client renders the GDN path distinctly. No fabricated per-head S / singular values / h tensors —
+    those are the toy Plastic shape and do not exist here. A measurement that FAILS or is missing is
+    null (unavailable), never a measured zero; a genuine zero is preserved."""
+    runner = session.runner
+    backend = runner.backend
+    norms = backend.state_norms(runner.committed)
+    per = norms.get("recurrent_norm")
+    per = list(per) if isinstance(per, list) else []
+    # drift is a separate measurement that can raise or come back short; an unmatched or failed unit
+    # is UNKNOWN (null), not zero drift
+    drift: list[Any] | None
+    try:
+        drift = [t.float().norm() for t in backend.state_delta(runner.committed, runner.anchor)]
+    except Exception:  # noqa: BLE001 - a degenerate/failed delta reports unknown, not a route error or zero
+        drift = None
+    units = [
+        {
+            "index": i,
+            "recurrent_norm": _finite_or_none(per[i]),
+            "drift_from_anchor": _finite_or_none(drift[i]) if (isinstance(drift, list) and i < len(drift)) else None,
+        }
+        for i in range(len(per))
+    ]
+    return {
+        "kind": "recurrent",
+        "backend": getattr(session, "backend_kind", "qwen"),
+        "pos": int(runner.pos),
+        "units": units,
+        "recurrent_norm_total": _finite_or_none(norms.get("recurrent_norm_total")),
+    }
+
+
 def state_payload(session: Any) -> dict[str, Any]:
-    """Per-layer view of the committed state for the weights panel."""
+    """Per-layer view of the committed state for the weights panel.
+
+    The toy Plastic state is per-layer ``S``/``h``; a pretrained backend (Qwen) has no such shape, so
+    it gets a distinct native payload rather than a 500 or fabricated tensors."""
     committed = session.runner.committed
     anchor = session.runner.anchor
+    if not hasattr(committed, "layers"):
+        return _native_state_payload(session)
     layers: list[dict[str, Any]] = []
     for i, layer in enumerate(committed.layers):
         s = layer.S[0].detach().float().cpu()  # (H, d_h, d_h)
@@ -229,7 +284,7 @@ def state_payload(session: Any) -> dict[str, Any]:
                 "drift_from_anchor": drift,
             }
         )
-    return {"layers": layers, "pos": int(session.runner.pos)}
+    return {"kind": "plastic", "layers": layers, "pos": int(session.runner.pos)}
 
 
 # ---------------------------------------------------------------------- red team

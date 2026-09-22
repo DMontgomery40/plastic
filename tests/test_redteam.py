@@ -126,6 +126,34 @@ def test_constraint_uses_guarded_nll(fixture):
     assert r.nll_payload_guarded == r.nll_payload_guarded and not r.constraint_violated
 
 
+def test_coherence_poison_attack_reports_embedding_bound_and_controls(fixture):
+    store, mid, d, suite = fixture
+    model_cfg, model, _ = store.load_checkpoint(mid)
+    from plastic.redteam.attack import coherence_poison_attack
+
+    prefix = list(np.fromfile(os.path.join(d, "validation.bin"), dtype="<u2")[:16].astype("int64"))
+    cfg = AttackConfig(poison_chunks=3, steps=4, lr=0.1, radius=3.0)
+    r = coherence_poison_attack(model, model_cfg, cfg, prefix, suite, device=CPU, rng=torch.Generator().manual_seed(0))
+    assert r.family == "coherence_poison"
+    assert len(r.payload_ids) == 3 * model_cfg.chunk and all(0 <= t < model_cfg.vocab_size for t in r.payload_ids)
+    # the embedding-space upper bound is finite and is at least the discrete unprotected damage
+    assert r.damage_embedding_unprotected == r.damage_embedding_unprotected  # not NaN
+    assert r.damage_embedding_unprotected >= r.damage_unprotected - 1e-4
+    # all three controls are populated and the payload ran chunk-by-chunk through the harness
+    assert len(r.decisions) == 3 and r.damage_unprotected == r.damage_unprotected and r.damage_frozen == r.damage_frozen
+
+
+def test_run_redteam_exposes_unprotected_aggregates(fixture):
+    store, mid, d, suite = fixture
+    cfg = AttackConfig(poison_chunks=2, steps=3, families=("coherence_poison",))
+    summary = run_redteam(store, mid, cfg=cfg, data_dir=d, n_prefixes=2, prefix_len=16, device=CPU, log=lambda s: None)
+    fam = summary["families"]["coherence_poison"]
+    for key in ("unprotected_damage_mean", "unprotected_damage_max", "unprotected_over_threshold_fraction",
+                "embedding_unprotected_damage_mean"):
+        assert key in fam, key
+    assert fam["embedding_unprotected_damage_mean"] is not None  # this family always fills it
+
+
 def test_run_redteam_summary_has_created_at(fixture):
     store, mid, d, suite = fixture
     cfg = AttackConfig(suffix_len=8, steps=1, families=("random",))

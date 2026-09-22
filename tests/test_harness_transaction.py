@@ -203,6 +203,111 @@ def test_projection_respects_budget():
     assert _delta(r.committed, lm.init_state(1)) <= cap * (1 + 1e-6)
 
 
+def test_projection_budget_recheck_float_rounding():
+    # ASTRA-061: at committed S = 2**20 the float32 ULP is 0.125, so a scaled projected delta can
+    # round to a *representable* stored change that still violates the budget cap — the branch that
+    # fires the SECOND apply_projected (the recheck) in _apply. In exact arithmetic the first scaled
+    # apply lands precisely at the cap, so a rounding fixture is what makes the recheck reproducible;
+    # this is deterministic coverage of the branch, NOT a claim that real float token forwards can
+    # never reach it (ASTRA-062). The committed/working S, the proposed delta, and the (orthogonal)
+    # canary gradient are set directly. The three caps make ULP rounding give, respectively: accept
+    # in one apply, accept-zero after a recheck, and a budget_unrepresentable rollback charging zero.
+    from plastic.harness.policy import Decision
+    from plastic.harness.signals import ChunkSignals
+
+    for domain in ("text", "physics"):
+        for rule in ("delta", "chunk"):
+            for cap, kind, applies in ((0.14, "project", 1), (0.07, "project", 2), (0.10, "rollback", 2)):
+                torch.manual_seed(813)
+                cfg = ModelConfig(domain=domain, rule=rule, d_model=16, n_heads=2, n_layers=2, chunk=4, vocab_size=64)
+                model = (PlasticLM(cfg) if domain == "text" else PlasticDynamics(cfg)).eval()
+                r = TransactionRunner(
+                    model, cfg, HarnessConfig(budget_chunk=cap, enable_stats=False, project_max_removed=1.0), device=CPU
+                )
+                if domain == "text":
+                    r.feed_tokens([7])
+                else:
+                    r.feed_physics(torch.zeros(1, cfg.input_dim), torch.zeros(1, cfg.obs_dim))
+                for a, z in zip(r.committed.layers, r.working.layers):
+                    a.S.fill_(2 ** 20)
+                    z.S.copy_(a.S)
+                r.working.layers[0].S.reshape(-1)[0] += 1.0  # a single-unit proposed delta at index 0
+                deltas = r.backend.state_delta(r.working, r.committed)
+                gradients = [torch.zeros_like(d) for d in deltas]
+                gradients[0].reshape(-1)[1] = 1.0  # orthogonal to the delta: projection keeps it whole
+                sig = ChunkSignals(
+                    pos_start=0, pos_end=1, n_tokens=1, chunk_loss=1.0, surprise_mean=0.0, surprise_max=0.0,
+                    beta_mean=1.0, alpha_mean=1.0, write_norm_sum=1.0, delta_norm=1.0,
+                )
+                calls: list[int] = []
+                base_apply = r.backend.apply_projected
+
+                def counted(*a, _b=base_apply, **k):
+                    calls.append(1)
+                    return _b(*a, **k)
+
+                r.backend.apply_projected = counted
+                decision = r._apply(Decision("project", []), sig, deltas, gradients)
+                ctx = (domain, rule, cap, decision.to_dict(), len(calls))
+                assert decision.kind == kind and len(calls) == applies, ctx
+                if applies == 2:
+                    assert any("budget_recheck" in s for s in decision.reasons), ctx
+                if kind == "rollback":
+                    assert any("budget_unrepresentable" in s for s in decision.reasons), ctx
+                assert r.budget_used <= cap * (1 + 1e-6), ctx
+
+
+def test_compression_ratio_handles_native_token_widths():
+    # ASTRA-068: the display-only compression metric must not overflow on native token ids above the
+    # uint16 ceiling (Qwen's ~248k vocab / chat special tokens); plastic vocabs stay uint16.
+    from plastic.harness.signals import compression_ratio
+
+    assert compression_ratio(list(range(100, 100 + 64))) is not None  # small ids (plastic)
+    big = [248045, 248069, 65535, 65536, 200000] * 8  # real chat special-token magnitudes
+    r = compression_ratio(big)
+    assert r is not None and r > 0
+    assert compression_ratio([65535] * 32) is not None  # boundary: fits uint16
+    assert compression_ratio([65536] * 32) is not None  # boundary: needs uint32
+    assert compression_ratio([248045, 248069]) is None  # too few bytes -> None (no overflow)
+    assert compression_ratio([]) is None and compression_ratio(None) is None
+
+
+def test_reduced_signal_backend_carries_none_end_to_end():
+    # A backend whose kernel exposes no per-token memory signals (like Qwen) must have
+    # surprise/write-norm/decay carried as None end-to-end — never zero or NaN — while chunk_loss and
+    # log_delta_norm stay real and a valid decision is still made. Driven with a reduced-signal
+    # wrapper over PlasticBackend so it runs in the plain suite (no Qwen checkpoint needed).
+    class _Reduced:
+        def __init__(self, inner):
+            self._inner = inner
+
+        def signal_names(self):
+            return ("chunk_loss", "log_delta_norm")
+
+        def forward(self, items, state, *, freeze, beta_scale):
+            out, new_state, _ = self._inner.forward(items, state, freeze=freeze, beta_scale=beta_scale)
+            return out, new_state, []  # no per-token memory signals
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+    cfg, lm = _lm()
+    r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)
+    r.backend = _Reduced(r.backend)
+    r.feed_tokens(_ids(8))
+    rec = r.transactions[0]
+    s = rec["signals"]
+    for k in ("surprise_mean", "surprise_max", "beta_mean", "alpha_mean", "write_norm_sum", "log_write_norm"):
+        assert s[k] is None, (k, s[k])  # unavailable memory signals are None, not 0.0 / NaN
+    assert isinstance(s["chunk_loss"], float) and s["chunk_loss"] == s["chunk_loss"]  # real, not NaN
+    assert isinstance(s["log_delta_norm"], float)
+    # z is None for every unavailable signal (a None value yields a None z)
+    assert s["z"]["surprise_mean"] is None and s["z"]["log_write_norm"] is None and s["z"]["fisher_update"] is None
+    assert rec["decision"]["kind"] in ("commit", "rollback", "scale", "project", "readonly")
+    # persistence round-trips a chunk that carried no memory signals
+    r.load_state_dict(r.state_dict())
+
+
 def test_nonfinite_candidate_is_rejected():
     cfg, lm = _lm()
     r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)
@@ -225,6 +330,44 @@ def test_generated_tokens_do_not_write_by_default():
     r2 = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False, learn_from_generation=True), device=CPU)
     r2.feed_tokens(_ids(8), source="model")
     assert any(float(l.S.abs().sum()) > 0 for l in r2.committed.layers)
+
+
+def test_native_generation_writes_are_accounted_and_source_recorded():
+    # A backend whose generation writes (Qwen) does NOT freeze model-source tokens by default: they
+    # are eligible native writes, accounted and recorded with their source, unlike plastic's frozen
+    # read-only generation. Explicit read-only still takes precedence over the backend's declaration.
+    class _GenWrites:
+        def __init__(self, inner):
+            self._inner = inner
+
+        def writes_for_source(self, source):
+            return True  # both user and generation write (Qwen semantics)
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+    cfg, lm = _lm()
+    # plastic default: a model-source chunk is frozen read-only (not eligible), and records its source
+    p = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)
+    p.feed_tokens(_ids(8), source="model")
+    prec = p.transactions[0]
+    assert prec["eligible"] is False and prec["decision"]["kind"] == "readonly"
+    assert prec["sources"] == {"user": 0, "model": 8}
+    assert all(torch.equal(l.S, torch.zeros_like(l.S)) for l in p.committed.layers)  # nothing written
+
+    # generation-writes backend: the same model chunk is eligible and actually writes
+    q = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)
+    q.backend = _GenWrites(q.backend)
+    q.feed_tokens(_ids(8), source="model")
+    qrec = q.transactions[0]
+    assert qrec["eligible"] is True and qrec["decision"]["kind"] != "readonly"
+    assert qrec["sources"] == {"user": 0, "model": 8}
+    assert any(float(l.S.abs().sum()) > 0 for l in q.committed.layers)  # generation wrote
+
+    # explicit read-only still takes precedence over the generation-writes declaration
+    q.read_only = True
+    q.feed_tokens(_ids(8, seed=1), source="model")
+    assert q.transactions[-1]["eligible"] is False and q.transactions[-1]["decision"]["kind"] == "readonly"
 
 
 def test_streaming_partition_invariance_and_persistence():
@@ -409,6 +552,35 @@ def test_alarm_freeze_modes():
     assert not r.read_only  # 1 -> 0, auto-resumed, this chunk learns again
 
 
+def test_ineligible_chunk_is_readonly_not_rollback():
+    # A chunk with no learning-eligible token (a read-only session, or generated tokens with
+    # learn_from_generation off) proposes no write, so it must be reported as a read-only
+    # observation — never a threshold rollback, and with no redundant frozen replay.
+    from plastic.harness.calibrate import Calibration
+
+    cfg, lm = _lm()
+    # a threshold so low any chunk exceeds it: an *eligible* chunk would roll back on it
+    cal = Calibration(thresholds={"chunk_loss": 0.01})
+    r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), calibration=cal, device=CPU)
+
+    # control: an eligible user chunk over the threshold rolls back (the threshold is live)
+    r.feed_tokens(_ids(8, seed=1), source="user")
+    assert r.transactions[-1]["decision"]["kind"] == "rollback"
+
+    # a generated chunk (learn_from_generation defaults off) writes nothing -> read-only, not rollback
+    r.feed_tokens(_ids(8, seed=2), source="model")
+    rec = r.transactions[-1]
+    assert rec["decision"]["kind"] == "readonly" and "learning_ineligible" in rec["decision"]["reasons"]
+    assert rec["accepted"]["delta_norm"] < 1e-6  # no write accepted
+    assert rec["signals"]["z"] == {n: None for n in rec["signals"]["z"]}  # ineligible: no z fed to history
+
+    # a mixed chunk (some eligible tokens) is NOT short-circuited — it goes through the policy
+    r2 = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), calibration=cal, device=CPU)
+    r2.feed_tokens(_ids(4, seed=3), source="user")
+    r2.feed_tokens(_ids(4, seed=4), source="model")  # completes one L=8 chunk, partly eligible
+    assert r2.transactions[-1]["decision"]["kind"] != "readonly"
+
+
 def test_read_only_chunks_do_not_feed_statistics():
     cfg, lm = _lm()
     r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)
@@ -436,7 +608,7 @@ def test_nonfinite_in_any_carried_field_is_refused():
         r.feed_tokens(_ids(5, seed=1))
         rec = r.transactions[-1]
         assert rec["decision"]["kind"] == "rollback" and any("nonfinite" in x for x in rec["decision"]["reasons"]), field_name
-        assert TransactionRunner._finite(r.committed), field_name
+        assert r.backend.is_finite(r.committed), field_name
 
 
 def test_chunk_cap_refusal_does_not_exhaust_a_large_session_budget():

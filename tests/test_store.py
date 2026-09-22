@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from plastic.config import ModelConfig
@@ -21,6 +22,100 @@ def test_register_and_list(tmp_path):
     store.register_model(a, {"status": "completed"})
     assert store.load_model_record(a)["status"] == "completed"
     assert store.load_model_record(a)["created_at_unix"] == 10
+
+
+def test_model_exists_is_backend_aware(tmp_path):
+    # ASTRA-081 #5: a Qwen model is registered with an EXTERNAL checkpoint dir (no local plastic
+    # checkpoint.pt/config), so model_exists must recognize it by its record + checkpoint dir rather
+    # than 404 the session/model/redteam/sleep routes that gate on it.
+    store = ArtifactStore(str(tmp_path))
+    ckpt_dir = tmp_path / "qwen-ckpt"
+    ckpt_dir.mkdir()
+
+    ok = store.new_model_id("qwen")
+    store.register_model(ok, {"backend": "qwen", "checkpoint_dir": str(ckpt_dir), "domain": "text", "chunk": 8})
+    assert store.model_exists(ok) is True  # record present and its checkpoint dir is on disk
+
+    missing_dir = store.new_model_id("qwen")
+    store.register_model(missing_dir, {"backend": "qwen", "checkpoint_dir": str(tmp_path / "nope"), "domain": "text"})
+    assert store.model_exists(missing_dir) is False  # registered but its checkpoint dir is absent
+
+    plastic_no_ckpt = store.new_model_id("lm")
+    store.register_model(plastic_no_ckpt, {"backend": "plastic", "status": "running"})
+    assert store.model_exists(plastic_no_ckpt) is False  # a plastic model still needs its checkpoint/config
+
+    assert store.model_exists("model-that-was-never-registered") is False
+
+
+def test_qwen_model_signature_and_session_lifecycle(tmp_path):
+    # A pretrained-backend (Qwen) model has no local plastic checkpoint; its signature comes from the
+    # registered backend + content digest, and sessions create/verify against it without a checkpoint.
+    from plastic.harness.config import HarnessConfig
+
+    store = ArtifactStore(str(tmp_path))
+    mid = store.new_model_id("qwen")
+    store.register_model(mid, {"backend": "qwen", "checkpoint_dir": "/models/qwen3.5", "checkpoint_digest": "abc123", "domain": "text", "chunk": 8})
+    sig = store.model_signature(mid)
+    assert sig == "qwen:abc123"  # backend + content digest, no plastic checkpoint read
+
+    sid = store.new_session_id("chat")
+    store.create_session(sid, model_id=mid, domain="text", harness_cfg=HarnessConfig())
+    store.verify_session_model(sid)  # signature matches -> no raise
+    assert store.load_session_meta(sid)["model_signature"] == "qwen:abc123"
+
+    # a changed registered checkpoint digest invalidates existing sessions
+    store.register_model(mid, {"backend": "qwen", "checkpoint_digest": "def456"})
+    with pytest.raises(ValueError, match="different signature"):
+        store.verify_session_model(sid)
+
+
+def test_fork_metadata_uses_backend_independent_cursor(tmp_path):
+    # ASTRA-074: session/fork metadata must read a backend-independent committed cursor, not a
+    # plastic state's serialized committed['pos'] (which Qwen's serialized state does not carry).
+    from plastic.harness.config import HarnessConfig
+    from plastic.harness.transaction import fork_state_dict
+
+    store = ArtifactStore(str(tmp_path))
+    mid = store.new_model_id("qwen")
+    store.register_model(mid, {"backend": "qwen", "checkpoint_digest": "d", "domain": "text", "chunk": 8})
+    # a Qwen-shaped runner state: the committed cursor is exposed at top level, not inside committed
+    parent_state = {"committed_pos": 24, "working_pos": 24, "committed": {"backend": "qwen"}, "working": {"backend": "qwen"}}
+    p = store.new_session_id("chat")
+    store.create_session(p, model_id=mid, domain="text", harness_cfg=HarnessConfig(), runner_state=parent_state)
+    assert store.load_session_meta(p)["pos"] == 24  # not 0
+
+    child = store.new_session_id("chat")
+    store.create_session(
+        child, model_id=mid, domain="text", harness_cfg=HarnessConfig(),
+        parent_session_id=p, runner_state=fork_state_dict(parent_state),
+    )
+    cmeta = store.load_session_meta(child)
+    assert cmeta["pos"] == 24 and cmeta["forked_at_pos"] == 24  # lineage cursor preserved, not 0/0
+
+
+def test_fork_cursor_fresh_warm_and_pending(tmp_path):
+    # ASTRA-076: a fork reports the parent's COMMITTED cursor in both metadata fields and drops
+    # pending working tokens — across fresh, warm, and warm-with-pending parents (a Qwen-shaped state
+    # whose committed cursor is exposed backend-independently, not inside committed).
+    from plastic.harness.config import HarnessConfig
+    from plastic.harness.transaction import fork_state_dict
+
+    store = ArtifactStore(str(tmp_path))
+    mid = store.new_model_id("qwen")
+    store.register_model(mid, {"backend": "qwen", "checkpoint_digest": "d", "domain": "text", "chunk": 8})
+
+    for committed, working in ((0, 0), (8, 8), (8, 11)):  # fresh, warm, warm-with-pending (working>committed)
+        parent_state = {"committed_pos": committed, "working_pos": working, "committed": {"backend": "qwen"}, "working": {"backend": "qwen"}}
+        p = store.new_session_id("chat")
+        store.create_session(p, model_id=mid, domain="text", harness_cfg=HarnessConfig(), runner_state=parent_state)
+        forked = fork_state_dict(parent_state)
+        # the fork starts from committed: both cursors are the committed pos, and pending is dropped
+        assert forked["committed_pos"] == committed and forked["working_pos"] == committed and forked["pending"] == []
+        child = store.new_session_id("chat")
+        store.create_session(child, model_id=mid, domain="text", harness_cfg=HarnessConfig(), parent_session_id=p, runner_state=forked)
+        cmeta = store.load_session_meta(child)
+        assert cmeta["pos"] == committed and cmeta["forked_at_pos"] == committed
+        assert store.load_session_meta(p)["pos"] == committed  # parent metadata unaffected by the fork
 
 
 def test_retried_run_does_not_inherit_stale_error(tmp_path):
