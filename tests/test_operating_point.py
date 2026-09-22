@@ -156,27 +156,67 @@ def test_eval_uses_matched_seeds_across_fresh_and_carried():
     assert fresh_seeds == carried_seeds == [20260922 + i for i in range(4)]
 
 
-def test_eval_keeps_completed_turns_when_a_chain_is_cut():
-    # ASTRA-086: a deadline mid-chain keeps the completed turns (durable evidence) with an incomplete
-    # flag, and the regime is marked not complete
+def test_eval_marks_incomplete_when_deadline_precedes_all_work():
+    # ASTRA-086 boundary: a deadline already in the past before any turn runs processes nothing in
+    # either regime and marks both not complete (the timing deadline is not evidence work ran)
     import time as _t
     from scripts.experiments.qwen_operating_point import _eval_sessions
 
-    calls = {"n": 0}
-
     def cutting_drive(runner, tok, prompt, *, max_new_tokens, temperature, top_k, gen):
-        calls["n"] += 1
         runner.transactions.append({"sources": {"user": 8, "model": 0}, "decision": {"kind": "commit"}, "eligible": True, "accepted": {"delta_norm": 1.0}})
         runner.transactions.append({"sources": {"user": 0, "model": 8}, "decision": {"kind": "commit"}, "eligible": True, "accepted": {"delta_norm": 1.0}})
         return ("x", [1], [2])
 
     prompts = [{"id": i, "prompt": f"p{i}"} for i in range(4)]
-    # deadline in the near past for CARRIED only: run fresh with a far deadline, then check carried cut
     rep = _eval_sessions(None, None, None, prompts, hcfg=None, gen=_gen_settings(), seed_base=0, chains=1,
                          deadline=_t.time() - 1, _runner=_FakeRunner(["commit"] * 100), _drive=cutting_drive)
-    # the far-past deadline stops both regimes immediately: nothing processed, marked incomplete
+    # nothing processed, both regimes incomplete, no phantom sessions kept
     assert rep["fresh"]["complete"] is False and rep["carried"]["complete"] is False
     assert rep["fresh"]["processed_ids"] == [] and rep["fresh"]["n_expected_sessions"] == 4
+    assert rep["fresh"]["sessions"] == [] and rep["carried"]["sessions"] == []
+
+
+def test_eval_preserves_completed_turns_then_interruption(monkeypatch):
+    # ASTRA-087: the transition the boundary test above does NOT reach -- a deadline that trips AFTER
+    # some turns complete must KEEP those turns' records, seeds and transactions as durable evidence,
+    # mark the chain incomplete, and mark the regime not complete. Fresh (singleton groups) finishes
+    # fully; the carried chain is cut mid-way after two successful turns.
+    import scripts.experiments.qwen_operating_point as qop
+    from scripts.experiments.qwen_operating_point import _eval_sessions
+
+    clock = {"t": 0.0}
+    monkeypatch.setattr(qop.time, "time", lambda: clock["t"])
+    seeds = []
+
+    def clock_drive(runner, tok, prompt, *, max_new_tokens, temperature, top_k, gen):
+        seeds.append(gen.initial_seed())
+        runner.transactions.append({"sources": {"user": 8, "model": 0}, "decision": {"kind": "commit"}, "eligible": True, "accepted": {"delta_norm": 1.0}})
+        runner.transactions.append({"sources": {"user": 0, "model": 8}, "decision": {"kind": "commit"}, "eligible": True, "accepted": {"delta_norm": 1.0}})
+        clock["t"] += 1.0  # each completed turn advances the wall clock by one unit
+        return ("x", [1], [2])
+
+    prompts = [{"id": i, "prompt": f"p{i}"} for i in range(4)]
+    # deadline=5: fresh's four singleton turns (clock 0->4) all finish; the carried four-turn chain
+    # starts at clock 4, runs rows 0 and 1 (clock ->6), then the row-2 pre-check trips at 6 > 5.
+    rep = _eval_sessions(None, None, None, prompts, hcfg=None, gen=_gen_settings(), seed_base=700,
+                         chains=1, deadline=5.0, _runner=_FakeRunner(["commit"] * 100), _drive=clock_drive)
+
+    # fresh ran to completion; nothing marked incomplete
+    assert rep["fresh"]["complete"] is True
+    assert rep["fresh"]["processed_ids"] == [0, 1, 2, 3]
+    assert all(not s.get("incomplete") for s in rep["fresh"]["sessions"])
+
+    # carried cut mid-chain after two successful turns: those two are retained as durable evidence
+    assert rep["carried"]["complete"] is False
+    assert rep["carried"]["processed_ids"] == [0, 1]
+    assert rep["carried"]["n_expected_sessions"] == 1 and rep["carried"]["n_complete_sessions"] == 0
+    (sess,) = rep["carried"]["sessions"]
+    assert sess["incomplete"] is True
+    assert [t["id"] for t in sess["turns"]] == [0, 1]  # only the completed turns
+    assert len(rep["carried"]["raw_transactions"]) == 4  # both completed turns' transactions kept (2 each)
+    # matched per-row seeds: fresh row i and carried row i share seed_base + i
+    assert seeds[:4] == [700 + i for i in range(4)]
+    assert seeds[4:6] == [700, 701]  # carried only reached rows 0 and 1
 
 
 def test_summarize_flags_nonfinite_accepted_delta():
