@@ -155,3 +155,22 @@ def test_heldout_loss_is_batch_size_invariant(tmp_path):
     for r in results[1:]:
         assert abs(r["heldout_loss"] - results[0]["heldout_loss"]) < 1e-4
         assert abs(r["heldout_loss_beta0"] - results[0]["heldout_loss_beta0"]) < 1e-4
+
+
+def test_adversarial_training_logs_damage(tmp_path):
+    d, tok = _text_corpus(tmp_path)
+    root = str(tmp_path / "adv")
+    # the validation fixture must be long enough for the default canary probes
+    encode_documents_to_bin(tok, DOCS * 4, os.path.join(d, "validation.bin"))
+    cfg = TrainConfig(
+        domain="text",
+        model=ModelConfig(d_model=32, n_heads=2, n_layers=1, chunk=8, vocab_size=tok.vocab_size),
+        artifacts_root=root, data_dir=d, steps=4, batch_size=2, seq_len=32, warmup_steps=1, eval_every=0,
+        save_every=0, eval_batches=1, log_every=1, device="cpu", mqar_frac=0.0,
+        adversarial=True, adv_every=2, adv_steps=2, adv_suffix_len=8, adv_prefix_len=16,
+    )
+    mid = train(cfg, log=lambda s: None)
+    log = ArtifactStore(root).read_log(mid)
+    adv = [r for r in log if "adv_damage" in r]
+    assert len(adv) == 2 and all(r["adv_damage"] == r["adv_damage"] for r in adv)
+    assert os.path.exists(ArtifactStore(root).canary_path(mid))

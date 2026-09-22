@@ -55,6 +55,10 @@ def _add_train_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--log-every", type=int, default=10)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--device", default="auto")
+    p.add_argument("--adversarial", action="store_true", help="meta-train the write gate against an embedding-space attacker")
+    p.add_argument("--adv-every", type=int, default=10)
+    p.add_argument("--adv-lambda", type=float, default=1.0)
+    p.add_argument("--adv-steps", type=int, default=5)
 
 
 def cmd_data_prepare(args: argparse.Namespace) -> int:
@@ -115,6 +119,10 @@ def cmd_train(args: argparse.Namespace) -> int:
         mu_range=(getattr(args, "mu_min", 0.02), getattr(args, "mu_max", 0.25)),
         nonlinear=getattr(args, "nonlinear", False),
         action_std=getattr(args, "action_std", 0.5),
+        adversarial=bool(getattr(args, "adversarial", False)),
+        adv_every=int(getattr(args, "adv_every", 10)),
+        adv_lambda=float(getattr(args, "adv_lambda", 1.0)),
+        adv_steps=int(getattr(args, "adv_steps", 5)),
     )
     model_id = train(cfg)
     print(model_id)

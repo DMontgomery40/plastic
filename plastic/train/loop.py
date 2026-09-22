@@ -63,6 +63,15 @@ class TrainConfig:
     nonlinear: bool = False
     action_std: float = 0.5
 
+    adversarial: bool = False
+    adv_every: int = 10
+    adv_lambda: float = 1.0
+    adv_steps: int = 5
+    adv_suffix_len: int = 32
+    adv_radius: float = 1.0
+    adv_lr: float = 0.05
+    adv_prefix_len: int = 128
+
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["model"] = self.model.to_dict()
@@ -223,6 +232,14 @@ def train(cfg: TrainConfig, *, log: Callable[[str], None] = _print_flush) -> str
         train_windows = TokenWindows(os.path.join(cfg.data_dir, "train.bin"), cfg.seq_len)
         heldout = TokenWindows(os.path.join(cfg.data_dir, "validation.bin"), cfg.seq_len)
 
+    suite = None
+    if cfg.adversarial and cfg.domain == "text":
+        from plastic.harness.canary import CanarySuite
+
+        assert cfg.data_dir is not None
+        suite = CanarySuite.default_text(os.path.join(cfg.data_dir, "validation.bin"), vocab_size=model_cfg.vocab_size, seed=cfg.seed)
+        suite.save(store.canary_path(model_id))
+
     model = build_model(model_cfg).to(device)
     opt = build_optimizer(
         model,
@@ -300,6 +317,19 @@ def train(cfg: TrainConfig, *, log: Callable[[str], None] = _print_flush) -> str
                 loss = model.loss(b.inputs.to(device), b.target_delta.to(device))
                 n_tok = int(b.inputs.shape[0] * b.inputs.shape[1])
 
+            adv_info: dict[str, float] = {}
+            if suite is not None and cfg.adv_every > 0 and step % cfg.adv_every == 0:
+                from plastic.train.adversarial import adversarial_damage
+
+                assert train_windows is not None
+                prefix = train_windows.sample(1, g)[:, : cfg.adv_prefix_len].to(device)
+                dmg, info = adversarial_damage(
+                    model, prefix, suite, steps=cfg.adv_steps, suffix_len=cfg.adv_suffix_len, radius=cfg.adv_radius,
+                    lr=cfg.adv_lr, device=device, rng=g,
+                )
+                loss = loss + cfg.adv_lambda * dmg
+                adv_info = {"adv_damage": float(dmg.detach()), "adv_damage_continuous": info["attack_damage_continuous"]}
+
             opt.zero_grad(set_to_none=True)
             loss.backward()
             grad_norm = float(torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip))
@@ -319,6 +349,7 @@ def train(cfg: TrainConfig, *, log: Callable[[str], None] = _print_flush) -> str
                     "tokens": tokens_seen,
                     "seconds": now - t0,
                     "tok_per_s": tps,
+                    **adv_info,
                 }
                 store.append_log(model_id, rec)
                 log(f"[train] step {step}/{cfg.steps} loss {rec['loss']:.4f} grad {grad_norm:.3f} lr x{scale:.3f} {tps / 1e3:.1f}K tok/s")
