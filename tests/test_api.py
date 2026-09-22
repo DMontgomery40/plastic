@@ -128,13 +128,35 @@ def test_calibrate(api):
         json={"data_dir": api.data, "chunks": 16, "fisher_chunks": 2, "fpr": 0.1},
     ).json()
     assert body["n_chunks"] >= 16 and body["target_fpr"] == 0.1
-    assert body["thresholds"] and all(isinstance(v, float) for v in body["thresholds"].values())
+    assert body["thresholds"] and all(v is None or isinstance(v, float) for v in body["thresholds"].values())
     assert body["reference_sizes"] and "reference" not in body
     assert body["created_at_unix"] > 0
+    # the rate the sample can support, which is not the requested target_fpr
+    assert set(body["achievable_fpr"]) <= set(body["thresholds"])
+    assert body["achievable_fpr"] and all(v > 0 for v in body["achievable_fpr"].values())
 
     detail = api.client.get(f"/api/models/{api.text}").json()
     assert detail["record"]["calibrated"] is True
     assert detail["calibration"]["thresholds"] == body["thresholds"]
+    assert detail["calibration"]["achievable_fpr"] == body["achievable_fpr"]
+
+
+def test_an_unbounded_threshold_is_null(api):
+    """A threshold can be infinite (an unbounded bound); JSON carries it as null."""
+    path = os.path.join(api.store.model_dir(api.text), "calibration.json")
+    original = open(path, "rb").read()
+    payload = json.loads(original)
+    signal = sorted(payload["thresholds"])[0]
+    payload["thresholds"][signal] = float("inf")
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f)
+        body = api.client.get(f"/api/models/{api.text}")
+        assert body.status_code == 200
+        assert body.json()["calibration"]["thresholds"][signal] is None
+    finally:
+        with open(path, "wb") as f:
+            f.write(original)
 
 
 # ---------------------------------------------------------------------- sessions

@@ -49,6 +49,15 @@ def sanitize(obj: Any) -> Any:
     return str(obj)
 
 
+def _finite(value: Any) -> float | None:
+    """One float, or null when it is infinite or NaN (an unbounded threshold)."""
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return None
+    return f if math.isfinite(f) else None
+
+
 # ---------------------------------------------------------------------- models
 
 
@@ -84,11 +93,18 @@ def model_summary(store: ArtifactStore, rec: dict[str, Any]) -> dict[str, Any]:
 
 
 def calibration_payload(cal: Calibration) -> dict[str, Any]:
-    """The calibration without the raw reference windows (sizes only)."""
+    """The calibration without the raw reference windows (sizes only).
+
+    ``thresholds`` values may be null: a signal whose quantile saturates or
+    whose bound is unlimited has no finite threshold. ``achievable_fpr`` is the
+    per-signal false-positive rate the calibration sample can actually support,
+    which is not the requested ``target_fpr`` when the sample is small.
+    """
     return {
         "n_chunks": int(cal.n_chunks),
-        "thresholds": {k: float(v) for k, v in cal.thresholds.items()},
-        "canary_baseline": {k: float(v) for k, v in cal.canary_baseline.items()},
+        "thresholds": {k: _finite(v) for k, v in cal.thresholds.items()},
+        "achievable_fpr": {k: _finite(v) for k, v in cal.achievable_fpr.items()},
+        "canary_baseline": {k: _finite(v) for k, v in cal.canary_baseline.items()},
         "reference_sizes": {k: len(v) for k, v in cal.reference.items()},
         "target_fpr": float(cal.target_fpr),
         "created_at_unix": int(cal.created_at_unix),
@@ -160,12 +176,32 @@ def lineage(store: ArtifactStore, session_id: str) -> list[str]:
 
 
 def transactions_tail(store: ArtifactStore, session_id: str, limit: int) -> list[dict[str, Any]]:
-    """The last ``limit`` transactions."""
+    """The last ``limit`` transactions, exactly as the runner wrote them.
+
+    A record is ``{index, t_unix, pos_start, pos_end, decision, requested,
+    signals, accepted, read_only, read_only_reason, seconds}``. The three that
+    matter for reading a chunk are distinct and all pass through untouched:
+
+    - ``requested``: what the policy asked for, before the harness applied it.
+    - ``decision``: what the harness applied (kind, reasons, scale).
+    - ``signals``: the PROPOSED update, measured on the provisional state before
+      the decision, so a rollback still reports the delta it would have made.
+    - ``accepted``: the committed outcome, measured after the decision
+      (``delta_norm``, ``budget_charge``, ``budget_used``, ``budget_remaining``,
+      and the canary values ``canary_coherence_after``, ``canary_poison_after``,
+      ``canary_delta_coherence``, ``canary_delta_poison``, which are null when the
+      model has no canary suite). A rollback's accepted ``delta_norm`` is zero.
+
+    The API never computes these. They come from the runner.
+    """
     return store.read_transactions(session_id, limit=limit)
 
 
 def transactions_page(store: ArtifactStore, session_id: str, *, limit: int, offset: int) -> dict[str, Any]:
-    """A window into the transaction log from the start, with the full count."""
+    """A window into the transaction log from the start, with the full count.
+
+    Records keep every field the runner wrote; see ``transactions_tail``.
+    """
     items = store.read_transactions(session_id)
     return {"total": len(items), "items": items[offset : offset + limit]}
 
