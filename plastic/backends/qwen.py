@@ -42,22 +42,29 @@ _KERNELS = ("torch_chunk_gated_delta_rule", "torch_recurrent_gated_delta_rule")
 def _install_frozen_kernels() -> None:
     from transformers.models.qwen3_5 import modeling_qwen3_5 as native
 
-    if getattr(native, "_plastic_freeze_installed", False):
+    if getattr(native, "_plastic_kernels_installed", False):
         return
     for name in _KERNELS:
         original = getattr(native, name)
 
         def make(orig):
             def wrapped(query, key, value, g, beta, **kwargs):  # noqa: ANN001
+                # freeze wins: beta=0 AND g=0 is a genuine no-write, no-decay. Otherwise a beta
+                # scale (leaving g/decay untouched) implements the harness scale-control contract —
+                # beta_scale=0 writes nothing while decay still runs, distinct from freeze.
                 if getattr(_tls, "freeze", False):
                     g = torch.zeros_like(g)
                     beta = torch.zeros_like(beta)
+                else:
+                    scale = getattr(_tls, "beta_scale", 1.0)
+                    if scale != 1.0:
+                        beta = beta * scale
                 return orig(query, key, value, g=g, beta=beta, **kwargs)
 
             return wrapped
 
         setattr(native, name, make(original))
-    native._plastic_freeze_installed = True
+    native._plastic_kernels_installed = True
 
 
 @contextmanager
@@ -68,6 +75,16 @@ def _frozen():
         yield
     finally:
         _tls.freeze = prev
+
+
+@contextmanager
+def _scaled(scale: float):
+    prev = getattr(_tls, "beta_scale", 1.0)
+    _tls.beta_scale = scale
+    try:
+        yield
+    finally:
+        _tls.beta_scale = prev
 
 
 @dataclass
@@ -272,6 +289,28 @@ class QwenBackend:
                 out = self.model(x, past_key_values=state.cache, use_cache=True)
         state.cache = out.past_key_values
         return out.logits[0], state
+
+    @torch.no_grad()
+    def forward(self, chunk: list[int], state: QwenState, *, freeze: bool, beta_scale: float) -> tuple[torch.Tensor, QwenState, list[Any]]:
+        """The Backend forward: advance ``chunk`` through the model, returning (logits, new_state,
+        per-token signals). ``freeze`` is a genuine no-write (β=0 and g=0). ``beta_scale`` scales the
+        write only (leaving decay g) via the per-call kernel wrapper; ``beta_scale=0`` writes nothing
+        while decay still runs, distinct from ``freeze``. The signal list is **empty**: Qwen's kernel
+        exposes no per-token memory signals (surprise/write-norm), so the runner carries those as
+        ``None`` — the available signals (chunk NLL from the logits, recurrent-state change from
+        ``state_delta``) are derived by the runner, not returned here."""
+        x = torch.tensor([chunk], dtype=torch.long, device=self.device)
+        with self._serialized():
+            if freeze:
+                with _frozen():
+                    out = self.model(x, past_key_values=state.cache, use_cache=True)
+            elif beta_scale != 1.0:
+                with _scaled(beta_scale):
+                    out = self.model(x, past_key_values=state.cache, use_cache=True)
+            else:
+                out = self.model(x, past_key_values=state.cache, use_cache=True)
+        state.cache = out.past_key_values
+        return out.logits[0], state, []
 
     @torch.no_grad()
     def logits_full(self, ids: list[int]) -> torch.Tensor:

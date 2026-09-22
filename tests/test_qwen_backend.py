@@ -186,6 +186,40 @@ def test_is_finite_covers_recurrent_conv_and_kv(backend):
     assert injected and not backend.is_finite(st_k)
 
 
+def test_forward_beta_scale_and_freeze_semantics(backend):
+    ids = backend.encode("A sentence long enough for a clean forward and beta-scale check across it.")
+    # forward matches process on the plain path and returns an empty per-token signal list
+    lp, _ = backend.process(ids[:6], backend.init_state())
+    lf, _, sig = backend.forward(ids[:6], backend.init_state(), freeze=False, beta_scale=1.0)
+    assert torch.equal(lp, lf) and sig == []
+
+    # beta_scale=0 from the zero initial state writes nothing: S = a*0 + 0*(k^T e) stays exactly zero
+    # (distinct from freeze only when decay matters — here decay of zero is also zero)
+    z = backend.init_state()
+    _, z, _ = backend.forward(ids[:6], z, freeze=False, beta_scale=0.0)
+    assert all(int(torch.count_nonzero(t)) == 0 for t in z.recurrent_leaves())
+
+    # scaling beta down shrinks the write: a half-scale write has a strictly smaller (but nonzero)
+    # recurrent-delta norm than a full write. It is NOT exactly half — the gated DELTA rule's
+    # error-correction term beta*(v - S k)k^T depends on S, so the write is nonlinear in the scale.
+    def _dnorm(scale):
+        base = backend.init_state()
+        s = backend.init_state()
+        _, s, _ = backend.forward(ids[:6], s, freeze=False, beta_scale=scale)
+        d = backend.state_delta(s, base)
+        return float(sum(t.pow(2).sum() for t in d) ** 0.5)
+
+    full, half = _dnorm(1.0), _dnorm(0.5)
+    assert full > 0 and 0 < half < full
+
+    # freeze via forward leaves recurrent memory exactly unchanged from a written state
+    w = backend.init_state()
+    _, w, _ = backend.forward(ids[:6], w, freeze=False, beta_scale=1.0)
+    pre = [t.clone() for t in w.recurrent_leaves()]
+    _, w, _ = backend.forward(ids[6:], w, freeze=True, beta_scale=1.0)
+    assert all(torch.equal(a, b) for a, b in zip(w.recurrent_leaves(), pre))
+
+
 def test_score_suite_is_read_only_and_gradient_is_defined(backend):
     ids = backend.encode("A benign sentence serving as coherence material for the canary suite here.")
     st = backend.init_state()
