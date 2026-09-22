@@ -1,426 +1,199 @@
-# ttt_ssm_eval — TTT Safety Research Infrastructure
+# plastic
 
-Test-Time Training turns every input into a training example. In a transformer, garbage in = garbage out. In TTT, garbage in = garbage *learned*. This repo is infrastructure for studying how to make that safe.
+A tiny test-time-training state-space model with a transactional safety harness.
 
-[![Architecture Tab (repo-wide blueprint)](./assets/ui_architecture.png)](./assets/ui_architecture.png)
+`plastic` is one small model (about 6M parameters) that learns while it reads. Its
+recurrence is a selective state-space layer; its memory is a fast weight matrix that
+takes one gradient step per token on a self-supervised objective, so context is
+compressed into weights instead of a growing cache. The whole thing is meta-trained
+end to end through that inner loop, which is what makes it a real test-time-training
+layer rather than an adapter bolted onto a frozen model. The same block stack serves
+two domains: next-token prediction on text, and a hidden-friction control task where
+the only way to predict well is to infer the latent dynamics into the fast weights.
 
-## Architecture Philosophy
+Learning at inference is a security surface: every input is a gradient step, so a
+hostile input is not just a bad answer, it is a bad thing learned. `plastic` wraps
+the inner loop in a transactional harness. Each chunk of tokens is a transaction:
+attempt the update, measure it, then commit, roll it back, scale it down, project it,
+or refuse it. Every signal the harness reads comes from the model itself (loss,
+surprise, the write rate the model chose, the size and curvature of the weight change,
+how it moves a set of probe texts), never from pattern-matching the input. Sessions
+are persisted and branchable, like version control for the plastic weights.
 
-### The Problem
+This is a research sandbox, not a product. It is deliberately small, runs in plain
+PyTorch on an Apple Silicon laptop or a single cloud GPU, and is honest about what it
+does and does not show.
 
-Standard TTT implementations treat weight updates as pure math—token goes in, gradient happens, weights change. The "learning" is implicit inside `forward()`. This is fine for research benchmarks on benign data. It's catastrophic for anything adversarial.
-
-### The Stance
-
-Safety checks are deliberately kept *outside* the computation graph:
-
-- **Inside the graph:** Safety becomes a learned approximation. The model can meta-learn to bypass it. Adversarial gradients can "convince" safety checks to approve poison.
-- **Outside the graph:** Safety is explicit Python. Gradients can't flow through regex. The gate can't be gradient-hacked because it's not differentiable.
-
-The tradeoff: the model can't learn to be safe—only to do tasks while safety logic watches. We accept this because "auditable and limited" beats "learned and hackable."
-
-### Defense in Depth
-
-No single layer is sufficient. The architecture stacks defenses with different failure modes:
-
-| Layer | Speed | What it catches | Failure mode |
-|-------|-------|-----------------|--------------|
-| **Gate** | Fast, static | Known attack patterns, entropy anomalies, instruction overrides | Novel obfuscation bypasses it |
-| **Canary** | Fast, dynamic | Catastrophic corruption (loss spikes, weight explosions) | Subtle drift doesn't spike loss |
-| **Auditor** | Slow, smart | Patterns across sessions, semantic attacks | Blind spots in the auditor |
-| **Human** | Slowest | Everything else | Inattention, scale |
-
-The goal isn't perfect defense. It's making failures observable before they compound.
-
-### Complementary Learning Systems (Wake/Sleep)
-
-Inspired by how biological memory actually works:
-
-- **Hippocampus (fast, plastic):** Learns quickly during the day, temporary storage
-- **Neocortex (slow, stiff):** Learns slowly during sleep, permanent storage
-- **Sleep:** Replay experiences, selectively consolidate what matters
-
-Mapped to this repo:
-
-| Biological | This Repo | When |
-|------------|-----------|------|
-| Hippocampus | Fast context weights (per-session) | During chat |
-| Neocortex | Core model weights | Never during inference |
-| Sleep | `ttt.text_lm.sleep` | Offline consolidation |
-
-During inference, only fast weights update. Core weights are frozen. Users cannot send gradients to the core model.
-
-During sleep (offline, no user interaction):
-1. Harvest chat traces from the day
-2. Filter through auditor (reject poison)
-3. Interleave with "core knowledge" (catastrophic forgetting prevention)
-4. Update core model slowly, carefully
-5. Reset fast weights for tomorrow
-
-This creates asymmetric timescales: fast learning happens continuously but temporarily. Permanent learning happens rarely, supervised, offline.
-
----
-
-## Paper Alignment (arXiv 2407.04620)
-
-This repo is inspired by the TTT layers framework described in *Learning to (Learn at Test Time): RNNs with Expressive Hidden States* (Sun et al., 2025). A copy is included at `assets/2407.04620v4.pdf`.
-
-**Paper spec (high level):**
-- **Hidden state = weights.** The recurrent “state” is a small model `f` with weights `W` (e.g. linear or MLP).
-- **Output rule:** `z_t = f(x_t; W_t)` (use the current weights to compute outputs).
-- **Update rule:** `W_{t+1} = W_t - η ∇_W ℓ(W_t; x)` where `ℓ` is a self-supervised loss (run even at inference/test time).
-- **Instantiations:** `TTT-Linear` (linear `f`) and `TTT-MLP` (2-layer MLP `f`).
-- **Efficiency tricks:** mini-batch TTT and a “dual form” for better hardware utilization (their ref impl uses fused kernels).
-
-**How this repo maps to that spec:**
-- **Text / World A (TTT Sentry):** `ttt/core/model.py` + `ttt/monitors/gradient.py` treat `adapter.weight` as the fast “hidden state weights”, updated per chunk with an instrumented safety loop (gate/rollback/SPFW) for eval.
-- **Text / World B (TinyLM chat):** `ttt/text_lm` stores per-session fast weights (context net) and updates them online during chat. The same safety harness primitives are now available here (opt-in via config).
-  - `kind="linear"`: linear residual adapter in hidden space (closest to `TTT-Linear` as “weights-as-state”).
-  - `kind="fast_lowrank_mem"`: low-rank fast-weight memory (`A/B` factors) with a self-supervised associative objective (`memory_loss`).
-- **Nano (SSM + branching):** `ttt_ssm_nano` uses a diagonal-stable SSM with a small set of plastic matrices persisted and branchable; conceptually “state as weights” in a non-language environment.
-
-**Intentional gaps vs the paper:**
-- No dual-form/fused-kernel TTT compute; this repo prioritizes correctness + safety instrumentation using standard PyTorch autograd.
-- No end-to-end outer-loop training of TTT layers at scale; Text core models are trained offline, while fast weights update online only.
-
----
-
-## What Exists vs What Is Claimed
-
-### Exists (Concrete)
-
-- Artifact store with branching sessions ("git for plastic weights")
-- Shared TTT safety harness (gate + rollback + SPFW projection) used by both the monitor path and the chat path
-- Tiny trainable LM (BPE + Muon) with per-session fast weights
-- Sleep consolidation that replays chat traces into core model
-- Dashboard for observing all of the above
-
-### Thesis (Being Tested)
-
-- Fast weights behave like a learned context window
-- Externalizing safety from the graph is worth the tradeoff
-- Sleep consolidation can be made selective and delta-based
-- The whole stack produces observable, correctable failures
-
----
-
-## Table of Contents
-
-- [Quick Start](#quick-start)
-- [Product Surface](#product-surface)
-- [Paper Alignment](#paper-alignment-arxiv-240704620)
-- [Nano Domain](#nano-domain-ssm--branching-sessions)
-- [Text Domain](#text-domain)
-  - [World A: TTT Sentry](#text-world-a--ttt-sentry)
-  - [World B: TinyLM](#text-world-b--tinylm-offline-training)
-  - [Chat Sessions](#text-world-b--chat-sessions)
-  - [Sleep Consolidation](#sleep-consolidation)
-- [Safety Coverage Matrix](#safety-coverage-matrix)
-- [Training Data](#training-data--scaling)
-- [Troubleshooting](#troubleshooting)
-- [Repo Map](#repo-map)
-
----
-
-## Quick Start
-
-### Install
+## Install and run
 
 ```bash
-python -m pip install -e .
+uv sync --extra dev
+uv run pytest -W ignore          # the test suite
+uv run plastic --help
+./start.sh                       # API on :13579, dashboard on :5173
 ```
 
-### Start Everything
+Python 3.12, PyTorch 2.12 or newer. MPS on Apple Silicon, CUDA on Hugging Face Jobs.
+
+## The architecture
+
+One block, stacked four times for text and three for physics. Every block has three
+parts, all in plain PyTorch that runs on CPU, MPS, and CUDA.
+
+**A selective state-space branch** provides activation-level context. It is a gated
+linear recurrence with a per-channel, input-dependent decay, computed with a chunked
+log-space scan that only ever forms decay ratios in `(0, 1]`. (The scan the project
+started with formed `a^t` directly and collapsed to zero after four tokens; the
+replacement is exact against a sequential reference to within 2e-5.)
+
+**A fast-weight memory branch** is the test-time-training layer. Per head it holds a
+matrix `S`, and per token it takes one gradient step on the associative loss
+`½‖kS − v‖²` with a learned write rate `β` and a forget gate `α`:
+
+```
+e_t = v_t − k_t (α_t S_{t−1})          prediction error (the inner-loop gradient direction)
+S_t = α_t S_{t−1} + β_t k_tᵀ e_t       one gradient step per token, gated
+m_t = q_t S_t                          read after the token's own write
+```
+
+This is TTT-Linear (Sun et al., 2024) with mini-batch one, plus Gated DeltaNet's
+forget gate. It has a chunk-parallel form for training (an exact unit-lower-triangular
+solve, not an approximate inverse, so repeated tokens do not blow it up) and a
+recurrent form for inference; the two agree to a few parts in `1e-4` and that
+equivalence is a permanent test. A second inner rule (mini-batch with momentum and
+Newton-Schulz orthogonalization, in the style of LaCT and Atlas) is available behind
+the same interface. `β` is the model's own answer to "should I learn from this?", and
+the harness reads it.
+
+**Meta-training** runs the full sequence with the fast state starting at zero, and
+backpropagates the ordinary next-token loss through every inner update. Because the
+inner step has a closed form, this needs only first-order autograd and runs on MPS at
+about 8K tokens/second for the default model.
+
+The design is grounded in a literature review current to September 2026 (TTT layers,
+Titans, LaCT, TTT-E2E, Gated DeltaNet, Mamba-3) and an architecture memo verified on
+CPU and MPS, both in `docs/research/`.
+
+## The safety harness
+
+Every input chunk is a transaction against three copies of the session state:
+committed, working, and the pending chunk. At each chunk boundary the harness computes
+signals entirely from the model and decides what to do with the update.
+
+| Signal | What it is |
+|---|---|
+| chunk loss | the model's own confusion on the chunk (out-of-distribution proxy) |
+| surprise | the inner-loop prediction error `‖e_t‖`, independent of the write rate |
+| write rate `β` | the learned gate the model applied to each token |
+| update norm | the actual change to the fast weights, and its Fisher-weighted size |
+| canary suites | a coherence set whose loss must not rise, a poison set whose loss must not fall |
+| canary alignment | cosine between the weight change and the gradient that would hurt the canaries |
+| robust statistics | median/MAD z-scores against a fixed benign reference, plus a CUSUM on drift |
+
+The decision is one of: **commit**, **rollback** (refuse the chunk as training signal,
+read it but do not learn it), **scale** (apply a fraction of the update), **project**
+(remove the component that would raise the canary loss, an A-GEM style half-space
+projection on the state delta), or **read-only** (the session's write budget is spent).
+Budgets are hard: the actual weight change of the accepted candidate is checked against
+the cap, non-finite states are refused, and a spent session stops learning until it is
+explicitly resumed. Thresholds are calibrated on a benign held-out stream to a target
+false-positive rate, using split-conformal order statistics that report the rate the
+sample size can actually support.
+
+There is no regex, no keyword list, and no string inspection anywhere in the harness.
+The design and its threat model follow a survey of attacks on and defenses for models
+that learn at inference (in `docs/research/`), including the 2026 result that test-time
+training can strip safety guardrails and that a private-probe drift detector is the
+defense that holds.
+
+## The two domains
+
+**Text.** Byte-level BPE, wikitext-103 (or fineweb-edu). Next-token prediction. Recall
+is measured directly with MQAR probes, and every checkpoint reports its held-out loss,
+its held-out loss with the memory disabled (the difference is the value of the memory),
+its MQAR accuracy, and the histogram of learned write rates.
+
+**Physics.** A 2D point mass with a friction coefficient the model never observes. The
+input is `[observation, action, reset flag]`; the target is the next observation delta.
+Several episodes with different friction are packed into one sequence, so the model has
+to infer the latent dynamics into its fast weights within each episode. Sessions report
+the three-way comparison on one trajectory: the base model with no memory, the session
+with its memory frozen, and the session learning online. On a laptop the adaptive model
+reaches an MSE of 0.0008 where the same model with its memory disabled sits at 1.04.
+
+## Sessions, red team, and sleep
+
+Sessions persist their plastic weights, harness state, and full transaction log, and
+they branch: fork a session and the child starts from the parent's committed state,
+so you can compare divergent learning histories from one point. `plastic chat` learns
+each prompt through the harness; `plastic physics` runs an episode; `plastic session
+fork|reset|resume|show` manage the tree.
+
+`plastic redteam` attacks a model on the real token path: it optimizes a perturbation
+of a suffix's embeddings to maximize canary damage subject to the model's own
+perplexity staying plausible, snaps to real tokens, and re-validates the discrete
+payload through the harness, so the reported damage is the damage of a payload that
+was actually fed. `plastic train --adversarial` meta-trains the write gate against
+that attacker. `plastic sleep` consolidates what sessions learned into the slow
+weights, accepted only if the canaries hold.
+
+## Usage
 
 ```bash
-./start.sh
+# data and training
+uv run plastic data prepare --corpus wikitext --out artifacts/data/wikitext
+uv run plastic train text --data artifacts/data/wikitext --steps 3000 --device mps
+uv run plastic train physics --steps 3000 --layers 3 --device mps
+uv run plastic models
+
+# a GPU run on Hugging Face Jobs (exports the working tree, no push needed)
+scripts/hf_jobs/launch_text.sh l4x1 6000 BATCH=16 MODEL_ID=lm_wikitext_l4
+hf jobs logs -f dmontgomery40/<job_id>
+hf buckets sync hf://buckets/dmontgomery40/plastic-runs/artifacts/models/<id> artifacts/models/<id>
+
+# calibrate the harness, then open a session
+uv run plastic calibrate <model_id> --data artifacts/data/wikitext
+uv run plastic session new --model <model_id>
+uv run plastic chat <session_id> "your prompt here"
+uv run plastic physics <session_id> --steps 256 --mu 0.12
+
+# attack and consolidate
+uv run plastic redteam <model_id> --data artifacts/data/wikitext --record
+uv run plastic sleep <model_id> --core artifacts/data/wikitext
 ```
 
-- API: `http://127.0.0.1:13579`
-- Dashboard: `http://127.0.0.1:5173`
-
-Environment knobs:
-- `ARTIFACTS_ROOT=/path/to/artifacts`
-- `TEXT_LM_DEVICE=auto|cpu|mps`
-
-### Manual Start
-
-API only:
-```bash
-python -m ttt_ssm_nano.artifacts_api --artifacts_root artifacts --host 127.0.0.1 --port 13579
-```
-
-Dashboard only:
-```bash
-npm -C dashboard install
-npm -C dashboard run dev
-```
-
----
-
-## Product Surface
-
-Single system: FastAPI server + React dashboard + artifact store.
-
-### Dashboard Tabs
-
-- **Nano:** Branching sessions, update event logs
-- **Text:** TTT Sentry safety monitor
-- **Train:** Offline training jobs, live loss curves
-- **Chat:** Per-session fast weights, TTT during conversation
-
-### Artifact Layout
+## Layout
 
 ```
-artifacts/
-├── base/                    # Nano base checkpoint
-├── sessions/                # Nano branching sessions
-├── text_runs/               # TTT Sentry monitor runs
-├── text_models/             # Offline-trained LMs
-└── text_sessions/           # Chat sessions (fast weights + traces)
+plastic/
+  model/        selective scan, gated delta rule, chunk rule, fast-weight memory, blocks, models, state
+  data/         wikitext/fineweb pipeline, MQAR recall probes, hidden-mu physics
+  train/        outer loop, LR schedule, Muon/AdamW split, adversarial write-gate loss
+  harness/      signals, robust stats, canaries, Fisher, projection, policy, calibration, transaction runner
+  session/      persisted, branchable sessions for both domains
+  redteam/      token-path attacker validated through the harness
+  sleep/        canary-gated consolidation into the slow weights
+  api/          FastAPI service over the artifact store
+  store.py      models, sessions, transactions, forks, signatures
+  cli.py        the `plastic` command
+dashboard/      React UI
+scripts/        Hugging Face Jobs launchers, experiments, throughput bench
+docs/           the design spec, milestone plans, and the research surveys
 ```
 
-The dashboard reads directly from these files. No hidden database.
-
----
-
-## Nano Domain (SSM + Branching Sessions)
-
-The "most blended" TTT×SSM implementation: online plastic matrices inside an SSM with persistence and branching.
-
-### Architecture
-
-- Core recurrence: diagonal stable SSM
-- Plastic parameters: `W_u`, `B`, `W_o` (2D matrices only)
-- Stability parameter: frozen (`A = -softplus(a_raw)`)
-
-### Branching
-
-Sessions are explicitly branchable. `fork_session` clones plastic weights and optionally optimizer momentum. This enables counterfactual comparisons: same starting point, different update histories.
-
-[![Sessions Tab (compare branches)](./assets/ui_sessions.png)](./assets/ui_sessions.png)
-
-### System Identification (Hidden μ)
-
-Nano includes a tiny **system identification** benchmark: a 2D point-mass environment with friction. Each run has a fixed hidden scalar **μ** (mu) that controls velocity decay. The model does **not** get μ as an input; it only sees the observed trajectory and its own actions.
-
-Why μ exists:
-- **μ is ground truth context.** It is a simulator parameter standing in for “unobserved environment conditions.”
-- **Online learning is the point.** The only way to do well across runs is to infer μ from observations and encode that inference into the model’s *plastic weights*.
-- **We show μ in the dashboard for evaluation.** It’s a label to sanity-check whether the learned plastic state actually tracks the latent context; it’s not a knob the model can “sense” directly.
-
-[![System ID Tab (hidden μ + trajectory)](./assets/ui_physics.png)](./assets/ui_physics.png)
-
----
-
-## Text Domain
-
-Two text tracks with different models/tokenizers, now sharing the same safety primitives (gate/rollback/SPFW) and event schema:
-
-### Text World A — TTT Sentry
-
-The canonical safety-instrumented update loop.
-
-**Model:** `ToyTTTModel`
-- Only `adapter.weight` is plastic
-- Everything else frozen
-- Regex tokenization (not BPE)
-
-**Safety Loop (per chunk):**
-1. Compute objective loss
-2. Compute write pressure (adapter grad norm)
-3. Compute auxiliary signals (compression proxy, canary alignment)
-4. Gate decision (allow/block) or `--safety_mode spfw` (project gradients before stepping)
-5. Apply update (possibly SPFW-projected; Muon not used here)
-6. Post-update canary rollback check
-
-**Gate (`ttt/core/gate.py`):**
-- Blocks on low entropy, low diversity, blobs, instruction overrides, OOD + heavy write
-
-**Rollback (`ttt/core/rollback.py`):**
-- Probes canary before/after update
-- Rolls back on z-score or absolute delta threshold breach
-
-**Red Team (`ttt/attacks/red_team.py`):**
-- Adversarial search for payloads that bypass gate but damage canary
-
-### Text World B — TinyLM Offline Training
-
-Trainable tiny LM for the Train + Chat tabs.
-
-**Model:** `TinyLm`
-- Recurrent backbone (SSM default, GRU fallback)
-- No attention layers
-- BPE tokenization
-
-**Training:**
-```bash
-python -m ttt.text_lm.train --corpus_dir training_data --steps 2000
-```
-
-[![Train Tab (Muon + BPE)](./assets/ui_train.png)](./assets/ui_train.png)
-
-### Text World B — Chat Sessions
-
-Fast weights as a per-session context window.
-
-[![Chat Tab (fast context net updates)](./assets/ui_chat.png)](./assets/ui_chat.png)
-
-*Caption: this screenshot is from a “raw” stage — tokenizer exists, but the core model is untrained (no pretraining), so output is expected to be gibberish until you run an offline Train job and select that model for chat.*
-
-**What “training in chat” means here:** Chat updates the **fast context net only** (per-session weights). The slow/core model weights do not update during chat; they only change via an offline **Train** job or **Sleep** consolidation.
-
-**Per message:**
-1. Encode prompt
-2. Chunk the prompt and (optionally) run the **gate** on each chunk (block skips the write, not generation)
-3. Compute a fast-weight objective (per chunk):
-   - `kind="linear"`: next-token CE on the chunk
-   - `kind="fast_lowrank_mem"`: `memory_loss` on hidden states (associative fast memory)
-4. Apply the update to the context net only (Muon; core frozen), optionally projecting gradients via **SPFW**
-5. Optionally probe a **rollback canary** before/after and restore the previous fast state on threshold breach
-6. Persist `context_state.pt`, `optim_state.pt`, `trace.jsonl`, and `events.jsonl` update events
-
-**Safety is opt-in (defaults OFF):**
-- `enable_gate`: run `ttt/core/gate.py` before writing; block means “skip update”.
-- `enable_spfw`: project fast-weight gradients into a safe subspace before `opt.step()` (Muon preserved).
-- `enable_rollback`: probe canary loss pre/post update and rollback on regression (“transaction semantics”).
-
-Canaries are configured with `canary_texts` (the first canary is used for rollback; all canaries constrain SPFW). If none are provided, chat defaults to `ttt/core/model.DEFAULT_CANARY_TEXT`.
-
-**API example (create a safety-instrumented chat session):**
-```bash
-curl -sS -X POST http://127.0.0.1:13579/api/text/sessions \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "kind": "fast_lowrank_mem",
-    "enable_gate": true,
-    "enable_spfw": true,
-    "enable_rollback": true,
-    "spfw_eps_cos": 0.02,
-    "spfw_passes": 1,
-    "canary_texts": ["<your canary prompt>"]
-  }'
-```
-
-Note: the dashboard Chat tab may not expose all safety toggles yet; the server/API supports them per-session via the request above (and they’re stored in `artifacts/text_sessions/<id>/meta.json`).
-
-### Sleep Consolidation
-
-Offline replay of chat traces into core model.
-
-```bash
-python -m ttt.text_lm.sleep --artifacts_root artifacts
-```
-
-**What it does:**
-1. Load base model
-2. Harvest traces from sessions that used that model
-3. Optionally mix with core knowledge (`--core_path`, `--core_ratio`)
-4. Train backbone + layernorm only (embed + head frozen)
-5. Write candidate checkpoint with `status="sleep_candidate"`
-
-**What it doesn't do yet:**
-- Auditor filtering (approve/reject memories)
-- Importance-weighted delta transfer
-- Adapter residual initialization for next day
-
----
-
-## Safety Coverage Matrix
-
-| Mechanism | TTT Sentry (A) | Chat (B) | Nano |
-|-----------|:--------------:|:--------:|:----:|
-| Online TTT updates | ✓ | ✓ | ✓ |
-| Gate (entropy/blob/override) | ✓ | ✓ (opt-in) | ✗ |
-| Rollback (canary probe) | ✓ | ✓ (opt-in) | ✓ |
-| Directional monitoring | ✓ | ✓ (via SPFW) | ✓ |
-| SPFW projection | ✓ | ✓ | ✗ |
-| Sleep consolidation | ✗ | ✓ | ✗ |
-
----
-
-## Training Data + Scaling
-
-### Corpus Location
-
-Put files under `training_data/`. Trainer recursively loads `*.txt/*.md/*.text/*.tex/*.rst`.
-
-### Recommended Starter
-
-```bash
-./scripts/fetch_tinystories.sh
-```
-
-### Memory
-
-- Token buffer: ~2 bytes per token ID
-- 100M tokens ≈ 200MB buffer
-- 1B tokens ≈ 2GB buffer
-
-For large corpora, pretrain tokenizer on a subset and reuse via `--tokenizer`.
-
----
-
-## Troubleshooting
-
-**404 on Train/Chat:** Stale server on same port, or no trained model exists.
-
-**"No usable text model":** Train one first. Requires `checkpoint.pt` + `tokenizer.json`.
-
-**Git LFS pointers:** Run `git -C training_data/.sources/TinyStories lfs pull`.
-
-**Sleep fails "corpus too small":** Need enough traces to sample `--seq_len` sequences. Generate more chat turns or provide `--core_path`.
-
----
-
-## Repo Map
-
-```
-ttt_ssm_eval/
-├── start.sh                           # Single entry point
-├── dashboard/                         # React UI
-├── ttt_ssm_nano/
-│   ├── phase0_muon.py                 # Single-run sandbox
-│   ├── phase1_branching_muon.py       # Branching sessions
-│   └── artifacts_api/                 # FastAPI server
-├── ttt/
-│   ├── core/                          # ToyTTTModel + gate/rollback/SPFW
-│   ├── monitors/                      # TTT Sentry
-│   ├── attacks/                       # Red team harness
-│   ├── optim/                         # Muon
-│   └── text_lm/                       # TinyLM + chat + sleep
-├── run_monitor.py                     # CLI for TTT Sentry
-├── training_data/                     # Corpora (gitignored)
-└── artifacts/                         # Outputs (gitignored)
-```
-
-### Key Files
-
-**Safety:**
-- `ttt/core/gate.py` — Pre-update gate
-- `ttt/core/rollback.py` — Post-update canary rollback
-- `ttt/core/spfw.py` — Safety-projected fast weights
-- `ttt/core/grad_utils.py` — Best-effort grads (`allow_unused=True`) for SPFW constraints
-- `ttt/monitors/gradient.py` — Instrumented update loop
-
-**Models:**
-- `ttt/core/model.py` — ToyTTTModel
-- `ttt/text_lm/model.py` — TinyLm
-- `ttt/text_lm/context.py` — Fast context nets
-- `ttt/text_lm/fast_memory.py` — Low-rank fast-weight memory (`kind="fast_lowrank_mem"`)
-
-**Learning:**
-- `ttt/text_lm/train.py` — Offline training
-- `ttt/text_lm/ttt_chat.py` — Online TTT in chat
-- `ttt/text_lm/sleep.py` — Sleep consolidation
-
----
-
-## What's Next
-
-- [ ] Expose chat safety toggles in the Dashboard Chat tab (API already supports it)
-- [ ] Auditor filtering in sleep (LLM review of traces)
-- [ ] Importance-weighted consolidation (not just replay)
-- [ ] Adapter residual from consolidated delta (meta-learning bias)
-- [ ] Dashboard "flag for review" → `flagged_prompts.json` → red team loop
-- [ ] Anomaly detection on update logs (surface outliers for human review)
+## Honest limits
+
+- About 6M parameters on wikitext. Generations are fluent-ish, not coherent; this
+  project demonstrates adaptation, recall, and the safety harness, not language quality.
+- The harness's guarantees are first-order and probe-based. An adaptive attacker can
+  still find directions the calibrated probes do not cover; the red team measures that
+  residual rather than hiding it.
+- The novelty is modest and stated as such: training the write gate for update safety
+  against an adaptive attacker, using the delta rule's exact per-token write pressure
+  as a signal, and projecting a TTT layer's state delta against a canary gradient. The
+  underlying pieces (TTT layers, delta rule, canaries, A-GEM projection, adversarial
+  training) are all prior work.
+
+## License
+
+See `LICENSE`. Research and educational use.
