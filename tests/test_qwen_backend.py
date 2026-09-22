@@ -602,6 +602,43 @@ def test_qwen_runs_end_to_end_through_the_transaction_runner(backend):
     assert r.pos == 2 * L
 
 
+def test_qwen_session_chat_end_to_end(tmp_path):
+    # The full native Session slice: register a Qwen model, create a chat session, chat through the
+    # native template with EOS-aware generation, persist, reopen, and continue. No `backend` fixture
+    # (each Session loads its own), so memory is freed between the two loads.
+    import gc
+
+    from plastic.backends.qwen import _checkpoint_digest
+    from plastic.harness.config import HarnessConfig
+    from plastic.session.runner import Session
+    from plastic.store import ArtifactStore
+
+    store = ArtifactStore(str(tmp_path))
+    mid = store.new_model_id("qwen")
+    store.register_model(mid, {
+        "backend": "qwen", "checkpoint_dir": CKPT, "checkpoint_digest": _checkpoint_digest(CKPT),
+        "domain": "text", "chunk": 8, "status": "completed",
+    })
+
+    sess = Session.create(store, model_id=mid, harness_cfg=HarnessConfig(enable_projection=False), device="cpu")
+    assert sess.backend_kind == "qwen"
+    res = sess.chat("Hello", max_new_tokens=6, seed=0)
+    assert isinstance(res.completion, str) and res.n_tokens_in > 0
+    assert res.summary["domain"] == "text" and "recurrent_norm_total" in res.summary["state_norms"]
+    assert res.transactions  # the prompt transacted through the harness
+    pos_after = sess.runner.pos
+    assert pos_after >= res.n_tokens_in  # prompt (and any generation) advanced the state
+    sid = sess.session_id
+    del sess
+    gc.collect()
+
+    # reopen the persisted session: the Qwen runner state (native cache included) is restored
+    sess2 = Session.open(store, sid, device="cpu")
+    assert sess2.backend_kind == "qwen" and sess2.runner.pos == pos_after
+    res2 = sess2.chat("Thanks", max_new_tokens=4, seed=1)
+    assert isinstance(res2.completion, str) and sess2.runner.pos > pos_after
+
+
 def test_encode_chat_returns_integer_ids(backend):
     # apply_chat_template defaults to a dict in tf 5.17; encode_chat must return native integer ids
     # that tensorize, for empty / ascii / unicode, matching render-then-tokenize.

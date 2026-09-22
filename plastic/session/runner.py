@@ -9,6 +9,7 @@ state, learning through the harness).
 
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -17,6 +18,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
+from plastic.config import ModelConfig
 from plastic.data.physics import PhysicsEnv
 from plastic.harness.calibrate import Calibration
 from plastic.harness.canary import CanarySuite
@@ -24,6 +26,23 @@ from plastic.harness.config import HarnessConfig
 from plastic.harness.transaction import TransactionRunner
 from plastic.store import ArtifactStore
 from plastic.tokenizer.bpe import Tokenizer
+
+
+class _QwenTextIO:
+    """A tokenizer-shaped adapter over a QwenBackend, so ``Session.chat`` drives a pretrained
+    backend through the same ``encode(add_bos=...) / eos_id / decode`` interface the native BPE
+    tokenizer exposes. ``encode`` renders the native chat template (add_bos is moot — the template
+    carries the special tokens); ``decode`` and ``eos_id`` come from the Qwen tokenizer."""
+
+    def __init__(self, backend: Any) -> None:
+        self._backend = backend
+        self.eos_id = int(backend.tokenizer.eos_token_id)
+
+    def encode(self, text: str, add_bos: bool = False) -> list[int]:
+        return self._backend.encode_chat(text)
+
+    def decode(self, ids: list[int]) -> str:
+        return self._backend.tokenizer.decode(ids)
 
 
 @dataclass
@@ -93,16 +112,32 @@ class Session:
         store.verify_session_model(session_id)
         self.meta = store.load_session_meta(session_id)
         self.model_id = str(self.meta["model_id"])
-        self.cfg, self.model, _ = store.load_checkpoint(self.model_id, self.device)
         self.hcfg = HarnessConfig.from_dict(self.meta["harness"])
+        record = store.load_model_record(self.model_id)
+        self.backend_kind = str(record.get("backend", "plastic"))
         model_dir = store.model_dir(self.model_id)
         self.calibration = Calibration.load(model_dir) if Calibration.exists(model_dir) else None
         canary_path = store.canary_path(self.model_id)
-        self.suite = CanarySuite.load(canary_path) if __import__("os").path.exists(canary_path) else None
-        self.tokenizer = Tokenizer.load(store.tokenizer_path(self.model_id)) if self.cfg.domain == "text" else None
-        self.runner = TransactionRunner(
-            self.model, self.cfg, self.hcfg, calibration=self.calibration, suite=self.suite, device=self.device
-        )
+        self.suite = CanarySuite.load(canary_path) if os.path.exists(canary_path) else None
+        if self.backend_kind == "qwen":
+            # a pretrained backend: load Qwen and its native tokenizer, and drive the runner through it
+            from plastic.backends.qwen import QwenBackend
+
+            self.backend = QwenBackend.load(record["checkpoint_dir"], device=self.device)
+            self.cfg = ModelConfig(domain="text", chunk=int(record.get("chunk", 8)))
+            self.model = None
+            self.tokenizer: Any = _QwenTextIO(self.backend)
+            self.runner = TransactionRunner(
+                None, self.cfg, self.hcfg, calibration=self.calibration, suite=self.suite,
+                device=self.device, backend=self.backend,
+            )
+        else:
+            self.cfg, self.model, _ = store.load_checkpoint(self.model_id, self.device)
+            self.backend = None
+            self.tokenizer = Tokenizer.load(store.tokenizer_path(self.model_id)) if self.cfg.domain == "text" else None
+            self.runner = TransactionRunner(
+                self.model, self.cfg, self.hcfg, calibration=self.calibration, suite=self.suite, device=self.device
+            )
         state = store.load_runner_state(session_id)
         if state:
             self.runner.load_state_dict(state)
@@ -122,9 +157,11 @@ class Session:
         device: torch.device | str = "cpu",
         extra: dict[str, Any] | None = None,
     ) -> "Session":
-        cfg = store.load_config(model_id)
-        sid = session_id or store.new_session_id("chat" if cfg.domain == "text" else "phys")
-        store.create_session(sid, model_id=model_id, domain=cfg.domain, harness_cfg=harness_cfg or HarnessConfig(), extra=extra)
+        record = store.load_model_record(model_id)
+        # a pretrained-backend model has no local plastic config; its domain comes from the record
+        domain = str(record.get("domain")) if record.get("backend", "plastic") != "plastic" else store.load_config(model_id).domain
+        sid = session_id or store.new_session_id("chat" if domain == "text" else "phys")
+        store.create_session(sid, model_id=model_id, domain=domain, harness_cfg=harness_cfg or HarnessConfig(), extra=extra)
         return cls(store, sid, device=device)
 
     # ------------------------------------------------------------------ persistence
