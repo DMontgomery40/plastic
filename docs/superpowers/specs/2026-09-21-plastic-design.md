@@ -57,10 +57,12 @@ Language rules: no "legacy", "v1", "backward compatibility", or schema-version f
 
 Notation: model width D = 256, heads H = 4, head dim d_h = 64, chunk L = 64, sequence T (multiple of L). Row-vector convention: a key `k ∈ R^{1×d_h}` reads memory `S ∈ R^{d_h×d_h}` as `k S`. One block, stacked N = 4 (text) or 3 (physics) times:
 
+**Short convolution.** Each branch input passes through a depthwise causal convolution of kernel K = 4 followed by SiLU (`u = SiLU(Conv_K(RMSNorm(x)))`), the standard recall ingredient of Mamba, DeltaNet, and TTT layers: it lets the key at one position bind to the value at the next. The last K−1 inputs of each convolution are part of the session state so chunked and recurrent paths agree exactly. `conv_kernel = 1` disables it.
+
 **SSM branch (selective diagonal recurrence, RG-LRU form).**
 
 ```
-u_t     = RMSNorm(x_t)
+u_t     = SiLU(Conv_K(RMSNorm(x_t)))
 r_t     = σ(W_r u_t + b_r)                      recurrence gate
 i_t     = σ(W_i u_t + b_i)                      input gate
 log a_t = −c · r_t · softplus(−λ)               c = 8, λ ∈ R^D learned  ⇒ a_t = σ(λ)^{c r_t} ∈ (0,1)
@@ -74,7 +76,7 @@ Computed with a chunked log-space scan: within a chunk, `P[t,s] = exp(C_t − C_
 **Memory branch (fast weights, fed by the SSM output).**
 
 ```
-u_t = RMSNorm(x_t)
+u_t = SiLU(Conv_K(RMSNorm(x_t)))                after the SSM residual
 q_t = normalize(W_q u_t)_h,  k_t = normalize(W_k u_t)_h,  v_t = (W_v u_t)_h      per head
 β_t = σ(w_β · u_t + b_β)                write rate ∈ (0,1), per head        (the learned "should I learn from this")
 α_t = exp(−softplus(w_α · u_t + b_α))   forget ∈ (0,1), per head
@@ -88,7 +90,9 @@ S_t = α_t S_{t−1} + β_t k_tᵀ e_t                 = α_t S_{t−1}(I − β
 m_t = q_t S_t                                    read after the token's own write
 ```
 
-This is TTT-Linear (Sun et al.) with mini-batch 1 plus Gated DeltaNet's decay; `S_t = α S_{t−1} − β ∇_S ½‖kS − v‖²` evaluated at `αS_{t−1}`. With unit keys and β, α in (0,1) each step is a contraction along k, so the state is bounded for any input. The per-token write pressure `‖ΔS_t‖_F = β_t ‖e_t‖` is exact and free.
+This is TTT-Linear (Sun et al.) with mini-batch 1 plus Gated DeltaNet's decay; `S_t = α S_{t−1} − β ∇_S ½‖kS − v‖²` evaluated at `αS_{t−1}`. With unit keys and β, α in (0,1) each step is a contraction along k, so the state is bounded for any input. The per-token write pressure `‖ΔS_t‖_F = β_t ‖e_t‖` is exact and free; the total mutation also contains the decay part `(1 − α_t)‖S_{t−1}‖`, which the harness accounts for separately.
+
+Two control modes are distinct by contract: `beta_scale` scales the write rate only (β ← s·β, decay continues), while `freeze=True` leaves `S` bit-identical (β ≡ 0 and α ≡ 1): the memory is read but neither written nor decayed. Read-only sessions and rolled-back chunks use `freeze`.
 
 Training uses the chunk-parallel WY form (nilpotent Neumann inverse, no `solve_triangular`, all matmuls); inference uses the per-token recurrence. The two agree to 4e-7 on CPU and MPS and the equivalence is a permanent test.
 
@@ -130,7 +134,7 @@ Physics: per step `x_t = [obs_t (4), action_t (2), reset_flag (1)] → Linear(7 
 
 ### 6.1 Session state
 
-Per layer: `h` (D,), `S` (H, d_h, d_h), `M` (rule `chunk` only). Plus `pos`. Three copies live in a session directory:
+Per layer: `h` (D,), `S` (H, d_h, d_h), `M` (rule `chunk` only), and the two convolution buffers (K−1, D). Plus `pos`. Three copies live in a session directory:
 
 - `committed`: last accepted state.
 - `working`: advanced token by token; generation reads from it.
@@ -147,7 +151,7 @@ Fork copies `committed` and harness state into a new session with `parent_sessio
 Identical for text and physics:
 
 1. Inputs append to `pending`; each is processed through the recurrent path against `working`. The layer emits per token: `‖e_t‖` (surprise), β_t, α_t, `‖ΔS_t‖_F = β_t ‖e_t‖` per head and layer.
-2. At `len(pending) == L` compute chunk signals (6.3), then decide (6.4): `commit` (`committed := working`), `rollback` (`working := committed`, reprocess the chunk with β ≡ 0, so the SSM state advances and the memory is read but not written: content is read, refused as training signal), `scale` (reprocess with β ← s·β), or `project` (6.4). Log the decision and all signals to `transactions.jsonl`.
+2. At `len(pending) == L` compute chunk signals (6.3), then decide (6.4): `commit` (`committed := working`), `rollback` (`working := committed`, reprocess the chunk with `freeze=True`, so the SSM state advances and the memory is read but neither written nor decayed: content is read, refused as training signal), `scale` (reprocess with β ← s·β), or `project` (6.4). Log the decision and all signals to `transactions.jsonl`. Activations and outputs produced during the provisional pass used the provisional fast weights of lower layers; after a non-commit decision the state is consistent (it was recomputed) but the already-emitted outputs are not retracted.
 3. Clear `pending`, advance `pos`.
 
 Text already generated within a rolled-back chunk is not retracted; this is documented as "learning refused, inference continued".
@@ -295,7 +299,9 @@ Verification gate before any milestone is called done: `uv run pytest`, `npm run
 7. Sleep is kept minimal (blocks only, canary-gated acceptance); the auditor idea from the old README is dropped.
 8. The GitHub repo rename happens in the final milestone; nothing is pushed.
 9. Old artifacts are deleted and regenerated; the old trained models are on the broken backbone and have no value.
-10. huggingface_hub is upgraded in the user's pyenv environment because the 1.15 CLI lacks `wait` and local-directory volumes.
+10. huggingface_hub is upgraded in the interpreter that owns the `hf` CLI because the 1.15 CLI lacks `wait` and local-directory volumes.
+11. A kernel-4 causal depthwise convolution precedes both branch inputs (added after the recall smoke test showed no key-to-value binding without it).
+12. The Codex design-challenge proposal (`docs/research/2026-09-21-plastic-coordinate-recurrence.md`: fast weights as an invertible coordinate chart of the recurrence, updated once per chunk on the task loss, with exact state transport at commit and a bounded-amplitude invariant) is kept as a third block variant for the experiments milestone, not adopted as the default: it gives up per-token writes and in-chunk recall, needs a chunk replay per inner gradient, and has no throughput measurement yet. Its ablation table is the falsification plan if it is built. Three of its contract critiques are adopted now: freeze must stop decay as well as writes; write pressure reports the gradient and decay parts separately; provisional outputs after a rejected chunk are documented as not retracted.
 
 ## 13. Milestones
 
