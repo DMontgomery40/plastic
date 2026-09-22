@@ -25,7 +25,6 @@ jobs:
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
       HF_REPO_ID: dmontgomery40/plastic
       HF_REPO_TYPE: ${{ matrix.repo_type }}
-      EXPORT_DIR: ${{ runner.temp }}/plastic-hf-${{ matrix.repo_type }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -33,6 +32,8 @@ jobs:
           python-version: '3.12'
       - name: Install Hub client
         run: python -m pip install 'huggingface_hub==1.32.0'
+      - name: Choose export directory on the runner
+        run: echo "EXPORT_DIR=${RUNNER_TEMP}/plastic-hf-${HF_REPO_TYPE}" >> "$GITHUB_ENV"
       - name: Prepare committed source and preserve published checkpoints
         run: |
           python - <<'PY'
