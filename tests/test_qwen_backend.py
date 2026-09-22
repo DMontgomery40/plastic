@@ -98,3 +98,38 @@ def test_frozen_recurrent_grad_is_finite(backend):
     _, st = backend.process(ids[:k], st)
     grads = backend.recurrent_grad(st, ids[k : k + 3], ids[k + 1 : k + 4])
     assert grads and all(torch.isfinite(g).all() and g.norm() > 0 for g in grads)
+
+
+def test_fresh_state_is_position_zero_and_gradient_works(backend):
+    from transformers import DynamicCache
+
+    from plastic.backends.qwen import QwenState
+
+    # position-zero initial state: cursor 0, correctly-shaped zero recurrent leaves, no synthetic BOS
+    st = backend.init_state()
+    assert st.position == 0
+    leaves = st.recurrent_leaves()
+    assert len(leaves) == 18 and all(int(torch.count_nonzero(s)) == 0 for s in leaves)
+
+    # forwarding from it is identical to a truly-empty cache (the harness never changes native output)
+    ids = backend.encode("Parity between the initialized zero state and an empty cache.")
+    ya, _ = backend.process(ids[:4], backend.init_state())
+    yr, _ = backend.process(ids[:4], QwenState(DynamicCache(config=backend.config)))
+    assert (ya - yr).abs().max().item() < 1e-3
+
+    # the FIRST-chunk canary gradient is defined (previously raised "inputs cannot be empty")
+    grads = backend.recurrent_grad(backend.init_state(), ids[:4], ids[1:5])
+    assert len(grads) == 18 and all(torch.isfinite(g).all() and g.norm() > 0 for g in grads)
+
+
+def test_encode_chat_returns_integer_ids(backend):
+    # apply_chat_template defaults to a dict in tf 5.17; encode_chat must return native integer ids
+    # that tensorize, for empty / ascii / unicode, matching render-then-tokenize.
+    for msg in ("", "Hello", "Café — déjà vu, 日本語 🎉"):
+        ids = backend.encode_chat(msg)
+        assert ids and all(isinstance(t, int) for t in ids)
+        torch.tensor([ids], dtype=torch.long)  # must not raise
+        rendered = backend.tokenizer.apply_chat_template(
+            [{"role": "user", "content": msg}], add_generation_prompt=True, enable_thinking=False, tokenize=False
+        )
+        assert ids == backend.tokenizer(rendered, add_special_tokens=False).input_ids

@@ -102,6 +102,7 @@ class QwenBackend:
         self.tokenizer = tokenizer
         self.config = config
         self.device = device
+        self.dtype = next(model.parameters()).dtype
         self.vocab_size = int(config.vocab_size)
         # Overlapping GPU work aborts the MPS runtime (Metal command-buffer assertion, exit 134,
         # ASTRA-053), and the thread-local freeze flag does not make concurrent forwards safe. All
@@ -152,12 +153,45 @@ class QwenBackend:
         return self.tokenizer(text, return_tensors="pt").input_ids[0].tolist()
 
     def encode_chat(self, user_message: str) -> list[int]:
+        # apply_chat_template defaults to a BatchEncoding in Transformers 5.17, so list(...) would
+        # yield the dict keys ("input_ids", ...) — return_dict=False gives native integer IDs
+        # (equivalent to rendering the template then tokenizing). (ASTRA-054.)
         msgs = [{"role": "user", "content": user_message}]
-        ids = self.tokenizer.apply_chat_template(msgs, add_generation_prompt=True, enable_thinking=False)
-        return list(ids)
+        ids = self.tokenizer.apply_chat_template(
+            msgs, add_generation_prompt=True, enable_thinking=False, tokenize=True, return_dict=False
+        )
+        return [int(t) for t in ids]
 
     def init_state(self) -> QwenState:
-        return QwenState(cache=None)
+        """A position-zero session state: an initialized cache at cursor 0 with zero recurrent
+        memory and zero-history (left-padded) conv buffers — no consumed token, no KV. Forwarding
+        from it is identical to an empty cache (verified), but it exposes correctly-shaped zero
+        recurrent leaves so ``score_suite`` and ``canary_gradient`` are defined on the FIRST chunk,
+        before any update — the harness must not skip its first projection or add a synthetic BOS
+        (the tokenizer has none). Recipe verified in ASTRA-055's zero-initial-state probe.
+        """
+        from transformers import DynamicCache
+
+        c = self.config
+        with self._serialized():
+            cache = DynamicCache(config=c)
+            for layer in cache.layers:
+                if not hasattr(layer, "recurrent_states"):
+                    continue
+                conv = torch.zeros(
+                    1,
+                    2 * c.linear_num_key_heads * c.linear_key_head_dim + c.linear_num_value_heads * c.linear_value_head_dim,
+                    c.linear_conv_kernel_dim,
+                    device=self.device,
+                    dtype=self.dtype,
+                )
+                memory = torch.zeros(
+                    1, c.linear_num_value_heads, c.linear_key_head_dim, c.linear_value_head_dim,
+                    device=self.device, dtype=self.dtype,
+                )
+                layer.lazy_initialization(conv_states=conv, recurrent_states=memory)
+                layer.has_previous_state[0] = True
+        return QwenState(cache)
 
     def clone(self, state: QwenState) -> QwenState:
         """Concurrency-safe snapshot: the cache deep copy runs under the backend lock (with an MPS
