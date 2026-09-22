@@ -32,16 +32,23 @@ def state_with_grad_S(state: SessionState) -> tuple[SessionState, list[Tensor]]:
 
 
 def chunk_loss(model, batch: Tensor | tuple[Tensor, Tensor], state: SessionState, *, freeze: bool = False):
-    """Loss of one chunk from ``state``; returns (loss, new_state)."""
-    if isinstance(batch, tuple):
-        inputs, targets = batch
-        pred, new_state, _ = model(inputs, state, mode="chunk", freeze=freeze)
-        return F.mse_loss(pred, targets), new_state
-    toks = batch
-    logits, new_state, _ = model(toks, state, mode="chunk", freeze=freeze)
-    V = logits.shape[-1]
-    loss = F.cross_entropy(logits[:, :-1].reshape(-1, V), toks[:, 1:].reshape(-1), ignore_index=0)
-    return loss, new_state
+    """Sum over examples of the per-example mean loss of one chunk from ``state``; returns (loss, new_state).
+
+    Text batches are ``(inputs (B, T), targets (B, T))``; physics batches ``(inputs (B, T, 7), targets (B, T, 4))``.
+    Summing per-example means (rather than a batch mean) makes the gradient with respect to each
+    example's own state independent of the batch size, so the Fisher estimate does not scale with B.
+    """
+    inputs, targets = batch
+    if inputs.dtype == torch.long:
+        logits, new_state, _ = model(inputs, state, mode="chunk", freeze=freeze)
+        V = logits.shape[-1]
+        per_tok = F.cross_entropy(logits.reshape(-1, V), targets.reshape(-1), ignore_index=0, reduction="none").view(targets.shape)
+        valid = (targets != 0).float()
+        per_ex = (per_tok * valid).sum(dim=1) / valid.sum(dim=1).clamp_min(1.0)
+        return per_ex.sum(), new_state
+    pred, new_state, _ = model(inputs, state, mode="chunk", freeze=freeze)
+    per_ex = (pred - targets).pow(2).mean(dim=(1, 2))
+    return per_ex.sum(), new_state
 
 
 def estimate_fisher_diag(
@@ -54,9 +61,10 @@ def estimate_fisher_diag(
 ) -> list[Tensor]:
     """Average squared gradient of the chunk loss with respect to the incoming ``S`` per layer.
 
-    ``sequences`` yields token batches ``(B, T)`` (text) or ``(inputs (B, T, 7), targets (B, T, 4))``
-    (physics); each is walked chunk by chunk with the state carried, so the Fisher
-    reflects states the model actually visits.
+    ``sequences`` yields token batches ``(B, T + 1)`` (text: ``T`` inputs, the last token is only a
+    target) or ``(inputs (B, T, 7), targets (B, T, 4))`` (physics). Each is walked chunk by chunk
+    with the state carried exactly as the model would carry it, so the Fisher reflects states
+    the model actually visits; every chunk's loss uses only its own inputs.
     """
     acc: list[Tensor] | None = None
     count = 0
@@ -64,28 +72,23 @@ def estimate_fisher_diag(
     for seq in sequences:
         if isinstance(seq, tuple):
             x, y = seq[0].to(device), seq[1].to(device)
-            T = x.shape[1]
-            state = model.init_state(x.shape[0], device)
+            T = int(x.shape[1])
         else:
-            x = seq.to(device)
-            y = None
-            T = x.shape[1]
-            state = model.init_state(x.shape[0], device)
-        for start in range(0, T - 1, chunk):
-            end = min(start + chunk + (0 if y is not None else 1), T)
-            piece: Tensor | tuple[Tensor, Tensor] = (x[:, start:end], y[:, start:end]) if y is not None else x[:, start:end]
+            toks = seq.to(device)
+            x, y = toks[:, :-1], toks[:, 1:]
+            T = int(x.shape[1])
+        state = model.init_state(x.shape[0], device)
+        for start in range(0, T, chunk):
+            end = min(start + chunk, T)
+            piece = (x[:, start:end], y[:, start:end])
             st, leaves = state_with_grad_S(state)
             loss, new_state = chunk_loss(model, piece, st)
             grads = torch.autograd.grad(loss, leaves, allow_unused=True)
             sq = [torch.zeros_like(l) if g is None else g.detach().pow(2) for l, g in zip(leaves, grads)]
-            sq = [s.mean(dim=0, keepdim=True) for s in sq]  # average over the batch
-            acc = sq if acc is None else [a + s for a, s in zip(acc, sq)]
+            sq = [s_.mean(dim=0, keepdim=True) for s_ in sq]  # average over examples
+            acc = sq if acc is None else [a + s_ for a, s_ in zip(acc, sq)]
             count += 1
             state = new_state.detach()
-            if y is None:
-                # keep chunk boundaries aligned with the model's chunk size: the next piece
-                # starts at `end - 1` so its first target is the token after this chunk's last input
-                pass
             if count >= n_chunks:
                 break
         if count >= n_chunks:

@@ -236,6 +236,35 @@ def cmd_physics(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_redteam(args: argparse.Namespace) -> int:
+    from plastic.redteam.attack import AttackConfig, run_redteam
+    from plastic.store import ArtifactStore
+
+    cfg = AttackConfig(
+        suffix_len=args.suffix_len, steps=args.steps, lr=args.lr, radius=args.radius, seed=args.seed,
+        families=tuple(args.families.split(",")), harness=(json.loads(args.harness_json) if args.harness_json else None),
+    )
+    summary = run_redteam(
+        ArtifactStore(args.artifacts_root), args.model_id, cfg=cfg, data_dir=args.data, n_prefixes=args.prefixes,
+        prefix_len=args.prefix_len, device=args.device, record=args.record,
+    )
+    print(json.dumps(summary, indent=2))
+    return 0
+
+
+def cmd_sleep(args: argparse.Namespace) -> int:
+    from plastic.sleep.consolidate import consolidate
+    from plastic.store import ArtifactStore
+
+    manifest = consolidate(
+        ArtifactStore(args.artifacts_root), args.model_id, sessions=(args.sessions or None), core_data_dir=args.core,
+        steps=args.steps, lr=args.lr, core_ratio=args.core_ratio, seq_len=args.seq_len, batch_size=args.batch_size,
+        device=args.device, seed=args.seed,
+    )
+    print(json.dumps({k: v for k, v in manifest.items() if k not in ("canary_before", "canary_after")}, indent=2, default=str))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="plastic", description="plastic: a tiny test-time-training state-space model with a transactional safety harness")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -334,6 +363,37 @@ def build_parser() -> argparse.ArgumentParser:
     phys.add_argument("--seed", type=int, default=0)
     phys.add_argument("--nonlinear", action="store_true")
     phys.set_defaults(fn=cmd_physics)
+
+    rt = sub.add_parser("redteam", help="attack a model through the token path and the harness")
+    rt.add_argument("model_id")
+    rt.add_argument("--artifacts-root", default="artifacts")
+    rt.add_argument("--data", default="artifacts/data/wikitext")
+    rt.add_argument("--device", default="cpu")
+    rt.add_argument("--prefixes", type=int, default=8)
+    rt.add_argument("--prefix-len", type=int, default=128)
+    rt.add_argument("--suffix-len", type=int, default=64)
+    rt.add_argument("--steps", type=int, default=50)
+    rt.add_argument("--lr", type=float, default=0.05)
+    rt.add_argument("--radius", type=float, default=1.0)
+    rt.add_argument("--seed", type=int, default=0)
+    rt.add_argument("--families", default="pgd,random,repeat,shuffle,topic_switch")
+    rt.add_argument("--harness-json", default=None)
+    rt.add_argument("--record", action="store_true", help="append the strongest payloads to the model's poison canaries")
+    rt.set_defaults(fn=cmd_redteam)
+
+    sl = sub.add_parser("sleep", help="consolidate session traces into the slow weights, gated by the canaries")
+    sl.add_argument("model_id")
+    sl.add_argument("--artifacts-root", default="artifacts")
+    sl.add_argument("--sessions", nargs="*", default=None)
+    sl.add_argument("--core", default="artifacts/data/wikitext")
+    sl.add_argument("--steps", type=int, default=200)
+    sl.add_argument("--lr", type=float, default=1e-4)
+    sl.add_argument("--core-ratio", type=float, default=0.8)
+    sl.add_argument("--seq-len", type=int, default=256)
+    sl.add_argument("--batch-size", type=int, default=8)
+    sl.add_argument("--device", default="cpu")
+    sl.add_argument("--seed", type=int, default=0)
+    sl.set_defaults(fn=cmd_sleep)
     return p
 
 

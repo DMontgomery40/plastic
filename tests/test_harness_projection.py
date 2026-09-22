@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from plastic.config import ModelConfig
@@ -59,3 +60,56 @@ def test_projection_is_invariant_to_gradient_scale():
         assert st.applied
         assert torch.allclose(out[0], torch.tensor([[[[0.0, 2000.0]]]]), atol=1e-3), (scale, out)
         assert abs(st.dot_after) <= 1e-6 * scale + 1e-9
+
+
+def _fisher_fixture(tmp_path):
+    docs = ["alpha beta gamma delta epsilon " * 40, "one two three four five six " * 40]
+    tok = Tokenizer.train(docs, vocab_size=300)
+    path = str(tmp_path / "train.bin")
+    encode_documents_to_bin(tok, docs, path)
+    import numpy as np
+
+    data = torch.from_numpy(np.fromfile(path, dtype="<u2").astype("int64"))
+    torch.manual_seed(0)
+    cfg = ModelConfig(d_model=32, n_heads=2, n_layers=2, chunk=8, vocab_size=tok.vocab_size)
+    return PlasticLM(cfg), data
+
+
+def test_fisher_is_invariant_to_batch_replication(tmp_path):
+    lm, data = _fisher_fixture(tmp_path)
+    seq = data[:65].unsqueeze(0)
+    sums = []
+    for B in (1, 2, 4):
+        f = estimate_fisher_diag(lm, [seq.repeat(B, 1)], chunk=8, n_chunks=4, device=torch.device("cpu"))
+        sums.append(sum(float(x.sum()) for x in f))
+    assert abs(sums[0] - sums[1]) < 1e-5 * max(1.0, sums[0]) and abs(sums[0] - sums[2]) < 1e-5 * max(1.0, sums[0]), sums
+
+
+def test_fisher_traverses_the_models_own_trajectory(tmp_path):
+    """The carried state after k chunks equals the model's state after k*chunk tokens."""
+    from plastic.harness.fisher import chunk_loss, state_with_grad_S
+
+    lm, data = _fisher_fixture(tmp_path)
+    toks = data[:33].unsqueeze(0)  # 32 inputs, last token is a target only
+    x, y = toks[:, :-1], toks[:, 1:]
+    state = lm.init_state(1)
+    for start in range(0, 32, 8):
+        st, leaves = state_with_grad_S(state)
+        _, state = chunk_loss(lm, (x[:, start : start + 8], y[:, start : start + 8]), st)
+        state = state.detach()
+    _, ref, _ = lm(x)
+    for a, b in zip(state.layers, ref.layers):
+        assert torch.allclose(a.S, b.S, atol=1e-5) and torch.allclose(a.h, b.h, atol=1e-5)
+    assert state.pos == 32
+
+
+@pytest.mark.parametrize("T", [5, 8, 9, 17])
+def test_fisher_physics_uses_every_transition(T):
+    from plastic.model.lm import PlasticDynamics
+
+    cfg = ModelConfig(domain="physics", d_model=32, n_heads=2, n_layers=1, chunk=8)
+    m = PlasticDynamics(cfg)
+    x = torch.randn(2, T, 7)
+    y = torch.randn(2, T, 4)
+    f = estimate_fisher_diag(m, [(x, y)], chunk=8, n_chunks=100, device=torch.device("cpu"))
+    assert f[0].shape == (1, 2, 16, 16) and torch.isfinite(f[0]).all()
