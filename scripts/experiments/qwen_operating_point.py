@@ -494,9 +494,10 @@ def _record_invocation(out_dir: str, provenance: dict[str, Any], mode: str) -> l
     and return every invocation recorded for the run. Calibration and eval both resume across
     invocations, so this -- not the per-session stamps alone -- is what shows whether every
     continuation came from one pinned source (ASTRA-109). An unreadable record is refused, preserved. A
-    RESUMED run with no record holds computation from invocations nobody recorded (created before the
-    record existed, or the record was lost): an explicit unrecorded-prior entry with no provenance is
-    written first, so such a run can never read as one clean source."""
+    CONTINUED run whose record is absent or empty holds computation from invocations nobody recorded
+    (created before the record existed, or the record was lost): an explicit unrecorded-prior entry with
+    no provenance is written first and persists, so such a run can never read as one clean source on
+    this or any later continuation (ASTRA-112). A fresh run never adopts an existing record."""
     path = os.path.join(out_dir, "invocations.json")
     invocations: Any = []
     if os.path.exists(path):
@@ -507,7 +508,9 @@ def _record_invocation(out_dir: str, provenance: dict[str, Any], mode: str) -> l
             raise RunConflict(f"{path} is unreadable ({e}); refusing to continue without this run's invocation record.")
         if not isinstance(invocations, list):
             raise RunConflict(f"{path} is not a list of invocations; refusing to continue without this run's invocation record.")
-    elif mode != "fresh":
+    if mode == "fresh" and os.path.exists(path):
+        raise RunConflict(f"{path} already exists for a run being created fresh; refusing to adopt stale history.")
+    if mode != "fresh" and not invocations:
         invocations = [{"t_unix": None, "mode": "unrecorded_prior", "provenance": None}]
     invocations.append({"t_unix": int(time.time()), "mode": mode, "provenance": provenance})
     _write_json(path, invocations)
@@ -519,7 +522,9 @@ def _run_provenance_check(invocations: list[dict[str, Any]]) -> dict[str, Any]:
     every continuation (ASTRA-109). More than one distinct provenance, a modified or untracked code
     path (a dirty flag is not a content identity), an unknown commit, or a missing provenance makes the
     result NOT a valid fixed screen: its evidence is kept and marked incompatible pending a reviewed
-    migration, never silently pooled. Returns ``{"ok", "reasons", "distinct"}``."""
+    migration, never silently pooled. The record must also begin with the run's single creating (fresh)
+    invocation: one that begins with a continuation cannot certify the calibration/eval work before it.
+    Returns ``{"ok", "reasons", "distinct"}``."""
     distinct: list[Any] = []
     for inv in invocations:
         p = inv.get("provenance") if isinstance(inv, dict) else None
@@ -528,6 +533,12 @@ def _run_provenance_check(invocations: list[dict[str, Any]]) -> dict[str, Any]:
     reasons: list[str] = []
     if not distinct:
         reasons.append("no invocation recorded")
+    modes = [inv.get("mode") if isinstance(inv, dict) else None for inv in invocations]
+    if modes and (modes[0] != "fresh" or modes.count("fresh") != 1):
+        # certifiable history starts at the run's creation and has exactly one; a record beginning with a
+        # continuation (or an unrecorded-prior marker) says nothing about the work before it (ASTRA-112)
+        reasons.append("the run's history does not begin with its single creating (fresh) invocation; "
+                       "earlier computation is unrecorded")
     if len(distinct) > 1:
         reasons.append(f"{len(distinct)} distinct invocation provenances (mixed source or runtime)")
     for p in distinct:
@@ -574,6 +585,12 @@ def _split_from_manifest(manifest: dict[str, Any]) -> dict[str, list[dict[str, A
     return out
 
 
+# every artifact a run writes besides its run record: any of them without a run record is prior work that a
+# fresh run must not overwrite or silently adopt (a stale invocation record or progress log included)
+_RUN_ARTIFACTS = ("split-manifest.json", "calibration.ckpt", "calibration-status.json", "invocations.json",
+                  "eval-progress.jsonl", "eval-operating-point.json", "followups-result.json", "screen-result.json")
+
+
 def _reconcile_run(out_dir: str, manifest: dict[str, Any], split: dict[str, list[dict[str, Any]]],
                    settings_identity: str, new_model_id) -> tuple[str, str, dict[str, Any], dict[str, list[dict[str, Any]]]]:
     """Decide whether this invocation is a fresh run or a continuation of an existing one in ``out_dir``.
@@ -605,8 +622,7 @@ def _reconcile_run(out_dir: str, manifest: dict[str, Any], split: dict[str, list
         return "resume", str(run["model_id"]), saved, saved_split
     # no run record: a genuinely fresh dir has NO prior run artifacts. If a manifest/checkpoint/result
     # is present, this is an interrupted initialization or a pre-run-record output dir -> preserve it.
-    prior = [os.path.basename(p) for p in (manifest_path, os.path.join(out_dir, "calibration.ckpt"),
-                                           os.path.join(out_dir, "screen-result.json")) if os.path.exists(p)]
+    prior = [name for name in _RUN_ARTIFACTS if os.path.exists(os.path.join(out_dir, name))]
     if prior:
         raise RunConflict(
             f"{out_dir} holds prior run artifacts ({', '.join(prior)}) but no run-record.json; refusing to "

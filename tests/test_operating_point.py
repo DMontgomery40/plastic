@@ -1065,20 +1065,28 @@ def test_followups_deadline_keeps_requested_vs_completed_accounting():
     assert (out["n_sessions_requested"], out["n_sessions_completed"], out["n_turns_requested"], out["n_turns_completed"]) == (3, 0, 6, 0)
 
 
-def _inv(commit="a" * 40, dirty=False, **extra):
-    return {"t_unix": 0, "mode": "resume", "provenance": {**_prov(commit), "code_dirty": dirty, **extra}}
+def _inv(commit="a" * 40, dirty=False, mode="resume", **extra):
+    return {"t_unix": 0, "mode": mode, "provenance": {**_prov(commit), "code_dirty": dirty, **extra}}
+
+
+_MARKER = {"t_unix": None, "mode": "unrecorded_prior", "provenance": None}
 
 
 @_pytest.mark.parametrize("invocations, ok, reason", [
-    ([_inv()], True, None),
-    ([_inv(), _inv()], True, None),                                   # continuations from ONE clean source
-    ([_inv(), _inv(commit="b" * 40)], False, "distinct invocation provenances"),
-    ([_inv(), _inv(torch="other")], False, "distinct invocation provenances"),  # runtime change
-    ([_inv(dirty=True)], False, "not a content identity"),
-    ([_inv(dirty=None)], False, "not a content identity"),           # unknown tree state is not clean
-    ([_inv(commit="unknown")], False, "commit is unknown"),
+    ([_inv(mode="fresh")], True, None),
+    ([_inv(mode="fresh"), _inv(), _inv()], True, None),                   # continuations from ONE clean source
+    ([_inv(mode="fresh"), _inv(commit="b" * 40)], False, "distinct invocation provenances"),
+    ([_inv(mode="fresh"), _inv(torch="other")], False, "distinct invocation provenances"),  # runtime change
+    ([_inv(mode="fresh", dirty=True)], False, "not a content identity"),
+    ([_inv(mode="fresh", dirty=None)], False, "not a content identity"),  # unknown tree state is not clean
+    ([_inv(mode="fresh", commit="unknown")], False, "commit is unknown"),
     ([{"t_unix": 0, "mode": "fresh", "provenance": None}], False, "no recorded provenance"),
     ([], False, "no invocation recorded"),
+    # ASTRA-112: a history that does not begin with the run's creation cannot certify earlier work
+    ([_inv()], False, "single creating (fresh) invocation"),               # a lone continuation
+    ([_inv(), _inv()], False, "single creating (fresh) invocation"),
+    ([_MARKER, _inv()], False, "single creating (fresh) invocation"),      # unrecorded prior work
+    ([_inv(mode="fresh"), _inv(mode="fresh")], False, "single creating (fresh) invocation"),
 ])
 def test_run_provenance_check_requires_one_clean_identified_source(invocations, ok, reason):
     from scripts.experiments.qwen_operating_point import _run_provenance_check
@@ -1103,17 +1111,58 @@ def test_record_invocation_accumulates_atomically_and_refuses_unreadable(tmp_pat
     assert path.read_text(encoding="utf-8") == '[{"mode": "fresh"'
 
 
-def test_resume_without_an_invocation_record_is_never_one_clean_source(tmp_path):
-    # a resumed run whose record is ABSENT (created before it existed, or lost) holds computation from
-    # unrecorded invocations; even a clean current invocation must not make it read as one clean source
-    from scripts.experiments.qwen_operating_point import _record_invocation, _run_provenance_check
+def test_unrecorded_history_is_never_one_clean_source_on_any_continuation(tmp_path):
+    # ASTRA-112: a continued run whose record is ABSENT or EMPTY (created before it existed, or lost)
+    # holds computation from unrecorded invocations. Even a clean current invocation must not make it
+    # read as one clean source -- on this continuation or any later one -- and a record that begins
+    # with a continuation certifies nothing before it. The intact same-source history stays valid.
+    from scripts.experiments.qwen_operating_point import RunConflict, _record_invocation, _run_provenance_check
     clean = {**_prov("a" * 40), "code_dirty": False}
-    _os.makedirs(tmp_path / "old")
-    resumed = _record_invocation(str(tmp_path / "old"), clean, "resume")
-    assert [i["mode"] for i in resumed] == ["unrecorded_prior", "resume"]
-    check = _run_provenance_check(resumed)
-    assert check["ok"] is False and any("no recorded provenance" in r for r in check["reasons"])
 
-    _os.makedirs(tmp_path / "new")  # a genuinely fresh run starts its record with itself only
-    fresh = _record_invocation(str(tmp_path / "new"), clean, "fresh")
-    assert [i["mode"] for i in fresh] == ["fresh"] and _run_provenance_check(fresh)["ok"] is True
+    def run_dir(name, ledger=None):
+        d = tmp_path / name
+        _os.makedirs(d)
+        if ledger is not None:
+            (d / "invocations.json").write_text(_json.dumps(ledger), encoding="utf-8")
+        return str(d)
+
+    for name, ledger in (("absent", None), ("empty", []), ("stale", [_inv()])):
+        d = run_dir(name, ledger)
+        first = _record_invocation(d, clean, "resume")
+        second = _record_invocation(d, clean, "resume")  # the unknown history persists in the record
+        for record in (first, second):
+            check = _run_provenance_check(record)
+            assert check["ok"] is False, name
+            assert any("single creating (fresh) invocation" in r for r in check["reasons"]), (name, check["reasons"])
+        if ledger is not None and ledger:
+            assert second[0] == ledger[0]  # an existing (stale) history is kept, never rewritten
+        else:
+            assert second[0]["mode"] == "unrecorded_prior" and second[0]["provenance"] is None
+
+    d = run_dir("intact")  # control: created fresh, continued twice from the same clean source
+    _record_invocation(d, clean, "fresh")
+    _record_invocation(d, clean, "resume")
+    intact = _record_invocation(d, clean, "resume")
+    assert [i["mode"] for i in intact] == ["fresh", "resume", "resume"] and _run_provenance_check(intact)["ok"] is True
+
+    d = run_dir("fresh-over-stale", [_inv(mode="fresh")])  # a fresh run never adopts an existing record
+    before = (tmp_path / "fresh-over-stale" / "invocations.json").read_bytes()
+    with _pytest.raises(RunConflict):
+        _record_invocation(d, clean, "fresh")
+    assert (tmp_path / "fresh-over-stale" / "invocations.json").read_bytes() == before
+
+
+@_pytest.mark.parametrize("artifact", ["split-manifest.json", "calibration.ckpt", "calibration-status.json", "invocations.json",
+                                       "eval-progress.jsonl", "eval-operating-point.json", "followups-result.json",
+                                       "screen-result.json"])
+def test_reconcile_never_starts_fresh_over_any_prior_run_artifact(tmp_path, artifact):
+    # a directory holding ANY run artifact but no run record is prior work: a fresh run must not
+    # overwrite it or adopt a stale invocation record / progress log as its own (ASTRA-098/112)
+    from scripts.experiments.qwen_operating_point import _RUN_ARTIFACTS, RunConflict, _reconcile_run
+    assert artifact in _RUN_ARTIFACTS
+    (tmp_path / artifact).write_text("prior", encoding="utf-8")
+    split = _split_of({"fit": [0], "cusum": [1], "dev": [2], "eval": [3]})
+    with _pytest.raises(RunConflict):
+        _reconcile_run(str(tmp_path), _manifest_of("new", split), split, "idA", lambda: "qwen_x")
+    assert (tmp_path / artifact).read_text(encoding="utf-8") == "prior"
+    assert not (tmp_path / "run-record.json").exists()
