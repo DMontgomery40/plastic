@@ -738,3 +738,50 @@ def test_encode_chat_returns_integer_ids(backend):
             [{"role": "user", "content": msg}], add_generation_prompt=True, enable_thinking=False, tokenize=False
         )
         assert ids == backend.tokenizer(rendered, add_special_tokens=False).input_ids
+
+
+def test_qwen_continuous_chat_state_roundtrips_for_resume(backend):
+    # The exact property calibrate_qwen's durable CUSUM resume relies on (ASTRA-086 #2): snapshot the
+    # runner state partway through a CONTINUOUS multi-turn chat, restore it into a fresh runner, and
+    # the continued per-turn log_delta_norm values match the uninterrupted chat elementwise. The
+    # fake-runner tests cover the resume control flow; this covers the real cache/state round-trip.
+    from plastic.config import ModelConfig
+    from plastic.harness.calibrate import log_only
+    from plastic.harness.config import HarnessConfig
+    from plastic.harness.transaction import TransactionRunner
+    from plastic.session.runner import _QwenTextIO, drive_chat_turn
+
+    cfg = ModelConfig(domain="text", chunk=8)
+    hcfg = log_only(HarnessConfig(target_fpr=0.2))
+    tok = _QwenTextIO(backend)
+    prompts = ["Say hello.", "Count to three.", "Name a fruit.", "Name a color."]
+
+    def _run_turn(runner, prompt, salt):
+        runner.transactions = []
+        g = torch.Generator().manual_seed(1000 + salt)
+        drive_chat_turn(runner, tok, prompt, max_new_tokens=4, temperature=0.9, top_k=50, gen=g)
+        return [r["signals"]["log_delta_norm"] for r in runner.transactions if r["signals"].get("log_delta_norm") is not None]
+
+    def _fresh_runner():
+        r = TransactionRunner(None, cfg, hcfg, device=torch.device("cpu"), backend=backend)
+        r.reset()
+        return r
+
+    # uninterrupted continuous chat (no reset between turns)
+    r = _fresh_runner()
+    full = []
+    for i, p in enumerate(prompts):
+        full += _run_turn(r, p, i)
+
+    # interrupted: run two turns, snapshot, restore into a fresh runner, continue the remaining turns
+    r2 = _fresh_runner()
+    part = []
+    for i in range(2):
+        part += _run_turn(r2, prompts[i], i)
+    snapshot = r2.state_dict()
+    r3 = TransactionRunner(None, cfg, hcfg, device=torch.device("cpu"), backend=backend)
+    r3.load_state_dict(snapshot)
+    for i in range(2, len(prompts)):
+        part += _run_turn(r3, prompts[i], i)
+
+    assert part == full  # exact continuous-state round-trip: resume reproduces the CUSUM reference

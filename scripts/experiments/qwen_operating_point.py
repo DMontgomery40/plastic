@@ -350,7 +350,7 @@ def main() -> None:
     import torch  # noqa
 
     from plastic.backends.qwen import QwenBackend, _checkpoint_digest
-    from plastic.harness.calibrate import calibrate_qwen
+    from plastic.harness.calibrate import CalibrationIncomplete, calibrate_qwen
     from plastic.harness.config import HarnessConfig
     from plastic.store import ArtifactStore
 
@@ -381,10 +381,23 @@ def main() -> None:
     store.register_model(mid, {"backend": "qwen", "checkpoint_dir": args.checkpoint, "domain": "text", "chunk": 8, "status": "completed"})
 
     gen = {"max_new_tokens": args.max_new_tokens, "temperature": 0.9, "top_k": 50}
-    # fit (log-only inside calibrate_qwen): thresholds on fresh fit prompts, CUSUM on the cusum set;
-    # the deadline stops fitting early so a bounded run still reaches evaluation (partial, recorded)
-    cal = calibrate_qwen(store, mid, [r["prompt"] for r in split["fit"]], cusum_prompts=[r["prompt"] for r in split["cusum"]],
-                         target_fpr=0.01, max_new_tokens=args.max_new_tokens, seed=seed, device=args.device, deadline=deadline)
+    # fit (log-only inside calibrate_qwen): thresholds on fresh fit prompts, CUSUM on the cusum set.
+    # A durable checkpoint (bound to the model/corpus/config) lets a deadline persist progress and
+    # resume rather than re-fit; on an incomplete calibration we stop BEFORE eval so a conformant run
+    # never evaluates on partial thresholds. Re-running the same command resumes from the checkpoint.
+    ckpt_path = os.path.join(args.out, "calibration.ckpt")
+    try:
+        cal = calibrate_qwen(store, mid, [r["prompt"] for r in split["fit"]], cusum_prompts=[r["prompt"] for r in split["cusum"]],
+                             target_fpr=0.01, max_new_tokens=args.max_new_tokens, seed=seed, device=args.device,
+                             deadline=deadline, checkpoint_path=ckpt_path, corpus_hash=manifest["corpus_hash"])
+    except CalibrationIncomplete as inc:
+        status = {"calibration_incomplete": True, "phase": inc.phase,
+                  "fit": [inc.fit_used, inc.fit_requested], "cusum": [inc.cusum_used, inc.cusum_requested],
+                  "checkpoint": ckpt_path, "corpus_hash": manifest["corpus_hash"]}
+        json.dump(status, open(os.path.join(args.out, "calibration-status.json"), "w"), indent=2)
+        print(f"[oppoint] calibration incomplete in {inc.phase}: fit {inc.fit_used}/{inc.fit_requested}, "
+              f"cusum {inc.cusum_used}/{inc.cusum_requested}; progress checkpointed. Re-run to resume.")
+        return
     fit_meta = store.load_model_record(mid)
     print(f"[oppoint] fit: {cal.n_chunks} chunks; fit_prompts {fit_meta['calibration_fit_prompts_used']}/{fit_meta['calibration_fit_prompts_requested']}; thresholds={cal.thresholds}")
 
