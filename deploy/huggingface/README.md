@@ -1,5 +1,27 @@
 # Public CPU demo
 
+## Keep GitHub and Hugging Face in sync
+
+Every push to GitHub `main` runs [the publication workflow](https://github.com/DMontgomery40/plastic/actions/workflows/sync-to-hub.yml)
+for both the [model repository](https://huggingface.co/dmontgomery40/plastic) and
+[Space](https://huggingface.co/spaces/dmontgomery40/plastic). It uses the official
+[Hugging Face sync action](https://huggingface.co/docs/hub/repositories-github-actions).
+The GitHub `HF_TOKEN` secret must have write access to both repositories.
+
+The workflow stages committed source and the shared README body, preserves each
+destination's README metadata and existing `text/` and `physics/` checkpoint bundles,
+and supplies the Space Dockerfile. It excludes local artifacts and the private
+scratchpad. Both jobs verify every exported file against the published bytes;
+`source_snapshot.json` records the originating GitHub commit. GitHub is the source
+for normal source/documentation edits; checkpoint releases remain explicit.
+
+Check both jobs in GitHub Actions after publishing. Runtime changes also require a
+successful Space build and a check of the affected live flow. A development-branch
+push is a backup and does not trigger deployment. To retry delivery, use the workflow's
+**Run workflow** control on `main`.
+
+## Deployment
+
 The Space serves the existing React dashboard and Python model API on one port.
 The deployment adapter adds a visible public-session notice and restricts the API
 to bounded operations on `demo_text` and `demo_physics`. The research implementation

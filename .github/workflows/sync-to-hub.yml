@@ -1,0 +1,111 @@
+name: Sync GitHub to Hugging Face
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hugging-face-publication
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        repo_type: [model, space]
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_REPO_ID: dmontgomery40/plastic
+      HF_REPO_TYPE: ${{ matrix.repo_type }}
+      EXPORT_DIR: ${{ runner.temp }}/plastic-hf-${{ matrix.repo_type }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install Hub client
+        run: python -m pip install 'huggingface_hub==1.32.0'
+      - name: Prepare committed source and preserve published checkpoints
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import shutil
+          import subprocess
+          from pathlib import Path
+          from huggingface_hub import HfApi, snapshot_download
+
+          assert os.environ.get('HF_TOKEN'), 'Configure the GitHub HF_TOKEN secret'
+          root = Path(os.environ['GITHUB_WORKSPACE'])
+          out = Path(os.environ['EXPORT_DIR'])
+          out.mkdir(parents=True, exist_ok=False)
+          repo, kind = os.environ['HF_REPO_ID'], os.environ['HF_REPO_TYPE']
+          info = HfApi().repo_info(repo, repo_type=kind)
+          saved = Path(snapshot_download(repo, repo_type=kind, revision=info.sha,
+                       allow_patterns=['README.md', 'text/**', 'physics/**']))
+          # hub-sync mirrors deletions: include all Hub-owned checkpoint files.
+          for folder in ('text', 'physics'):
+              assert (saved / folder / 'manifest.json').is_file(), folder
+              shutil.copytree(saved / folder, out / folder)
+          remote_card = (saved / 'README.md').read_text()
+          header, separator, _ = remote_card.partition('\n---\n')
+          assert header.startswith('---\n') and separator, 'Missing Hub metadata'
+          tracked = subprocess.check_output(['git', 'ls-files', '-z'], cwd=root).decode().split('\0')
+          excluded = {'.git', '.github', '.claude', '.codex', 'artifacts', 'training_data'}
+          for name in filter(None, tracked):
+              path = Path(name)
+              if path.parts[0] in excluded or path.name == 'SHARED_SCRATCHPAD.md':
+                  continue
+              assert not (root / path).is_symlink(), f'Unexpected source symlink: {path}'
+              (out / path).parent.mkdir(parents=True, exist_ok=True)
+              shutil.copy2(root / path, out / path)
+          (out / 'README.md').write_text(header + separator + '\n' + (root / 'README.md').read_text())
+          if kind == 'space':
+              shutil.copy2(root / 'deploy/huggingface/Dockerfile', out / 'Dockerfile')
+          provenance = {'github_repository': os.environ['GITHUB_REPOSITORY'],
+                        'github_commit': os.environ['GITHUB_SHA'],
+                        'preserved_hf_revision': info.sha, 'repo_type': kind}
+          (out / 'source_snapshot.json').write_text(json.dumps(provenance, indent=2) + '\n')
+          # Record every exported byte outside the upload directory for verification.
+          hashes = {p.relative_to(out).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                    for p in out.rglob('*') if p.is_file() and not p.name.startswith('.git')}
+          out.with_suffix('.hashes.json').write_text(json.dumps(hashes))
+          print(f'Prepared {len(hashes)} files for {kind}; checkpoint bundles preserved')
+          PY
+      - name: Sync with the official Hugging Face action
+        uses: huggingface/hub-sync@v0.1.0
+        with:
+          github_repo_id: ${{ github.repository }}
+          huggingface_repo_id: dmontgomery40/plastic
+          hf_token: ${{ secrets.HF_TOKEN }}
+          repo_type: ${{ matrix.repo_type }}
+          space_sdk: docker
+          subdirectory: ${{ env.EXPORT_DIR }}
+      - name: Verify both source identity and preserved checkpoint bytes
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          from huggingface_hub import HfApi, snapshot_download
+
+          repo, kind = os.environ['HF_REPO_ID'], os.environ['HF_REPO_TYPE']
+          info = HfApi().repo_info(repo, repo_type=kind)
+          expected = json.loads(Path(os.environ['EXPORT_DIR']).with_suffix('.hashes.json').read_text())
+          actual = Path(snapshot_download(repo, repo_type=kind, revision=info.sha))
+          for name, digest in expected.items():
+              assert hashlib.sha256((actual / name).read_bytes()).hexdigest() == digest, name
+          forbidden = {'SHARED_SCRATCHPAD.md', 'artifacts', 'training_data', '.claude', '.codex'}
+          assert not any(Path(f.rfilename).parts[0] in forbidden for f in info.siblings)
+          print(f'Verified {kind} at {info.sha}: {len(expected)} exact files, including checkpoints')
+          PY
