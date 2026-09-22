@@ -110,7 +110,12 @@ def compression_ratio(ids: Sequence[int] | None) -> float | None:
     """zlib ratio of the chunk's token ids as bytes; display only, never a decision input."""
     if not ids:
         return None
-    raw = np.asarray(list(ids), dtype="<u2").tobytes()
+    arr = np.asarray(list(ids), dtype=np.int64)
+    # token ids can exceed 16 bits — Qwen's native vocab is ~248k, whose chat special tokens overflow
+    # uint16 — so pick the byte width that fits. plastic vocabs (<= 8192) stay uint16, preserving the
+    # existing display values.
+    dtype = "<u2" if int(arr.max()) < 65536 else "<u4"
+    raw = arr.astype(dtype).tobytes()
     if len(raw) < 32:
         return None
     return len(zlib.compress(raw, 9)) / len(raw)

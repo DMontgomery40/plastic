@@ -257,6 +257,21 @@ def test_projection_budget_recheck_float_rounding():
                 assert r.budget_used <= cap * (1 + 1e-6), ctx
 
 
+def test_compression_ratio_handles_native_token_widths():
+    # ASTRA-068: the display-only compression metric must not overflow on native token ids above the
+    # uint16 ceiling (Qwen's ~248k vocab / chat special tokens); plastic vocabs stay uint16.
+    from plastic.harness.signals import compression_ratio
+
+    assert compression_ratio(list(range(100, 100 + 64))) is not None  # small ids (plastic)
+    big = [248045, 248069, 65535, 65536, 200000] * 8  # real chat special-token magnitudes
+    r = compression_ratio(big)
+    assert r is not None and r > 0
+    assert compression_ratio([65535] * 32) is not None  # boundary: fits uint16
+    assert compression_ratio([65536] * 32) is not None  # boundary: needs uint32
+    assert compression_ratio([248045, 248069]) is None  # too few bytes -> None (no overflow)
+    assert compression_ratio([]) is None and compression_ratio(None) is None
+
+
 def test_reduced_signal_backend_carries_none_end_to_end():
     # A backend whose kernel exposes no per-token memory signals (like Qwen) must have
     # surprise/write-norm/decay carried as None end-to-end — never zero or NaN — while chunk_loss and

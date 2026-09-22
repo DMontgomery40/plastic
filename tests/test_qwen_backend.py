@@ -460,6 +460,11 @@ def test_qwen_runs_end_to_end_through_the_transaction_runner(backend):
     moved = any(not torch.equal(a, b) for a, b in zip(pre, r.committed.recurrent_leaves()))
     assert moved  # native generation wrote to memory
 
+    # summary() must work on a Qwen session (it previously raised on committed.norms()); the recurrent
+    # memory norm is surfaced honestly
+    summ = r.summary()
+    assert "recurrent_norm_total" in summ["state_norms"] and summ["state_norms"]["recurrent_norm_total"] > 0
+
     # the whole runner state (Qwen cache included) round-trips through torch.save/load
     buf = io.BytesIO()
     torch.save(r.state_dict(), buf)

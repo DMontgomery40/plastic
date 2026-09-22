@@ -575,7 +575,7 @@ class TransactionRunner:
             "read_only_reason": self.read_only_reason,
             "n_transactions": self.n_transactions,
             "cusum": self.cusum.state(),
-            "state_norms": self.committed.norms(),
+            "state_norms": self.backend.state_norms(self.committed),
             "drift_from_anchor": delta_norms(self.backend.state_delta(self.committed, self.anchor))[0],
         }
 

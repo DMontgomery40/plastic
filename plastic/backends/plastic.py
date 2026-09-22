@@ -60,6 +60,9 @@ class PlasticBackend:
                     return False
         return True
 
+    def state_norms(self, state: SessionState) -> dict[str, Any]:
+        return state.norms()
+
     def state_dict(self, state: SessionState) -> dict[str, Any]:
         return state.state_dict()
 

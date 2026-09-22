@@ -64,6 +64,11 @@ class Backend(Protocol):
     def is_finite(self, state: State) -> bool:
         ...
 
+    def state_norms(self, state: State) -> dict[str, Any]:
+        """Per-memory-unit and total norms for the session summary/dashboard (plastic: S and h norms;
+        Qwen: the recurrent memory norm). Display only, never a decision input."""
+        ...
+
     def state_dict(self, state: State) -> dict[str, Any]:
         """Full serialization — all memory units, KV/conv, cursor/positions and init flags, plus
         backend/checkpoint/tokenizer identity for a runtime-compat check on load."""

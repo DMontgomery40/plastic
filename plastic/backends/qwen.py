@@ -277,6 +277,12 @@ class QwenBackend:
         with self._serialized():
             return QwenState(copy.deepcopy(state.cache))
 
+    def state_norms(self, state: QwenState) -> dict[str, Any]:
+        """Per-leaf and total norms of the recurrent memory — Qwen's analog of plastic's S norm, for
+        the session summary/dashboard. Display only, never a decision input."""
+        per = [float(t.float().norm()) for t in state.recurrent_leaves()]
+        return {"recurrent_norm": per, "recurrent_norm_total": float(sum(x * x for x in per) ** 0.5)}
+
     def state_delta(self, a: QwenState, b: QwenState) -> list[torch.Tensor]:
         """Per-memory-unit change ``a − b`` over the 18 gated-delta recurrent tensors — the memory
         units the harness measures (update norm) and projects. KV and conv are activation/attention

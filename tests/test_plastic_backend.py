@@ -47,6 +47,7 @@ def test_forward_matches_the_direct_model_call():
     delta = be.state_delta(new_state, st)
     assert len(delta) == cfg.n_layers and all(torch.is_tensor(t) for t in delta)
     assert be.is_finite(new_state)
+    assert be.state_norms(new_state) == new_state.norms()  # summary norms delegate to the native state
 
 
 def test_state_dict_roundtrip_and_clone_independence():
