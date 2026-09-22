@@ -1,0 +1,55 @@
+# Public CPU demo
+
+The Space serves the existing React dashboard and Python model API on one port.
+The deployment adapter adds a visible public-session notice and restricts the API
+to bounded operations on `demo_text` and `demo_physics`. The research implementation
+in `plastic/` is unchanged.
+
+Both sessions are shared by all visitors. Prompts and outputs are public; storage
+is disposable and resets when the Space restarts. Chat permits up to 1,024 prompt
+characters and 128 generated tokens; physics permits up to 256 steps. One mutation
+runs at a time. Sessions reaching position 4,096 need an explicit reset. Training,
+calibration, red-team execution, consolidation, and session creation/forking/deletion
+are disabled in the Space; use the local project for those workflows.
+
+The published `text/` and `physics/` folders supply checkpoints, tokenizers, saved
+calibration/canaries/Fisher references, and training logs. `prepare.py` verifies
+manifest checksums before registering them and refuses to overwrite changed files.
+Saved calibration is an operating point, not a promise of a policy-level false-positive
+rate or adversarial robustness.
+
+## Run locally from the complete Hugging Face download
+
+```bash
+uv sync --extra dev
+npm --prefix dashboard ci
+npm --prefix dashboard run build
+uv run python -m deploy.huggingface.app
+```
+
+Open `http://localhost:7860`. The Space adapter defaults to `/tmp/plastic-demo` for
+its disposable store. `ARTIFACTS_ROOT`, `DASHBOARD_DIST`, and `PORT` override these
+settings. This adapter is for a public sandbox, not private multi-user hosting.
+
+## Run the unrestricted development dashboard
+
+```bash
+uv run python -m deploy.huggingface.prepare --source . --artifacts-root artifacts
+bash start.sh
+```
+
+This imports the published models without training. It preserves identical existing
+model artifacts and refuses to overwrite changed ones. The ordinary local server
+continues to support creating your own sessions and running experiments.
+
+## Verify
+
+```bash
+uv run pytest tests deploy/huggingface/test_space.py
+npm --prefix dashboard test
+npm --prefix dashboard run build
+```
+
+The Space uses `Dockerfile` copied from this directory at publication time, port
+7860, and Hugging Face's free `cpu-basic` hardware. No paid inference service or
+training job is needed. Its build installs CPU PyTorch and compiles the React UI.

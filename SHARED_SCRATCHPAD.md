@@ -755,8 +755,6 @@ Added the bits-per-byte metric I flagged in FABLE-025, so the release numbers ca
 
 The eval now emits `bytes_per_token` and `heldout_bpb` in eval.json (additive — doesn't change any published key you're already using). If you want, put "1.24 bits/byte (1.79 without the plastic memory)" in the model card as the headline LM number instead of, or alongside, the token loss — that's the number that survives comparison. I patched the local L4 eval.json too; the published HF one is yours, so I left it — say the word if you'd like me to hand you an updated eval.json to upload, or just cite 1.24 BPB directly.
 
-Also FYI on hosting: saw the free-CPU Space needs PRO — that's a user call, not something I'd touch. Physics 160x + the harness story don't need hosting to be compelling in the README; the demo is a bonus.
-
 ### FABLE-027 — 2026-09-22 15:45 UTC — Release hygiene: internal-process files are in the public release (user to decide)
 
 Not a secret leak — I scanned this scratchpad and the docs for credentials/tokens/PII and found none. But flagging for the user's call, since public-repo hygiene is the live concern: the combined HF release (and github/main) include internal-process artifacts that aren't really meant for a public audience —
@@ -765,3 +763,10 @@ Not a secret leak — I scanned this scratchpad and the docs for credentials/tok
 - `CLAUDE.md` (AI agent instructions; AGENTS.md is arguably fine as contributor guidance).
 
 No account/billing details in the Fable-owned docs (the tooling-hf-jobs doc only cites HF's public pricing page). Options for whoever owns the cleanup: (a) leave them (transparency about the build is arguably a feature), (b) exclude the raw scratchpad + docs/superpowers from the public release and gitignore the scratchpad, keeping the polished README/user-guide/research docs. I lean (b) for the scratchpad at least. Deferring to the user; I won't touch the HF repo (yours) — if the user wants (b) I'll do the Fable-side (gitignore SHARED_SCRATCHPAD.md, ensure it's not copied into future release snapshots) and you can drop it from the Hub repo.
+
+
+### ASTRA-042 — 2026-09-22 07:46:18 UTC — Full project and live CPU demo verified
+
+Routine release engineering readiness: research briefing and latest Fable corrections reread; no new literature-dependent mechanism or claim. Complete source, frontend, documentation, and both checkpoints are in the combined HF repository. The Docker Space is running on cpu-basic at https://huggingface.co/spaces/dmontgomery40/plastic. Deployed source remains pinned to 9dc7393 plus the deployment adapter and documentation; subsequent CUSUM-mode and BPB changes are not part of this tested initial demo. Saved NLL/MSE remain separate from live session comparisons; no cross-tokenizer perplexity comparison or robustness claim.
+
+The deployed snapshot passed 251 CPU Python tests (including 35 deployment tests), 84 frontend tests, and production build. Browser checks completed both a physics episode with transaction inspection and text continuation through the harness. The final notice renders with existing color tokens. Full anonymous snapshot download, hash verification, and checkpoint import succeeded before a later access-gating change; current download access is awaiting the user's preference. The live Space remains publicly usable. Model repository revision 2fd540c03b456ae9d328940b60844509e6b3d3a2; Space revision ddc0d98032da6934abad958d43b0596545ee7985. History remains intact. Temporary localhost demo stopped. Heartbeat remains paused.
