@@ -671,19 +671,17 @@ def test_qwen_calibration_produces_installable_thresholds(tmp_path):
     mid = store.new_model_id("qwen")
     store.register_model(mid, {"backend": "qwen", "checkpoint_dir": CKPT, "domain": "text", "chunk": 8, "status": "completed"})
 
-    convos = [
-        ("What is the capital of France?", "The capital of France is Paris."),
-        ("Name a primary color.", "Red is a primary color."),
-        ("How many days are in a week?", "There are seven days in a week."),
-        ("What is two plus two?", "Two plus two is four."),
-        ("What color is the sky on a clear day?", "The sky is blue on a clear day."),
-    ]
-    cal = calibrate_qwen(store, mid, convos, n_chunks=20, target_fpr=0.1, reset_every=8, log=lambda s: None)
+    # prompts the model GENERATES responses to (not teacher-forced), through the real chat protocol
+    prompts = ["What is the capital of France?", "Name a primary color.", "How many days are in a week?"]
+    cal = calibrate_qwen(store, mid, prompts, target_fpr=0.2, max_new_tokens=4, seed=0, log=lambda s: None)
     # reduced-signal references/thresholds only, stamped with the actual loaded checkpoint digest
     assert cal.model_signature.startswith("qwen:") and len(cal.model_signature) > len("qwen:")
     assert set(cal.reference.keys()) == {"chunk_loss", "log_delta_norm"}
     assert "chunk_loss" in cal.thresholds and "log_delta_norm" in cal.thresholds
     assert "surprise_mean" not in cal.thresholds and "log_write_norm" not in cal.thresholds
+    # prompt-chunk and generation-chunk denominators are recorded separately (real generation ran)
+    r = store.load_model_record(mid)
+    assert r["calibration_prompt_chunks"] >= 1 and r["calibration_generation_chunks"] >= 1
     gc.collect()
 
     # a session on this model installs the calibration (identity gate accepts the matching signature)

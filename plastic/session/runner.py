@@ -108,6 +108,34 @@ def _counts(transactions: list[dict[str, Any]]) -> dict[str, int]:
     return out
 
 
+def drive_chat_turn(runner, tok: Any, prompt: str, *, max_new_tokens: int, temperature: float, top_k: int, gen=None) -> tuple[str, list[int], list[int]]:
+    """Drive one chat turn through ``runner``: encode the prompt (user source), partial-flush so the
+    prompt transacts before generation, sample the model token-by-token (model source), close the
+    assistant turn once, then final-flush. Returns (completion, generated_ids, prompt_ids). Both
+    ``Session.chat`` and the Qwen calibrator use this so they exercise the IDENTICAL transaction
+    protocol — the prompt-vs-generation/closure source partition and chunk boundaries are the same."""
+    ids = tok.encode(prompt, add_bos=(runner.pos == 0 and not runner.pending))
+    runner.feed_tokens(ids, source="user")
+    runner.flush()
+    logits = runner._last_logits  # the flush may have recomputed the chunk
+    out_ids: list[int] = []
+    for _ in range(int(max_new_tokens)):
+        if logits is None:
+            break
+        nxt = _sample(logits, temperature=temperature, top_k=top_k, gen=gen)
+        if nxt == tok.eos_id:
+            break
+        out_ids.append(nxt)
+        logits = runner.feed_tokens([nxt], source="model")
+    # close the assistant turn once (EOS / length cap / zero generation), as governed model-source
+    # writes not shown to the user (native separator; empty for the plastic BPE path)
+    close_ids = list(getattr(tok, "assistant_close_ids", []) or [])
+    if close_ids:
+        runner.feed_tokens(close_ids, source="model")
+    runner.flush()
+    return tok.decode(out_ids), out_ids, ids
+
+
 def _verify_calibration(cal: Any, model_identity: str) -> tuple[Any, str]:
     """Install a persisted calibration only if it was built for THIS model's actual content. A
     mismatched or unsigned calibration is discarded — its thresholds would misgate a different model
@@ -222,35 +250,12 @@ class Session:
     ) -> ChatResult:
         if self.cfg.domain != "text" or self.tokenizer is None:
             raise ValueError("chat requires a text session")
-        tok = self.tokenizer
-        ids = tok.encode(prompt, add_bos=(self.runner.pos == 0 and not self.runner.pending))
         self.runner.transactions = []
-        logits = self.runner.feed_tokens(ids, source="user")
-        # generation is a control switch (generated tokens are read-only by default); it happens
-        # only at a chunk boundary, so the prompt's partial chunk is transacted first
-        self.runner.flush()
-        logits = self.runner._last_logits  # the flush may have recomputed the chunk
         gen = torch.Generator().manual_seed(int(seed)) if seed is not None else None
-        out_ids: list[int] = []
-        for _ in range(int(max_new_tokens)):
-            if logits is None:
-                break
-            nxt = _sample(logits, temperature=temperature, top_k=top_k, gen=gen)
-            if nxt == tok.eos_id:
-                break
-            out_ids.append(nxt)
-            logits = self.runner.feed_tokens([nxt], source="model")
-        # Close the assistant turn in the carried state exactly once — for EOS, the length cap, or
-        # zero generation alike — so the next user turn follows a correctly-terminated turn. The
-        # closure tokens (native template separator, backend-specific; empty for the plastic BPE
-        # path) are governed model-source writes subject to read-only/budget precedence, and are NOT
-        # part of the displayed completion or the generated-token count.
-        close_ids = list(getattr(tok, "assistant_close_ids", []) or [])
-        if close_ids:
-            self.runner.feed_tokens(close_ids, source="model")
-        self.runner.flush()
+        completion, out_ids, ids = drive_chat_turn(
+            self.runner, self.tokenizer, prompt, max_new_tokens=max_new_tokens, temperature=temperature, top_k=top_k, gen=gen
+        )
         transactions = list(self.runner.transactions)
-        completion = tok.decode(out_ids)
         self._persist(transactions)
         self.store.append_trace(
             self.session_id,

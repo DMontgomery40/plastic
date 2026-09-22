@@ -401,30 +401,38 @@ def calibrate_model(
 def calibrate_qwen(
     store,
     model_id: str,
-    conversations: Iterable[tuple[str, str]],
+    prompts: Iterable[str],
     *,
-    n_chunks: int = 512,
     target_fpr: float = 0.01,
+    max_new_tokens: int = 64,
+    temperature: float = 0.9,
+    top_k: int = 50,
+    seed: int = 0,
+    cusum_prompts: Iterable[str] | None = None,
     harness_cfg: HarnessConfig | None = None,
     device: torch.device | str = "cpu",
-    reset_every: int | None = 32,
     log=print,
 ) -> "Calibration":
-    """Calibrate Qwen harness thresholds on a conversational corpus, through the SAME reduced-signal
-    runner a chat session uses.
+    """Calibrate Qwen harness thresholds on the ACTUAL Session.chat protocol.
 
-    ``conversations`` is an iterable of ``(user, assistant)`` string pairs; each is rendered with the
-    native chat template (no generation prompt — a completed reference) and fed as the benign write
-    stream. Qwen produces only the reduced decision signals (chunk NLL and recurrent-state change),
-    so the others get no reference/threshold. The calibration is stamped with the ACTUAL loaded
-    checkpoint digest, so it installs only on the matching model (ASTRA-078). Writes calibration.json.
+    Drives real chats (log_only) over ``prompts`` — the model GENERATES each response (not
+    teacher-forced) — so every turn goes through the real protocol: prompt (user source) partial
+    flush, model-source generated tokens, assistant closure, final flush. Thresholds are built from
+    those real operating-point records; Qwen produces only the reduced decision signals (chunk NLL,
+    recurrent-state change), so only those get references/thresholds. The per-chunk reference uses a
+    fresh chat per prompt (reset between); the CUSUM reference uses a separate CONTINUOUS multi-turn
+    chat (no reset), the same protocol. The calibration is stamped with the ACTUAL loaded checkpoint
+    digest so it installs only on the matching model (ASTRA-078).
 
-    Calibrate on conversations DISJOINT from any used to evaluate; do not tune on demonstration
-    prompts. This produces thresholds, not a measured intervention-rate or safety claim.
+    Prompt-chunk and generation-chunk counts are recorded SEPARATELY (never pooled). Calibrate on
+    prompts DISJOINT from evaluation. This produces thresholds, not a measured intervention-rate or
+    safety claim.
     """
     from plastic.backends.qwen import QwenBackend
     from plastic.config import ModelConfig
+    from plastic.harness.stats import robust_z
     from plastic.harness.transaction import TransactionRunner
+    from plastic.session.runner import _QwenTextIO, drive_chat_turn
 
     device = torch.device(device)
     rec = store.load_model_record(model_id)
@@ -434,21 +442,65 @@ def calibrate_qwen(
     cfg = ModelConfig(domain="text", chunk=int(rec.get("chunk", 8)))
     hcfg = log_only(harness_cfg or HarnessConfig(target_fpr=target_fpr))
     runner = TransactionRunner(None, cfg, hcfg, device=device, backend=backend)
+    tok = _QwenTextIO(backend)
+    prompts = list(prompts)
 
-    def stream():
-        for user, assistant in conversations:
-            ids = backend.tokenizer.apply_chat_template(
-                [{"role": "user", "content": user}, {"role": "assistant", "content": assistant}],
-                add_generation_prompt=False, enable_thinking=False, tokenize=True, return_dict=False,
-            )
-            yield [int(t) for t in ids]
+    def _chat(prompt: str, salt: int) -> None:
+        runner.transactions = []
+        g = torch.Generator().manual_seed(int(seed) + salt)
+        drive_chat_turn(runner, tok, prompt, max_new_tokens=max_new_tokens, temperature=temperature, top_k=top_k, gen=g)
 
-    cal = calibrate_from_runner(
-        runner, stream(), n_chunks=n_chunks, model_signature=f"qwen:{backend.checkpoint_digest}",
-        target_fpr=target_fpr, reset_every=reset_every,
+    # per-chunk reference: a fresh chat per prompt (reset between) through the real generation path
+    records: list[dict[str, Any]] = []
+    for i, prompt in enumerate(prompts):
+        runner.reset()
+        _chat(prompt, i)
+        records.extend(runner.transactions)
+    if not records:
+        raise ValueError("no chunks observed during calibration")
+    signals = [r["signals"] for r in records]
+    reference = {name: [float(s[name]) for s in signals if s.get(name) is not None] for name in ROLLBACK_DECISION_SIGNALS}
+    reference = {k: v for k, v in reference.items() if v}
+    thresholds, achievable = thresholds_from_records(signals, target_fpr=target_fpr)
+
+    # CUSUM reference: a separate CONTINUOUS multi-turn chat (no reset), same generation protocol
+    cusum_reference: list[float] = []
+    if "log_delta_norm" in reference:
+        runner.reset()
+        cont: list[float] = []
+        for i, prompt in enumerate(list(cusum_prompts) if cusum_prompts is not None else prompts):
+            _chat(prompt, 1000 + i)
+            cont.extend(float(r["signals"]["log_delta_norm"]) for r in runner.transactions if r["signals"].get("log_delta_norm") is not None)
+        if len(cont) >= 16:
+            zc = [z for z in (robust_z(v, cont) for v in cont) if z is not None]
+            ch = calibrated_cusum_h(zc, k=runner.hcfg.cusum_k, h_min=runner.hcfg.cusum_h, target_fpr=target_fpr)
+            if ch is not None:
+                thresholds["cusum_h"], achievable["cusum_h"] = ch
+                cusum_reference = cont
+            else:
+                thresholds["cusum_h"] = float(runner.hcfg.cusum_h)
+        else:
+            thresholds["cusum_h"] = float(runner.hcfg.cusum_h)
+
+    # prompt-chunk vs generation-chunk denominators kept separate (the prompt flushes before
+    # generation, so no chunk mixes the two within a turn)
+    prompt_chunks = sum(1 for r in records if r["sources"]["user"] > 0 and r["sources"]["model"] == 0)
+    gen_chunks = sum(1 for r in records if r["sources"]["model"] > 0)
+    cal = Calibration(
+        model_signature=f"qwen:{backend.checkpoint_digest}",
+        n_chunks=len(signals),
+        reference=reference,
+        cusum_reference=cusum_reference,
+        thresholds=thresholds,
+        achievable_fpr=achievable,
+        target_fpr=float(target_fpr),
+        created_at_unix=int(time.time()),
     )
     cal.save(store.model_dir(model_id))
-    store.register_model(model_id, {"calibrated_at_unix": cal.created_at_unix, "calibration_chunks": cal.n_chunks})
-    log(f"[calibrate] qwen {model_id}: {cal.n_chunks} chunks; thresholds: "
-        + ", ".join(f"{k}={v:.4g}" for k, v in cal.thresholds.items()))
+    store.register_model(model_id, {
+        "calibrated_at_unix": cal.created_at_unix, "calibration_chunks": cal.n_chunks,
+        "calibration_prompt_chunks": prompt_chunks, "calibration_generation_chunks": gen_chunks,
+    })
+    log(f"[calibrate] qwen {model_id}: {len(signals)} chunks ({prompt_chunks} prompt, {gen_chunks} generation); "
+        + "thresholds: " + ", ".join(f"{k}={v:.4g}" for k, v in thresholds.items()))
     return cal
