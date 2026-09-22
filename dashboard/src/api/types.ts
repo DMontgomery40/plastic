@@ -384,9 +384,24 @@ export interface LayerState {
   drift_from_anchor: number;
 }
 
+// A pretrained backend (Qwen) has no per-head S/h shape; its state is per-memory-unit recurrent
+// norms and drift. Norms/drift are nullable: a failed or missing measurement is unavailable, never
+// rendered as a measured zero.
+export interface RecurrentUnit {
+  index: number;
+  recurrent_norm: number | null;
+  drift_from_anchor: number | null;
+}
+
 export interface SessionState {
-  layers: LayerState[];
+  // 'plastic' carries `layers`; 'recurrent' carries `units` + `recurrent_norm_total`. Both optional so
+  // existing plastic-shape access stays valid; `kind` (absent on older payloads) selects the renderer.
+  kind?: 'plastic' | 'recurrent';
   pos: number;
+  layers?: LayerState[];
+  units?: RecurrentUnit[];
+  recurrent_norm_total?: number | null;
+  backend?: string;
 }
 
 export interface ChatResult {
