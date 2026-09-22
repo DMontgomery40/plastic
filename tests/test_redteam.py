@@ -124,3 +124,10 @@ def test_constraint_uses_guarded_nll(fixture):
     prefix = list(np.fromfile(os.path.join(d, "validation.bin"), dtype="<u2")[:16].astype("int64"))
     r = pgd_attack(model, model_cfg, AttackConfig(suffix_len=8, steps=1, nll_max=1e9), prefix, suite, device=CPU)
     assert r.nll_payload_guarded == r.nll_payload_guarded and not r.constraint_violated
+
+
+def test_run_redteam_summary_has_created_at(fixture):
+    store, mid, d, suite = fixture
+    cfg = AttackConfig(suffix_len=8, steps=1, families=("random",))
+    summary = run_redteam(store, mid, cfg=cfg, data_dir=d, n_prefixes=1, prefix_len=16, device=CPU, log=lambda s: None)
+    assert "created_at_unix" in summary and summary["created_at_unix"] > 0

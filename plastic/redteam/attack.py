@@ -400,7 +400,7 @@ def run_redteam(
     threshold = None
     if calibration is not None:
         threshold = calibration.thresholds.get("canary_delta_coherence")
-    summary: dict[str, Any] = {"run_id": run_id, "model_id": model_id, "threshold_coherence": threshold, "families": {}}
+    summary: dict[str, Any] = {"run_id": run_id, "model_id": model_id, "created_at_unix": int(time.time()), "threshold_coherence": threshold, "families": {}}
     for family in cfg.families:
         rs = [r for r in results if r.family == family]
         if not rs:

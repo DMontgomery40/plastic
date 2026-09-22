@@ -89,6 +89,7 @@ def model_summary(store: ArtifactStore, rec: dict[str, Any]) -> dict[str, Any]:
         "has_canary": os.path.exists(store.canary_path(model_id)),
         "parent_model_id": rec.get("parent_model_id"),
         "type": rec.get("type"),
+        "sleep": rec.get("sleep"),
     }
 
 
