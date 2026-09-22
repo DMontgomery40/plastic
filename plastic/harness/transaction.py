@@ -110,7 +110,16 @@ class TransactionRunner:
         return out, signals
 
     def _token_freeze(self, source: str) -> bool:
-        return self.read_only or (source == "model" and not self.hcfg.learn_from_generation)
+        # An explicit session read-only (spent budget / latched alarm / requested freeze) always wins.
+        # Otherwise the backend declares whether this source writes: plastic freezes generation
+        # read-only (writes_for_source("model") is False) unless learn_from_generation; Qwen's
+        # generation writes its recurrent state (writes_for_source True) and is never frozen by
+        # default — those native writes are accounted, not treated as free observations.
+        if self.read_only:
+            return True
+        if self.backend.writes_for_source(source):
+            return False
+        return not self.hcfg.learn_from_generation
 
     def feed_tokens(self, ids: list[int], *, source: Source = "user") -> Tensor | None:
         if self.domain != "text":
@@ -335,6 +344,14 @@ class TransactionRunner:
             "requested": decision.to_dict(),
             "signals": sig.to_dict(),  # PROPOSED: measured on the provisional state before the decision
             "accepted": accepted,      # ACCEPTED: measured on the committed state after the decision
+            # source and eligibility are recorded independently of the decision kind, so a chat turn's
+            # prompt (a user/eligible write) and its generation (Qwen: native model writes) can be
+            # reported and calibrated separately rather than pooled into one intervention rate.
+            "sources": {
+                "user": self.pending_sources.count("user"),
+                "model": self.pending_sources.count("model"),
+            },
+            "eligible": self.pending_eligible,
             "read_only": self.read_only,
             "read_only_reason": self.read_only_reason,
             "seconds": time.time() - t0,

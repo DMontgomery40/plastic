@@ -317,6 +317,44 @@ def test_generated_tokens_do_not_write_by_default():
     assert any(float(l.S.abs().sum()) > 0 for l in r2.committed.layers)
 
 
+def test_native_generation_writes_are_accounted_and_source_recorded():
+    # A backend whose generation writes (Qwen) does NOT freeze model-source tokens by default: they
+    # are eligible native writes, accounted and recorded with their source, unlike plastic's frozen
+    # read-only generation. Explicit read-only still takes precedence over the backend's declaration.
+    class _GenWrites:
+        def __init__(self, inner):
+            self._inner = inner
+
+        def writes_for_source(self, source):
+            return True  # both user and generation write (Qwen semantics)
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+    cfg, lm = _lm()
+    # plastic default: a model-source chunk is frozen read-only (not eligible), and records its source
+    p = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)
+    p.feed_tokens(_ids(8), source="model")
+    prec = p.transactions[0]
+    assert prec["eligible"] is False and prec["decision"]["kind"] == "readonly"
+    assert prec["sources"] == {"user": 0, "model": 8}
+    assert all(torch.equal(l.S, torch.zeros_like(l.S)) for l in p.committed.layers)  # nothing written
+
+    # generation-writes backend: the same model chunk is eligible and actually writes
+    q = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)
+    q.backend = _GenWrites(q.backend)
+    q.feed_tokens(_ids(8), source="model")
+    qrec = q.transactions[0]
+    assert qrec["eligible"] is True and qrec["decision"]["kind"] != "readonly"
+    assert qrec["sources"] == {"user": 0, "model": 8}
+    assert any(float(l.S.abs().sum()) > 0 for l in q.committed.layers)  # generation wrote
+
+    # explicit read-only still takes precedence over the generation-writes declaration
+    q.read_only = True
+    q.feed_tokens(_ids(8, seed=1), source="model")
+    assert q.transactions[-1]["eligible"] is False and q.transactions[-1]["decision"]["kind"] == "readonly"
+
+
 def test_streaming_partition_invariance_and_persistence():
     cfg, lm = _lm()
     ids = _ids(16)
