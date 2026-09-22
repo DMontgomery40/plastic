@@ -1,7 +1,7 @@
 // Formatting helpers. Every number that reaches the screen goes through one of
 // these, so a null or a NaN from the API renders as a dash instead of "NaN".
 
-import type { DecisionKind } from '../api/types';
+import type { CalibrationStatus, DecisionKind } from '../api/types';
 
 /**
  * The single token for "there is no value here". Never render a missing metric
@@ -25,6 +25,47 @@ export const NO_VALID_PAYLOADS = 'no valid payloads';
 /** True for a real, finite number. The API can send null or NaN for several signals. */
 export function isNum(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
+}
+
+/**
+ * How a session's calibration status should read, and — crucially — whether it is ACTIVE. Only an
+ * installed calibration gates the session: a rejected artifact (different model / unsigned) or an
+ * absent one must never draw active policy threshold lines or claim active rates. `active` is the
+ * single gate a caller uses to suppress those. A missing status (a loaded summary without the field)
+ * reads as unknown, never as "not calibrated" — the caller distinguishes a failed/loading fetch,
+ * which is not a status at all, by whether the summary itself is present.
+ */
+export interface CalibrationDisplay {
+  active: boolean;
+  label: string;
+  detail: string;
+}
+
+export function calibrationDisplay(status: CalibrationStatus | string | null | undefined): CalibrationDisplay {
+  switch (status) {
+    case 'installed':
+      return { active: true, label: 'Installed', detail: 'Calibrated thresholds are active for this session.' };
+    case 'absent':
+      return {
+        active: false,
+        label: 'Not calibrated',
+        detail: 'No calibration is installed, so the policy falls back to robust z-scores and no thresholds are drawn.',
+      };
+    case 'rejected_signature_mismatch':
+      return {
+        active: false,
+        label: 'Rejected: different model',
+        detail: 'A saved calibration exists but was built for a different checkpoint, so it is not installed on this session.',
+      };
+    case 'rejected_unsigned':
+      return {
+        active: false,
+        label: 'Rejected: unsigned',
+        detail: 'A saved calibration exists but is unsigned, so it is not installed on this session.',
+      };
+    default:
+      return { active: false, label: 'Unknown', detail: 'Calibration status is unavailable for this session.' };
+  }
 }
 
 export function fmt(v: unknown, decimals = 4): string {

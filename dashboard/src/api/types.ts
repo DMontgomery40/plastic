@@ -286,8 +286,17 @@ export interface StateNorms {
   h_norm_total: number;
 }
 
+// The session's ACTUAL calibration state as reported by Session.summary(), distinct from whether the
+// model has a saved calibration artifact: only 'installed' means the thresholds gate this session.
+// A rejected artifact exists but was refused (built for a different checkpoint, or unsigned).
+export type CalibrationStatus =
+  | 'installed'
+  | 'absent'
+  | 'rejected_unsigned'
+  | 'rejected_signature_mismatch';
+
 // TransactionRunner.summary() returns the ten required keys; Session.summary()
-// adds session_id / model_id / domain. Both shapes satisfy this interface.
+// adds session_id / model_id / domain, plus the backend/calibration/signals fields below.
 export interface RunnerSummary {
   pos: number;
   pending: number;
@@ -302,6 +311,12 @@ export interface RunnerSummary {
   session_id?: string;
   model_id?: string;
   domain?: Domain;
+  // Session.summary() (never the bare runner summary) adds these: which backend drives the session,
+  // whether a persisted calibration was actually installed/rejected/absent ON THIS SESSION, and the
+  // decision signals this backend can produce. Optional, so a plain RunnerSummary need not carry them.
+  backend?: string;
+  calibration?: CalibrationStatus;
+  signals_available?: string[];
 }
 
 // -------------------------------------------------------------------- sessions

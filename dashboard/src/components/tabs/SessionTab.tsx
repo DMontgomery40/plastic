@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { useStore } from '../../store';
 import type { TransactionRecord } from '../../api/types';
-import { UNAVAILABLE, fmt, fmtInt, fmtPercent, fmtThreshold, isNum } from '../../utils/formatting';
+import { UNAVAILABLE, calibrationDisplay, fmt, fmtInt, fmtPercent, fmtThreshold, isNum } from '../../utils/formatting';
 import { LineChartPanel, type ReferenceSpec } from '../charts';
 import { DecisionBadge, Empty, KeyValue, Panel, StatTile } from '../panels';
 import { CalibratedRates, ObservedIntervention } from '../panels/RatePanel';
@@ -365,7 +365,11 @@ export function SessionTab() {
   // modelDetail is one shared slot; another tab may have left a different
   // model in it. Nothing from it is drawn until it is this session's model.
   const model = modelDetail?.record.model_id === modelId ? modelDetail : null;
-  const thresholds = model?.calibration?.thresholds ?? null;
+  // Gate the ACTIVE calibration display on the session's own installed state, not the model's saved
+  // artifact: a rejected (different model / unsigned) or absent calibration must not draw active
+  // policy threshold lines or claim active rates, even though the model still holds a saved artifact.
+  const calState = calibrationDisplay(sessionDetail?.summary?.calibration);
+  const thresholds = calState.active ? (model?.calibration?.thresholds ?? null) : null;
   const transactions = sessionDetail?.transactions ?? [];
 
   const signalRows = useMemo(
@@ -430,6 +434,21 @@ export function SessionTab() {
           tone={summary.read_only ? 'rollback' : 'commit'}
           hint={summary.read_only_reason ?? 'writes permitted (a write can still be rolled back)'}
         />
+        <StatTile
+          label="Backend"
+          value={summary.backend ?? 'plastic'}
+          hint={
+            summary.signals_available && summary.signals_available.length > 0
+              ? `decision signals: ${summary.signals_available.join(', ')}`
+              : 'the fast-memory backend driving this session'
+          }
+        />
+        <StatTile
+          label="Calibration"
+          value={calState.label}
+          tone={calState.active ? 'commit' : calState.label.startsWith('Rejected') ? 'rollback' : 'default'}
+          hint={calState.detail}
+        />
       </div>
 
       <Panel
@@ -471,8 +490,8 @@ export function SessionTab() {
           title="Signals over the session"
           subtitle={
             thresholds
-              ? 'Dashed lines are the calibrated thresholds for this model.'
-              : 'No calibration on this model, so the policy falls back to robust z-scores and no thresholds are drawn.'
+              ? 'Dashed lines are the calibrated thresholds installed on this session.'
+              : `${calState.detail} The policy falls back to robust z-scores.`
           }
         >
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -529,7 +548,7 @@ export function SessionTab() {
         subtitle="Three distinct quantities. None of them is evidence for another."
       >
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <CalibratedRates calibration={model?.calibration ?? null} />
+          <CalibratedRates calibration={calState.active ? (model?.calibration ?? null) : null} />
           <ObservedIntervention
             counts={{
               n_transactions: transactions.length,
