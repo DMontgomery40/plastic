@@ -197,6 +197,9 @@ class QwenBackend:
                 layer.has_previous_state[0] = True
         return QwenState(cache)
 
+    def position(self, state: QwenState) -> int:
+        return state.position
+
     def clone(self, state: QwenState) -> QwenState:
         """Concurrency-safe snapshot: the cache deep copy runs under the backend lock (with an MPS
         sync), so it never races a forward on the shared device. The harness clones through here;

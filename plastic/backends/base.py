@@ -47,6 +47,12 @@ class Backend(Protocol):
         ``score_suite`` and ``canary_gradient`` are defined on the FIRST chunk, before any update."""
         ...
 
+    def position(self, state: State) -> int:
+        """The cursor (number of absorbed tokens/steps) — the runner's ``pos``. Plastic exposes it as
+        ``state.pos``, Qwen as ``state.position``; the abstraction names it here so the runner never
+        reads a backend-specific field."""
+        ...
+
     def clone(self, state: State) -> State:
         ...
 

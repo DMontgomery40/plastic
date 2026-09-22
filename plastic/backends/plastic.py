@@ -44,6 +44,9 @@ class PlasticBackend:
     def clone(self, state: SessionState) -> SessionState:
         return state.clone()
 
+    def position(self, state: SessionState) -> int:
+        return int(state.pos)
+
     def state_delta(self, a: SessionState, b: SessionState) -> list[Tensor]:
         return a.s_delta(b)
 

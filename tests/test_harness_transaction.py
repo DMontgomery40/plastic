@@ -465,7 +465,7 @@ def test_nonfinite_in_any_carried_field_is_refused():
         r.feed_tokens(_ids(5, seed=1))
         rec = r.transactions[-1]
         assert rec["decision"]["kind"] == "rollback" and any("nonfinite" in x for x in rec["decision"]["reasons"]), field_name
-        assert TransactionRunner._finite(r.committed), field_name
+        assert r.backend.is_finite(r.committed), field_name
 
 
 def test_chunk_cap_refusal_does_not_exhaust_a_large_session_budget():

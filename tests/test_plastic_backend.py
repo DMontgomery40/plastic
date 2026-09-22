@@ -78,3 +78,10 @@ def test_canary_and_projection_delegate():
     deltas = [torch.ones_like(l.S) for l in committed.layers]
     be.apply_projected(working, committed, deltas)
     assert all(torch.allclose(w.S, c.S + d) for w, c, d in zip(working.layers, committed.layers, deltas))
+    # apply_projected is an absolute overwrite from committed, not an accumulation onto working:
+    # a second apply with a rescaled delta must land committed.S + delta2, never committed.S +
+    # delta1 + delta2. This is what makes the runner's projection budget-recheck (two applies of a
+    # growing scale_p * projected) safe from double-scaling.
+    deltas2 = [3.0 * torch.ones_like(l.S) for l in committed.layers]
+    be.apply_projected(working, committed, deltas2)
+    assert all(torch.allclose(w.S, c.S + d) for w, c, d in zip(working.layers, committed.layers, deltas2))
