@@ -174,7 +174,11 @@ export function SessionsTab() {
               {sessions.map((s) => (
                 <tr
                   key={s.session_id}
-                  className={`border-b border-edge ${s.session_id === currentSessionId ? 'bg-accent-soft' : 'hover:bg-surface-overlay'}`}
+                  className={`border-b border-edge ${
+                    s.session_id === currentSessionId
+                      ? 'border-l-2 border-l-accent bg-accent-soft'
+                      : 'border-l-2 border-l-transparent hover:bg-surface-overlay'
+                  }`}
                 >
                   <td className="px-2 py-1.5">
                     <button

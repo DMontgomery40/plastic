@@ -34,7 +34,10 @@ export default {
         accent: {
           DEFAULT: '#58a6ff', // interactive: links, selection, focus
           hover: '#79b8ff',
-          soft: '#1d3352', // selected-row wash (a solid color, not an alpha)
+          // Selected-row wash. Solid, and dark enough that text keeps its
+          // contrast against the COMPOSITED background: accent 7.1:1,
+          // ink-secondary 10.2:1, ink-primary 16.7:1, status-commit 9.1:1.
+          soft: '#0c1726',
         },
         status: {
           commit: '#3fd17a',

@@ -191,7 +191,10 @@ export function SessionTab() {
     if (modelId && modelDetail?.record.model_id !== modelId) void loadModel(modelId);
   }, [modelId, modelDetail?.record.model_id, loadModel]);
 
-  const thresholds = modelDetail?.calibration?.thresholds ?? null;
+  // modelDetail is one shared slot; another tab may have left a different
+  // model in it. Nothing from it is drawn until it is this session's model.
+  const model = modelDetail?.record.model_id === modelId ? modelDetail : null;
+  const thresholds = model?.calibration?.thresholds ?? null;
   const transactions = sessionDetail?.transactions ?? [];
 
   const signalRows = useMemo(
@@ -236,7 +239,7 @@ export function SessionTab() {
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <StatTile label="Position" value={fmtInt(summary.pos)} hint={`${fmtInt(summary.pending)} tokens pending`} />
-        <StatTile label="Transactions" value={fmtInt(summary.n_transactions)} hint={`chunk size ${fmtInt(modelDetail?.config.chunk)}`} />
+        <StatTile label="Transactions" value={fmtInt(summary.n_transactions)} hint={`chunk size ${fmtInt(model?.config.chunk)}`} />
         <StatTile label="Commits" value={fmtInt(counts.commit ?? 0)} tone="commit" hint="of the last 100 chunks" />
         <StatTile label="Rollbacks" value={fmtInt(counts.rollback ?? 0)} tone="rollback" hint="of the last 100 chunks" />
         <StatTile label="Drift from anchor" value={fmt(summary.drift_from_anchor, 3)} hint="‖S − S_anchor‖" />
@@ -336,7 +339,7 @@ export function SessionTab() {
           </div>
         </Panel>
 
-        <BetaHistogramPanel hist={modelDetail?.eval?.beta_hist ?? null} modelId={modelId} />
+        <BetaHistogramPanel hist={model?.eval?.beta_hist ?? null} modelId={modelId} />
       </div>
 
       <LayerStatePanel state={sessionState} loading={stateLoading} />

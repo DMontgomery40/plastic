@@ -89,7 +89,8 @@ export interface PlasticState {
   refreshModels: () => Promise<void>;
   refreshSessions: () => Promise<void>;
   refreshDataDirs: () => Promise<void>;
-  refreshJobs: () => Promise<void>;
+  /** `quiet` is for the 2 s poll loop: it must not clear or set the foreground error. */
+  refreshJobs: (quiet?: boolean) => Promise<void>;
   refreshRedteam: () => Promise<void>;
   bootstrap: () => Promise<void>;
 
@@ -159,13 +160,17 @@ export function describeError(err: unknown): string {
 }
 
 export const useStore = create<PlasticState>()((set, get) => {
-  /** Run a request with its loading flag set, recording any failure in `error`. */
-  const withLoading = async <T,>(key: LoadingKey, run: () => Promise<T>): Promise<T | null> => {
-    set((s) => ({ loading: { ...s.loading, [key]: true }, error: null }));
+  /**
+   * Run a request with its loading flag set, recording any failure in `error`.
+   * A `quiet` request leaves `error` untouched: the job poll runs every 2 s and
+   * would otherwise wipe the message from the action the user just took.
+   */
+  const withLoading = async <T,>(key: LoadingKey, run: () => Promise<T>, quiet = false): Promise<T | null> => {
+    set((s) => ({ loading: { ...s.loading, [key]: true }, ...(quiet ? {} : { error: null }) }));
     try {
       return await run();
     } catch (err) {
-      set({ error: describeError(err) });
+      if (!quiet) set({ error: describeError(err) });
       return null;
     } finally {
       set((s) => ({ loading: { ...s.loading, [key]: false } }));
@@ -216,8 +221,8 @@ export const useStore = create<PlasticState>()((set, get) => {
       if (dataDirs) set({ dataDirs });
     },
 
-    refreshJobs: async () => {
-      const jobs = await withLoading('jobs', api.getTrainJobs);
+    refreshJobs: async (quiet = false) => {
+      const jobs = await withLoading('jobs', api.getTrainJobs, quiet);
       if (!jobs) return;
       set({ jobs });
       const statuses = await Promise.all(
@@ -387,7 +392,7 @@ export function startJobPolling(): void {
       stopJobPolling();
       return;
     }
-    void refreshJobs();
+    void refreshJobs(true);
   }, POLL_MS);
 }
 

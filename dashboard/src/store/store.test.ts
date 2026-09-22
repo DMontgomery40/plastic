@@ -413,6 +413,29 @@ describe('training jobs', () => {
     expect(useStore.getState().trainStatus.lm_2).toBeUndefined();
   });
 
+  it('leaves a foreground error alone while polling', async () => {
+    mockRoutes(FULL_ROUTES, { '/api/models': 500 });
+    await useStore.getState().refreshModels();
+    const message = useStore.getState().error;
+    expect(message).not.toBeNull();
+
+    // the poll loop runs every 2 s and must not wipe what the user is reading
+    mockRoutes({ ...FULL_ROUTES, '/api/train/jobs': [RUNNING_JOB], '/api/train/lm_2': { model_id: 'lm_2', status: 'running', latest: null, eval: null } });
+    await useStore.getState().refreshJobs(true);
+    expect(useStore.getState().error).toBe(message);
+
+    await useStore.getState().refreshJobs();
+    expect(useStore.getState().error).toBeNull();
+  });
+
+  it('does not report its own failure when polling quietly', async () => {
+    mockRoutes(FULL_ROUTES, { '/api/train/jobs': 500 });
+    await useStore.getState().refreshJobs(true);
+    expect(useStore.getState().error).toBeNull();
+    await useStore.getState().refreshJobs();
+    expect(useStore.getState().error).toContain('HTTP 500');
+  });
+
   it('detects a running job', () => {
     expect(hasRunningJob([])).toBe(false);
     expect(hasRunningJob([{ ...RUNNING_JOB, status: 'finished', exit_code: 0 }])).toBe(false);

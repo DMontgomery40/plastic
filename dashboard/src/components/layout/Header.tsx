@@ -38,6 +38,7 @@ export function Header() {
     value: s.session_id,
     label: `${s.session_id} · ${s.domain} · pos ${s.pos}`,
   }));
+  const active = currentSessionId !== null && options.some((o) => o.value === currentSessionId) ? currentSessionId : null;
 
   const online = health?.ok === true;
   const statusColor = online ? '#3fd17a' : '#ff6b6b';
@@ -72,11 +73,14 @@ export function Header() {
             Session
           </label>
           {options.length > 0 ? (
+            // When the active session is not in the filtered list the picker
+            // must not name a different one: it shows an explicit placeholder
+            // instead, so the header never claims a session the tabs are not on.
             <Select
               id="session-picker"
-              value={currentSessionId && options.some((o) => o.value === currentSessionId) ? currentSessionId : options[0].value}
+              value={active ?? ''}
               onChange={setCurrentSession}
-              options={options}
+              options={active ? options : [{ value: '', label: `Select a ${wanted ?? ''} session`.replace('  ', ' ') }, ...options]}
             />
           ) : (
             <span className="text-xs text-ink-secondary">

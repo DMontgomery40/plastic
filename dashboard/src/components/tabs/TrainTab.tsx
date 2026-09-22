@@ -68,10 +68,13 @@ export function TrainTab() {
 
   const set = <K extends keyof TrainRequest>(key: K, value: TrainRequest[K]) => setForm((f) => ({ ...f, [key]: value }));
 
-  const lossRows = (modelDetail?.log ?? [])
+  // Never draw one model's log or calibration under another model's heading.
+  const detail = modelDetail?.record.model_id === selectedId ? modelDetail : null;
+
+  const lossRows = (detail?.log ?? [])
     .filter((r) => r.event !== 'eval' && isNum(r.loss))
     .map((r) => ({ step: r.step, loss: r.loss as number, grad_norm: isNum(r.grad_norm) ? r.grad_norm : Number.NaN }));
-  const evalRows = (modelDetail?.log ?? [])
+  const evalRows = (detail?.log ?? [])
     .filter((r) => r.event === 'eval' && isNum(r.heldout_loss))
     .map((r) => ({ step: r.step, heldout_loss: r.heldout_loss as number, memory_value: isNum(r.memory_value) ? r.memory_value : Number.NaN }));
 
@@ -118,7 +121,11 @@ export function TrainTab() {
               return (
                 <tr
                   key={m.model_id}
-                  className={`border-b border-edge ${m.model_id === selectedId ? 'bg-accent-soft' : 'hover:bg-surface-overlay'}`}
+                  className={`border-b border-edge ${
+                    m.model_id === selectedId
+                      ? 'border-l-2 border-l-accent bg-accent-soft'
+                      : 'border-l-2 border-l-transparent hover:bg-surface-overlay'
+                  }`}
                 >
                   <td className="px-2 py-1.5">
                     <button type="button" onClick={() => setSelected(m.model_id)} className="font-mono text-sm text-accent hover:text-accent-hover">
@@ -207,15 +214,15 @@ export function TrainTab() {
           ) : null}
 
           <Panel title="Calibration" subtitle="Empirical thresholds at the target false-positive rate, plus the Fisher diagonal and the canary baselines.">
-            {!modelDetail ? (
+            {!detail ? (
               <p className="text-sm text-ink-secondary">Select a model to see its calibration.</p>
-            ) : modelDetail.calibration === null ? (
+            ) : detail.calibration === null ? (
               <Empty
-                title={`${modelDetail.record.model_id} is not calibrated.`}
+                title={`${detail.record.model_id} is not calibrated.`}
                 detail="Without it the harness falls back to robust z-scores over the session's own history and draws no thresholds."
-                command={`uv run plastic calibrate ${modelDetail.record.model_id} --data artifacts/data/wikitext`}
+                command={`uv run plastic calibrate ${detail.record.model_id} --data artifacts/data/wikitext`}
               >
-                <Button disabled={calibrating} onClick={() => void calibrate(modelDetail.record.model_id, {})}>
+                <Button disabled={calibrating} onClick={() => void calibrate(detail.record.model_id, {})}>
                   {calibrating ? 'Calibrating…' : 'Calibrate now'}
                 </Button>
               </Empty>
@@ -224,7 +231,7 @@ export function TrainTab() {
                 <div>
                   <p className="mb-2 text-label font-semibold uppercase tracking-wide text-ink-muted">Thresholds</p>
                   <KeyValue
-                    rows={Object.entries(modelDetail.calibration.thresholds).map(([signal, value]) => ({
+                    rows={Object.entries(detail.calibration.thresholds).map(([signal, value]) => ({
                       label: signal,
                       value: fmt(value, 4),
                     }))}
@@ -234,16 +241,16 @@ export function TrainTab() {
                   <p className="mb-2 text-label font-semibold uppercase tracking-wide text-ink-muted">Reference</p>
                   <KeyValue
                     rows={[
-                      { label: 'Chunks observed', value: fmtInt(modelDetail.calibration.n_chunks) },
-                      { label: 'Target FPR', value: fmtPercent(modelDetail.calibration.target_fpr, 2) },
-                      { label: 'Calibrated', value: fmtRelative(modelDetail.calibration.created_at_unix) },
-                      ...Object.entries(modelDetail.calibration.canary_baseline).map(([k, v]) => ({
+                      { label: 'Chunks observed', value: fmtInt(detail.calibration.n_chunks) },
+                      { label: 'Target FPR', value: fmtPercent(detail.calibration.target_fpr, 2) },
+                      { label: 'Calibrated', value: fmtRelative(detail.calibration.created_at_unix) },
+                      ...Object.entries(detail.calibration.canary_baseline).map(([k, v]) => ({
                         label: `canary ${k}`,
                         value: fmt(v, 4),
                       })),
                       {
                         label: 'Canary probes',
-                        value: modelDetail.canary ? `${modelDetail.canary.n_coherence} coherence, ${modelDetail.canary.n_poison} poison` : '—',
+                        value: detail.canary ? `${detail.canary.n_coherence} coherence, ${detail.canary.n_poison} poison` : '—',
                       },
                     ]}
                   />
