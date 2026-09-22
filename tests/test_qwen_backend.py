@@ -57,7 +57,7 @@ def test_native_logit_parity_and_snapshot(backend):
     assert torch.equal(la, lb) and st2.position == n
 
 
-def test_freeze_leaves_memory_unchanged_but_advances_position(backend):
+def test_freeze_is_a_genuine_no_write(backend):
     import plastic.backends.qwen as q
 
     ids = backend.encode("A short sentence for the freeze check here, long enough to span two chunks cleanly.")
@@ -66,8 +66,35 @@ def test_freeze_leaves_memory_unchanged_but_advances_position(backend):
     st = backend.init_state()
     _, st = backend.process(ids[:k], st)
     pre = q._recurrent_snapshot(st.cache)
+    conv_pre = [{i: c.clone() for i, c in getattr(l, "conv_states", {}).items()} for l in st.cache.layers]
     _, st = backend.process(ids[k:], st, freeze=True)
     post = q._recurrent_snapshot(st.cache)
-    changed = max((pre[l][i] - post[l][i]).abs().max().item() for l in range(len(pre)) for i in pre[l])
-    assert changed == 0.0  # no write under freeze
-    assert st.position == n  # activation/position still advanced
+    # recurrent memory is exactly unchanged (a real freeze, not a snapshot-restore of the final tensor)
+    assert max((pre[l][i] - post[l][i]).abs().max().item() for l in range(len(pre)) for i in pre[l]) == 0.0
+    # conv/attention/position still advance (activation progresses)
+    conv_change = max(
+        (conv_pre[l][i] - c).abs().max().item()
+        for l, layer in enumerate(st.cache.layers)
+        for i, c in getattr(layer, "conv_states", {}).items()
+    )
+    assert conv_change > 0.0 and st.position == n
+
+
+def test_freeze_on_empty_cache_writes_nothing(backend):
+    # regression for the snapshot-restore bug: with no prior cache there is nothing to restore,
+    # so a genuine freeze must still produce a zero recurrent state (not a 13.7-magnitude write).
+    ids = backend.encode("Freeze from an empty state must not write.")
+    st = backend.init_state()
+    _, st = backend.process(ids[:6], st, freeze=True)
+    recmax = max(s.abs().max().item() for l in st.cache.layers for s in getattr(l, "recurrent_states", {}).values())
+    assert recmax == 0.0
+
+
+def test_frozen_recurrent_grad_is_finite(backend):
+    ids = backend.encode("The frozen canary gradient must reach every recurrent leaf.")
+    n = len(ids)
+    k = max(1, n // 2)
+    st = backend.init_state()
+    _, st = backend.process(ids[:k], st)
+    grads = backend.recurrent_grad(st, ids[k : k + 3], ids[k + 1 : k + 4])
+    assert grads and all(torch.isfinite(g).all() and g.norm() > 0 for g in grads)
