@@ -308,11 +308,13 @@ def test_load_state_dict_rejects_incompatible_and_malformed(backend):
     with pytest.raises(ValueError, match="non-finite"):
         backend.load_state_dict(m)
 
-    m = fresh()  # a warm state with KV stripped masquerading as position-zero (nonzero recurrent)
+    m = fresh()  # a warm state with all K/V stripped and marked uninitialized -> masquerades as
+    # position-zero, but its recurrent memory is non-zero
     for layer in m["cache"].layers:
-        if getattr(layer, "keys", None) is not None:
+        if getattr(layer, "recurrent_states", None) is None:  # attention layers
             layer.keys = None
             layer.values = None
+            layer.is_initialized = False
     with pytest.raises(ValueError, match="position-zero"):
         backend.load_state_dict(m)
 
@@ -330,17 +332,24 @@ def test_load_state_dict_rejects_incompatible_and_malformed(backend):
     with pytest.raises(ValueError, match="is_initialized"):
         backend.load_state_dict(m)
 
-    m = fresh()  # a sliced attention key head-count (would crash the next forward)
+    m = fresh()  # a reduced attention head count (would crash the next forward)
     d = first_dynamic(m["cache"])
     d.keys = d.keys[:, :1]
-    with pytest.raises(ValueError, match="heads/feature/dtype"):
+    d.values = d.values[:, :1]
+    with pytest.raises(ValueError, match="heads/feature"):
         backend.load_state_dict(m)
 
-    m = fresh()  # K/V removed from ONE attention layer (others keep it) -> not all-or-none
+    m = fresh()  # K sliced but V not -> K/V shape mismatch
+    d = first_dynamic(m["cache"])
+    d.keys = d.keys[:, :1]
+    with pytest.raises(ValueError, match="K/V shape mismatch"):
+        backend.load_state_dict(m)
+
+    m = fresh()  # K/V removed from ONE attention layer but still flagged initialized -> inconsistent
     d = first_dynamic(m["cache"])
     d.keys = None
     d.values = None
-    with pytest.raises(ValueError, match="all or none"):
+    with pytest.raises(ValueError, match="is_initialized"):
         backend.load_state_dict(m)
 
     m = fresh()  # conv cast to a dtype the backend does not use
@@ -348,6 +357,80 @@ def test_load_state_dict_rejects_incompatible_and_malformed(backend):
     l.conv_states[0] = l.conv_states[0].to(torch.bfloat16)
     with pytest.raises(ValueError, match="conv shape/dtype"):
         backend.load_state_dict(m)
+
+
+def test_persistence_validation_matrix(backend):
+    # ASTRA-071: a widened invariant matrix over representative first/last layers of each kind and
+    # fresh/warm states. Every malformation in the validation contract rejects; the valid warm state
+    # still loads with an EXACT continuation and the fresh state loads and forwards.
+    ids = backend.encode("A warm state spanning enough tokens for the persistence invariant matrix here today.")
+    warm = backend.init_state()
+    _, warm = backend.process(ids[:8], warm)
+    fresh = backend.init_state()
+
+    ref_sd = backend.state_dict(warm)
+    linear_idx = [i for i, l in enumerate(ref_sd["cache"].layers) if getattr(l, "recurrent_states", None) is not None]
+    attn_idx = [i for i, l in enumerate(ref_sd["cache"].layers) if getattr(l, "recurrent_states", None) is None]
+    linear_reps = [linear_idx[0], linear_idx[-1]]
+    attn_reps = [attn_idx[0], attn_idx[-1]]
+
+    # valid states: warm continuation is byte-exact after a reload; fresh loads and forwards
+    exact_ref, _ = backend.process(ids[8:11], backend.clone(warm))
+    exact_got, _ = backend.process(ids[8:11], backend.load_state_dict(backend.state_dict(warm)))
+    assert (exact_ref - exact_got).abs().max().item() == 0.0
+    f_back = backend.load_state_dict(backend.state_dict(fresh))
+    assert f_back.position == 0 and all(int(torch.count_nonzero(t)) == 0 for t in f_back.recurrent_leaves())
+    y, _ = backend.process(ids[:4], f_back)
+    assert torch.isfinite(y).all()
+
+    linear_muts = {
+        "recurrent_none": lambda l: l.recurrent_states.__setitem__(0, None),
+        "recurrent_shape": lambda l: l.recurrent_states.__setitem__(0, l.recurrent_states[0].reshape(1, -1)),
+        "conv_none": lambda l: l.conv_states.__setitem__(0, None),
+        "conv_dtype": lambda l: l.conv_states.__setitem__(0, l.conv_states[0].to(torch.bfloat16)),
+        "clear_has_previous": lambda l: l.has_previous_state.__setitem__(0, False),
+        "clear_conv_init": lambda l: l.is_conv_states_initialized.__setitem__(0, False),
+        "clear_rec_init": lambda l: l.is_recurrent_states_initialized.__setitem__(0, False),
+    }
+    attn_muts = {
+        "clear_is_initialized": lambda l: setattr(l, "is_initialized", False),
+        "kv_head_sliced": lambda l: setattr(l, "keys", l.keys[:, :1]),
+        "kv_batch2": lambda l: (setattr(l, "keys", l.keys.repeat(2, 1, 1, 1)), setattr(l, "values", l.values.repeat(2, 1, 1, 1))),
+        "kv_rank5": lambda l: (setattr(l, "keys", l.keys.unsqueeze(0)), setattr(l, "values", l.values.unsqueeze(0))),
+        "v_bf16": lambda l: setattr(l, "values", l.values.to(torch.bfloat16)),
+        "k_bf16": lambda l: setattr(l, "keys", l.keys.to(torch.bfloat16)),
+    }
+
+    for name, fn in linear_muts.items():
+        for idx in linear_reps:
+            sd = backend.state_dict(warm)
+            fn(sd["cache"].layers[idx])
+            with pytest.raises(ValueError):
+                backend.load_state_dict(sd)
+    for name, fn in attn_muts.items():
+        for idx in attn_reps:
+            sd = backend.state_dict(warm)
+            fn(sd["cache"].layers[idx])
+            with pytest.raises(ValueError):
+                backend.load_state_dict(sd)
+
+    # one warm attention layer stripped to look fresh (K/V absent AND is_initialized cleared) while the
+    # others stay warm -> the all-or-none K/V rule rejects it
+    for idx in attn_reps:
+        sd = backend.state_dict(warm)
+        layer = sd["cache"].layers[idx]
+        layer.keys = None
+        layer.values = None
+        layer.is_initialized = False
+        with pytest.raises(ValueError, match="all or none"):
+            backend.load_state_dict(sd)
+
+    # a FRESH attention layer marked initialized but with no K/V (would crash get_seq_length on load)
+    for idx in attn_reps:
+        sd = backend.state_dict(fresh)
+        sd["cache"].layers[idx].is_initialized = True
+        with pytest.raises(ValueError, match="is_initialized"):
+            backend.load_state_dict(sd)
 
 
 def test_position_zero_state_persists_and_loads(backend):

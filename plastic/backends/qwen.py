@@ -387,9 +387,13 @@ class QwenBackend:
                     raise ValueError(f"layer {idx}: missing conv state")
                 if tuple(cs[0].shape) != spec[3] or cs[0].dtype != spec[4]:
                     raise ValueError(f"layer {idx}: conv shape/dtype {tuple(cs[0].shape)}/{cs[0].dtype} != expected {spec[3]}/{spec[4]}")
-                hp = getattr(layer, "has_previous_state", None)
-                if not hp or not hp.get(0):
-                    raise ValueError(f"layer {idx}: linear layer not initialized (has_previous_state)")
+                # every native initialization flag must be set — clearing is_conv_states_initialized or
+                # is_recurrent_states_initialized (not just has_previous_state) makes the next update
+                # reinitialize that buffer and diverge (ASTRA-071)
+                for flag in ("has_previous_state", "is_conv_states_initialized", "is_recurrent_states_initialized"):
+                    fd = getattr(layer, flag, None)
+                    if not fd or not fd.get(0):
+                        raise ValueError(f"layer {idx}: linear initialization flag {flag} is not set")
             else:  # dynamic (full-attention) layer
                 n_dynamic += 1
                 if getattr(layer, "recurrent_states", None) is not None:
@@ -397,14 +401,24 @@ class QwenBackend:
                 k, v = getattr(layer, "keys", None), getattr(layer, "values", None)
                 if (k is None) != (v is None):
                     raise ValueError(f"layer {idx}: inconsistent attention K/V (one present, one absent)")
+                # is_initialized must agree with K/V presence in BOTH directions: a warm layer has both,
+                # a fresh layer has neither. is_initialized=True with absent K/V crashes get_seq_length
+                # (keys.numel on None); is_initialized=False with populated K/V changes the forward.
+                init = bool(getattr(layer, "is_initialized", False))
+                if init != (k is not None):
+                    raise ValueError(f"layer {idx}: is_initialized ({init}) inconsistent with K/V presence ({k is not None})")
                 if k is not None:
                     n_dynamic_with_kv += 1
-                    if not getattr(layer, "is_initialized", False):
-                        raise ValueError(f"layer {idx}: attention layer has K/V but is_initialized is False")
-                    if int(k.shape[1]) != kv_heads or int(k.shape[-1]) != kv_feat or k.dtype != kv_dtype:
-                        raise ValueError(f"layer {idx}: K/V heads/feature/dtype {tuple(k.shape)}/{k.dtype} != expected heads={kv_heads} feat={kv_feat} {kv_dtype}")
+                    if k.dim() != 4 or v.dim() != 4:  # check rank BEFORE indexing dims
+                        raise ValueError(f"layer {idx}: attention K/V rank {k.dim()}/{v.dim()} != 4")
                     if tuple(v.shape) != tuple(k.shape):
                         raise ValueError(f"layer {idx}: K/V shape mismatch {tuple(k.shape)} != {tuple(v.shape)}")
+                    if int(k.shape[0]) != 1:
+                        raise ValueError(f"layer {idx}: attention K/V batch {int(k.shape[0])} != 1")
+                    if int(k.shape[1]) != kv_heads or int(k.shape[-1]) != kv_feat:
+                        raise ValueError(f"layer {idx}: K/V heads/feature {tuple(k.shape)} != expected heads={kv_heads} feat={kv_feat}")
+                    if k.dtype != kv_dtype or v.dtype != kv_dtype:
+                        raise ValueError(f"layer {idx}: K/V dtype {k.dtype}/{v.dtype} != expected {kv_dtype}")
                     kv_lengths.append(int(k.shape[-2]))
         # K/V must be present in every attention layer (a warm state) or none (position-zero)
         if n_dynamic_with_kv not in (0, n_dynamic):
