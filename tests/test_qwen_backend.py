@@ -645,6 +645,12 @@ def test_qwen_session_chat_end_to_end(tmp_path):
     assert isinstance(res2.completion, str) and "<|im_end|>" not in res2.completion
     assert sess2.runner.pos == pos_after + res2.n_tokens_in + res2.n_tokens_out + close_len
 
+    # zero-generation turn (output cap 0): the assistant turn is still closed exactly once
+    pos_before_zero = sess2.runner.pos
+    res3 = sess2.chat("Ok", max_new_tokens=0, seed=2)
+    assert res3.n_tokens_out == 0
+    assert sess2.runner.pos == pos_before_zero + res3.n_tokens_in + close_len
+
 
 def test_encode_chat_returns_integer_ids(backend):
     # apply_chat_template defaults to a dict in tf 5.17; encode_chat must return native integer ids

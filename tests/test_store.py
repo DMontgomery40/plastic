@@ -70,6 +70,31 @@ def test_fork_metadata_uses_backend_independent_cursor(tmp_path):
     assert cmeta["pos"] == 24 and cmeta["forked_at_pos"] == 24  # lineage cursor preserved, not 0/0
 
 
+def test_fork_cursor_fresh_warm_and_pending(tmp_path):
+    # ASTRA-076: a fork reports the parent's COMMITTED cursor in both metadata fields and drops
+    # pending working tokens — across fresh, warm, and warm-with-pending parents (a Qwen-shaped state
+    # whose committed cursor is exposed backend-independently, not inside committed).
+    from plastic.harness.config import HarnessConfig
+    from plastic.harness.transaction import fork_state_dict
+
+    store = ArtifactStore(str(tmp_path))
+    mid = store.new_model_id("qwen")
+    store.register_model(mid, {"backend": "qwen", "checkpoint_digest": "d", "domain": "text", "chunk": 8})
+
+    for committed, working in ((0, 0), (8, 8), (8, 11)):  # fresh, warm, warm-with-pending (working>committed)
+        parent_state = {"committed_pos": committed, "working_pos": working, "committed": {"backend": "qwen"}, "working": {"backend": "qwen"}}
+        p = store.new_session_id("chat")
+        store.create_session(p, model_id=mid, domain="text", harness_cfg=HarnessConfig(), runner_state=parent_state)
+        forked = fork_state_dict(parent_state)
+        # the fork starts from committed: both cursors are the committed pos, and pending is dropped
+        assert forked["committed_pos"] == committed and forked["working_pos"] == committed and forked["pending"] == []
+        child = store.new_session_id("chat")
+        store.create_session(child, model_id=mid, domain="text", harness_cfg=HarnessConfig(), parent_session_id=p, runner_state=forked)
+        cmeta = store.load_session_meta(child)
+        assert cmeta["pos"] == committed and cmeta["forked_at_pos"] == committed
+        assert store.load_session_meta(p)["pos"] == committed  # parent metadata unaffected by the fork
+
+
 def test_retried_run_does_not_inherit_stale_error(tmp_path):
     # A failed attempt records an error; a retry at the same model_id must not carry it forward.
     store = ArtifactStore(str(tmp_path))
