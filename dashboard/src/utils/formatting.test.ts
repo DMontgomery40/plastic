@@ -113,12 +113,20 @@ describe('generationLearningCopy', () => {
     expect(ro).toMatch(/no chunk writes/i);
   });
 
-  it('an unknown/loading effective policy is not asserted as read-only or learned', () => {
+  it('an unknown/loading effective policy is not asserted, and never affirms eligibility', () => {
     for (const v of [undefined, null]) {
       const copy = generationLearningCopy(v, false);
       expect(copy).toMatch(/not available yet/i);
       expect(copy).not.toMatch(/not write-eligible/i); // do not claim a policy we do not have
+      expect(copy).not.toMatch(/write-eligible/i); // and do not affirm prompt eligibility either
     }
+  });
+
+  it('a KNOWN read-only latch wins over an unknown capability (ASTRA-104)', () => {
+    // missing capability + read_only=True must honor the latch, not affirm write-eligibility
+    const copy = generationLearningCopy(undefined, true);
+    expect(copy).toMatch(/read-only/i);
+    expect(copy).not.toMatch(/write-eligible/i);
   });
 });
 

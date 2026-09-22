@@ -54,5 +54,13 @@ describe('ChatTab generation-write subtitle', () => {
     seed(undefined);
     render(<ChatTab />);
     expect(screen.getByText(/not available yet/i)).toBeTruthy();
+    expect(screen.queryByText(/write-eligible/i)).toBeNull();
+  });
+
+  it('a known read-only latch wins over an unknown capability (ASTRA-104)', () => {
+    seed(undefined, true);
+    render(<ChatTab />);
+    expect(screen.getByText(/read-only, so no chunk writes/i)).toBeTruthy();
+    expect(screen.queryByText(/write-eligible/i)).toBeNull();
   });
 });

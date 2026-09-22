@@ -278,11 +278,13 @@ export function fmtValidOnlyPercent(v: number | null | undefined, decimals = 0):
  * retained learning. A read-only latch suppresses all writes, so the caller passes that through.
  */
 export function generationLearningCopy(generationWriteEligible: boolean | null | undefined, readOnly: boolean): string {
-  if (generationWriteEligible == null) {
-    return 'Prompt tokens are write-eligible; the effective write policy for generated tokens is not available yet.';
-  }
+  // a KNOWN read-only latch wins over an unknown capability: report the latch, do not affirm any
+  // eligibility while the whole effective policy is unavailable (ASTRA-104)
   if (readOnly) {
     return 'The session is currently read-only, so no chunk writes: every chunk transacts as read-only.';
+  }
+  if (generationWriteEligible == null) {
+    return 'The effective write policy for this session is not available yet.';
   }
   const prompt = 'Prompt tokens are write-eligible';
   if (generationWriteEligible) {
