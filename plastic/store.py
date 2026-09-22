@@ -186,6 +186,13 @@ class ArtifactStore:
         return cfg, model, {"step": int(ckpt.get("step", 0)), "extra": dict(ckpt.get("extra", {}))}
 
     def model_signature(self, model_id: str) -> str:
+        # A pretrained-backend model (Qwen) has no local plastic checkpoint/config to hash; its
+        # signature is its backend and the content digest recorded at registration (the same digest
+        # QwenBackend binds a saved session to), so a session created against one checkpoint is
+        # refused if the registered checkpoint content changes.
+        rec = self._load_index()["models"].get(model_id, {})
+        if rec.get("backend") and rec.get("backend") != "plastic":
+            return f"{rec['backend']}:{rec.get('checkpoint_digest') or rec.get('checkpoint_dir') or model_id}"
         cfg = self.load_config(model_id)
         h = hashlib.sha256()
         h.update(cfg.signature_material().encode("utf-8"))

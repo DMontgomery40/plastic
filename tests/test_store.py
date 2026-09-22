@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from plastic.config import ModelConfig
@@ -21,6 +22,28 @@ def test_register_and_list(tmp_path):
     store.register_model(a, {"status": "completed"})
     assert store.load_model_record(a)["status"] == "completed"
     assert store.load_model_record(a)["created_at_unix"] == 10
+
+
+def test_qwen_model_signature_and_session_lifecycle(tmp_path):
+    # A pretrained-backend (Qwen) model has no local plastic checkpoint; its signature comes from the
+    # registered backend + content digest, and sessions create/verify against it without a checkpoint.
+    from plastic.harness.config import HarnessConfig
+
+    store = ArtifactStore(str(tmp_path))
+    mid = store.new_model_id("qwen")
+    store.register_model(mid, {"backend": "qwen", "checkpoint_dir": "/models/qwen3.5", "checkpoint_digest": "abc123", "domain": "text", "chunk": 8})
+    sig = store.model_signature(mid)
+    assert sig == "qwen:abc123"  # backend + content digest, no plastic checkpoint read
+
+    sid = store.new_session_id("chat")
+    store.create_session(sid, model_id=mid, domain="text", harness_cfg=HarnessConfig())
+    store.verify_session_model(sid)  # signature matches -> no raise
+    assert store.load_session_meta(sid)["model_signature"] == "qwen:abc123"
+
+    # a changed registered checkpoint digest invalidates existing sessions
+    store.register_model(mid, {"backend": "qwen", "checkpoint_digest": "def456"})
+    with pytest.raises(ValueError, match="different signature"):
+        store.verify_session_model(sid)
 
 
 def test_retried_run_does_not_inherit_stale_error(tmp_path):
