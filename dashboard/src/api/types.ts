@@ -266,6 +266,13 @@ export interface TransactionRecord {
   signals: ChunkSignals;
   /** ACCEPTED: measured on the committed state, after the decision. */
   accepted: AcceptedMetrics;
+  // token counts by source in this chunk: `user` = prompt tokens, `model` = generated tokens
+  // (INCLUDING the turn-closure tokens, not only sampled output). The prompt flushes before
+  // generation, so a chunk is all-user or all-model, never mixed.
+  sources?: { user: number; model: number };
+  // whether this chunk was permitted to learn at all. read-only / ineligible is NOT a rollback and
+  // NOT evidence of a damaging update -- it is a chunk the policy did not let write.
+  eligible?: boolean;
   read_only: boolean;
   read_only_reason: string | null;
   seconds: number;

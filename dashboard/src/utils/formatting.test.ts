@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import type { TransactionRecord } from '../api/types';
 
-import { calibrationDisplay, calibrationView } from './formatting';
+import { calibrationDisplay, calibrationView, generationLearningCopy, sourceAccounting } from './formatting';
 
 describe('calibrationDisplay', () => {
   it('marks only an installed calibration active', () => {
@@ -83,5 +84,44 @@ describe('calibrationView', () => {
       // unknown does not establish the active policy, so it must NOT assert the robust-z fallback
       expect(v.signalsSubtitle).not.toMatch(/falls back/i);
     }
+  });
+});
+
+describe('generationLearningCopy', () => {
+  it('does not claim generation is read-only by default; reflects the harness control', () => {
+    const on = generationLearningCopy(true, false);
+    expect(on).toMatch(/generated tokens/i);
+    expect(on).toMatch(/also learned/i);
+    expect(on).toMatch(/closure/i); // closure tokens are part of model-source learning
+    const off = generationLearningCopy(false, false);
+    expect(off).toMatch(/not learned/i);
+    expect(off).toMatch(/learn_from_generation/i);
+    expect(off).not.toMatch(/read-only by default/i);
+  });
+
+  it('a read-only session says neither is being learned', () => {
+    const ro = generationLearningCopy(true, true);
+    expect(ro).toMatch(/read-only/i);
+    expect(ro).toMatch(/neither/i);
+  });
+});
+
+describe('sourceAccounting', () => {
+  it('buckets chunks by source with eligible denominators and interventions', () => {
+    const dec = (kind: TransactionRecord['decision']['kind']) => ({ kind, reasons: [], scale: 1 });
+    const tx = (over: Partial<TransactionRecord>): TransactionRecord => ({
+      index: 0, t_unix: 0, pos_start: 0, pos_end: 8, decision: dec('commit'),
+      requested: dec('commit'), signals: {} as TransactionRecord['signals'],
+      accepted: {} as TransactionRecord['accepted'], read_only: false, read_only_reason: null, seconds: 0,
+      ...over,
+    });
+    const txns = [
+      tx({ sources: { user: 8, model: 0 }, eligible: true, decision: dec('commit') }),   // user, eligible
+      tx({ sources: { user: 0, model: 8 }, eligible: true, decision: dec('rollback') }), // model, eligible, intervention
+      tx({ sources: { user: 0, model: 2 }, eligible: false, decision: dec('readonly') }),// model, NOT eligible, NOT intervention
+    ];
+    const acc = sourceAccounting(txns);
+    expect(acc.user).toEqual({ chunks: 1, eligible: 1, interventions: 0, tokens: 8 });
+    expect(acc.model).toEqual({ chunks: 2, eligible: 1, interventions: 1, tokens: 10 }); // 8 + 2 incl. closure
   });
 });

@@ -1,7 +1,7 @@
 // Formatting helpers. Every number that reaches the screen goes through one of
 // these, so a null or a NaN from the API renders as a dash instead of "NaN".
 
-import type { CalibrationStatus, DecisionKind } from '../api/types';
+import type { CalibrationStatus, DecisionKind, TransactionRecord } from '../api/types';
 
 /**
  * The single token for "there is no value here". Never render a missing metric
@@ -268,4 +268,55 @@ export function fmtValidOnly(v: number | null | undefined, decimals = 4): string
 /** A valid-only fraction, with the same null semantics. */
 export function fmtValidOnlyPercent(v: number | null | undefined, decimals = 0): string {
   return isNum(v) ? fmtPercent(v, decimals) : NO_VALID_PAYLOADS;
+}
+
+/**
+ * How this session treats GENERATED tokens, derived from the harness control rather than a blanket
+ * default: with learn_from_generation the model's own generated chunks are learned (subject to the
+ * read-only latch and budget); without it they are not. A read-only latch or exhausted budget
+ * suppresses learning regardless, so the caller passes those through as the current effective state.
+ */
+export function generationLearningCopy(learnFromGeneration: boolean, readOnly: boolean): string {
+  const prompt = 'Prompt tokens are learned through transactions';
+  if (readOnly) {
+    return `${prompt}; the session is currently read-only, so neither prompt nor generated tokens are being learned.`;
+  }
+  if (learnFromGeneration) {
+    return `${prompt}, and generated tokens (including turn-closure tokens) are also learned in this session.`;
+  }
+  return `${prompt}; generated tokens are not learned in this session (learn_from_generation is off).`;
+}
+
+export interface SourceBucket {
+  chunks: number;
+  eligible: number;
+  interventions: number;
+  tokens: number;
+}
+export interface SourceAccounting {
+  user: SourceBucket;
+  model: SourceBucket;
+}
+
+/**
+ * Per-source chunk accounting for a turn. A chunk is user-source (prompt) or model-source
+ * (generation) -- the prompt flushes before generation so a chunk never mixes the two. Interventions
+ * (rollback / scale / project) and the eligible DENOMINATOR are reported per source: readonly and
+ * ineligible chunks are not interventions, and model-source token counts include turn-closure tokens,
+ * not only sampled output.
+ */
+export function sourceAccounting(transactions: readonly TransactionRecord[]): SourceAccounting {
+  const zero = (): SourceBucket => ({ chunks: 0, eligible: 0, interventions: 0, tokens: 0 });
+  const acc: SourceAccounting = { user: zero(), model: zero() };
+  const intervention: Record<string, boolean> = { rollback: true, scale: true, project: true };
+  for (const tx of transactions) {
+    const s = tx.sources ?? { user: 0, model: 0 };
+    const isModel = (s.model ?? 0) > 0;
+    const bucket = isModel ? acc.model : acc.user;
+    bucket.chunks += 1;
+    bucket.tokens += isModel ? s.model ?? 0 : s.user ?? 0;
+    if (tx.eligible) bucket.eligible += 1;
+    if (intervention[tx.decision.kind]) bucket.interventions += 1;
+  }
+  return acc;
 }

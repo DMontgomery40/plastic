@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useStore } from '../../store';
-import { fmt, fmtInt, fmtRelative } from '../../utils/formatting';
+import { calibrationDisplay, fmt, fmtInt, fmtRelative, generationLearningCopy, sourceAccounting } from '../../utils/formatting';
 import { Button, DecisionBadge, Empty, Field, KeyValue, NumberInput, Panel } from '../panels';
 
 export function ChatTab() {
@@ -52,10 +52,19 @@ export function ChatTab() {
 
   const turns = (sessionDetail?.trace ?? []).filter((t) => t.kind === 'chat').slice().reverse();
 
+  // effective generation-write description from the harness control + read-only latch, not a blanket
+  // "read-only by default" (false for the native backend, which learns from generation when enabled)
+  const harness = sessionDetail?.meta.harness;
+  const summary = sessionDetail?.summary;
+  const promptSubtitle = generationLearningCopy(harness?.learn_from_generation ?? false, summary?.read_only ?? false);
+  const backend = summary?.backend ?? 'plastic';
+  const cal = calibrationDisplay(summary?.calibration);
+  const accounting = chatResult ? sourceAccounting(chatResult.transactions) : null;
+
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
       <div className="space-y-4">
-        <Panel title="Prompt" subtitle="Prompt tokens are learned through transactions; generated tokens are read-only by default.">
+        <Panel title="Prompt" subtitle={promptSubtitle}>
           <label htmlFor="chat-prompt" className="mb-1 block text-label font-semibold uppercase tracking-wide text-ink-muted">
             Prompt text
           </label>
@@ -86,6 +95,28 @@ export function ChatTab() {
             </Panel>
 
             <Panel title="Transactions of this turn" subtitle="Every chunk boundary crossed while the turn was processed.">
+              {accounting ? (
+                <div className="mb-3">
+                  <KeyValue
+                    rows={[
+                      {
+                        label: 'User-source (prompt) chunks',
+                        value: `${fmtInt(accounting.user.chunks)} (${fmtInt(accounting.user.eligible)} eligible)`,
+                        note: `${fmtInt(accounting.user.interventions)} interventions`,
+                      },
+                      {
+                        label: 'Model-source (generation) chunks',
+                        value: `${fmtInt(accounting.model.chunks)} (${fmtInt(accounting.model.eligible)} eligible)`,
+                        note: `${fmtInt(accounting.model.interventions)} interventions · ${fmtInt(accounting.model.tokens)} tokens incl. closure`,
+                      },
+                    ]}
+                  />
+                  <p className="mt-1 text-sm text-ink-secondary">
+                    Intervention rates use the eligible denominator per source. A read-only or ineligible chunk is not an
+                    intervention and not evidence of a damaging update.
+                  </p>
+                </div>
+              ) : null}
               {chatResult.transactions.length === 0 ? (
                 <Empty
                   title="No chunk boundary was crossed."
@@ -104,6 +135,14 @@ export function ChatTab() {
                         <span className="font-mono text-xs text-ink-secondary">
                           pos {tx.pos_start}–{tx.pos_end}
                         </span>
+                        <span className="font-mono text-xs text-ink-secondary">
+                          {(tx.sources?.model ?? 0) > 0
+                            ? `model ${fmtInt(tx.sources?.model)} tok`
+                            : `user ${fmtInt(tx.sources?.user)} tok`}
+                        </span>
+                        {tx.eligible === false ? (
+                          <span className="font-mono text-xs text-ink-muted">ineligible</span>
+                        ) : null}
                         <span className="font-mono text-xs text-ink-secondary">loss {fmt(tx.signals.chunk_loss, 4)}</span>
                         <span className="font-mono text-xs text-ink-secondary">β {fmt(tx.signals.beta_mean, 4)}</span>
                         <span className="font-mono text-xs text-status-scale">‖Δ‖ proposed {fmt(tx.signals.delta_norm, 4)}</span>
@@ -134,6 +173,17 @@ export function ChatTab() {
       </div>
 
       <div className="space-y-4">
+        {sessionDetail ? (
+          <Panel title="Backend and calibration">
+            <KeyValue
+              rows={[
+                { label: 'Backend', value: backend },
+                { label: 'Calibration', value: cal.label, note: cal.detail },
+              ]}
+            />
+          </Panel>
+        ) : null}
+
         <Panel title="Sampling">
           <div className="space-y-3">
             <Field label="Max new tokens" htmlFor="chat-max">
