@@ -157,6 +157,10 @@ class Session:
         ids = tok.encode(prompt, add_bos=(self.runner.pos == 0 and not self.runner.pending))
         self.runner.transactions = []
         logits = self.runner.feed_tokens(ids, source="user")
+        # generation is a control switch (generated tokens are read-only by default); it happens
+        # only at a chunk boundary, so the prompt's partial chunk is transacted first
+        self.runner.flush()
+        logits = self.runner._last_logits  # the flush may have recomputed the chunk
         gen = torch.Generator().manual_seed(int(seed)) if seed is not None else None
         out_ids: list[int] = []
         for _ in range(int(max_new_tokens)):

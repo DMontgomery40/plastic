@@ -9,6 +9,7 @@ so the total benign gating rate stays near ``target_fpr``.
 from __future__ import annotations
 
 import json
+import math
 import os
 import time
 from dataclasses import dataclass, field
@@ -30,6 +31,7 @@ class Calibration:
     n_chunks: int = 0
     reference: dict[str, list[float]] = field(default_factory=dict)
     thresholds: dict[str, float] = field(default_factory=dict)
+    achievable_fpr: dict[str, float] = field(default_factory=dict)
     canary_baseline: dict[str, float] = field(default_factory=dict)
     target_fpr: float = 0.01
     created_at_unix: int = 0
@@ -41,6 +43,7 @@ class Calibration:
             "n_chunks": self.n_chunks,
             "reference": {k: [float(x) for x in v] for k, v in self.reference.items()},
             "thresholds": {k: float(v) for k, v in self.thresholds.items()},
+            "achievable_fpr": {k: float(v) for k, v in self.achievable_fpr.items()},
             "canary_baseline": {k: float(v) for k, v in self.canary_baseline.items()},
             "target_fpr": self.target_fpr,
             "created_at_unix": self.created_at_unix,
@@ -53,6 +56,7 @@ class Calibration:
             n_chunks=int(d.get("n_chunks", 0)),
             reference={k: list(v) for k, v in d.get("reference", {}).items()},
             thresholds={k: float(v) for k, v in d.get("thresholds", {}).items()},
+            achievable_fpr={k: float(v) for k, v in d.get("achievable_fpr", {}).items()},
             canary_baseline={k: float(v) for k, v in d.get("canary_baseline", {}).items()},
             target_fpr=float(d.get("target_fpr", 0.01)),
             created_at_unix=int(d.get("created_at_unix", 0)),
@@ -79,17 +83,68 @@ class Calibration:
         return os.path.exists(os.path.join(model_dir, "calibration.json"))
 
 
-def thresholds_from_records(records: list[dict[str, Any]], *, target_fpr: float) -> dict[str, float]:
-    """Upper quantile per decision signal, with the false-positive budget split by union bound."""
-    present = [name for name in ROLLBACK_DECISION_SIGNALS if sum(1 for r in records if r.get(name) is not None) >= 20]
+def conformal_threshold(values: list[float], fpr: float, *, side: str = "upper") -> tuple[float, float]:
+    """Split-conformal order-statistic threshold and the false-positive rate it can actually deliver.
+
+    With ``n`` exchangeable benign values, the ``ceil((n+1)(1-fpr))``-th smallest value is exceeded by
+    a fresh benign value with probability at most ``fpr``; when ``fpr (n+1) < 1`` that is the sample
+    maximum and the achievable rate is ``1/(n+1)``, which is reported so nobody claims a rate the
+    sample size cannot support.
+    """
+    vals = sorted(float(v) for v in values if v == v)
+    n = len(vals)
+    if n < 8:
+        raise ValueError(f"need at least 8 values, got {n}")
+    if side == "lower":
+        lo, achievable = conformal_threshold([-v for v in vals], fpr, side="upper")
+        return -lo, achievable
+    k = math.ceil((n + 1) * (1.0 - float(fpr)))
+    if k > n:
+        return vals[-1], 1.0 / (n + 1)
+    return vals[k - 1], max(float(fpr), 1.0 / (n + 1))
+
+
+def thresholds_from_records(records: list[dict[str, Any]], *, target_fpr: float) -> tuple[dict[str, float], dict[str, float]]:
+    """Per-signal thresholds with the false-positive budget split by union bound; returns
+    (thresholds, achievable_fpr). Coherence and the statistical signals get upper thresholds,
+    the poison canary a lower one."""
+    upper = [name for name in ROLLBACK_DECISION_SIGNALS if sum(1 for r in records if r.get(name) is not None) >= 8]
+    lower = ["canary_delta_poison"] if sum(1 for r in records if r.get("canary_delta_poison") is not None) >= 8 else []
+    present = upper + lower
     if not present:
-        return {}
-    per_signal_fpr = max(1e-4, float(target_fpr) / len(present))
-    out: dict[str, float] = {}
-    for name in present:
+        return {}, {}
+    per_signal_fpr = max(1e-5, float(target_fpr) / len(present))
+    thresholds: dict[str, float] = {}
+    achievable: dict[str, float] = {}
+    for name in upper:
         vals = [float(r[name]) for r in records if r.get(name) is not None]
-        out[name] = quantile_threshold(vals, per_signal_fpr)
-    return out
+        thresholds[name], achievable[name] = conformal_threshold(vals, per_signal_fpr)
+    for name in lower:
+        vals = [float(r[name]) for r in records if r.get(name) is not None]
+        thresholds[name], achievable[name] = conformal_threshold(vals, per_signal_fpr, side="lower")
+    return thresholds, achievable
+
+
+def calibrated_cusum_h(records: list[dict[str, Any]], reference: dict[str, list[float]], *, k: float, h_min: float) -> float | None:
+    """Largest two-sided CUSUM statistic reached on the calibration stream (z against the
+    fixed reference), scaled up: the in-control stream must not alarm."""
+    from plastic.harness.stats import Cusum, robust_z
+
+    ref = reference.get("log_delta_norm")
+    if not ref:
+        return None
+    c = Cusum(k, float("inf"))
+    peak = 0.0
+    for r in records:
+        v = r.get("log_delta_norm")
+        if v is None:
+            continue
+        z = robust_z(float(v), ref)
+        if z is None:
+            continue
+        c.update(z)
+        peak = max(peak, c.s_hi, c.s_lo)
+    return max(float(h_min), 1.25 * peak + 0.5)
 
 
 def calibrate_from_runner(
@@ -146,11 +201,16 @@ def calibrate_from_runner(
         vals = [float(r[key]) for r in records if r.get(key) is not None]
         if vals:
             baseline[key.replace("_before", "")] = sum(vals) / len(vals)
+    thresholds, achievable = thresholds_from_records(records, target_fpr=target_fpr)
+    h = calibrated_cusum_h(records, reference, k=runner.hcfg.cusum_k, h_min=runner.hcfg.cusum_h)
+    if h is not None:
+        thresholds["cusum_h"] = h
     return Calibration(
         model_signature=model_signature,
         n_chunks=len(records),
         reference=reference,
-        thresholds=thresholds_from_records(records, target_fpr=target_fpr),
+        thresholds=thresholds,
+        achievable_fpr=achievable,
         canary_baseline=baseline,
         target_fpr=float(target_fpr),
         created_at_unix=int(time.time()),
@@ -168,7 +228,7 @@ def calibrate_model(
     model_id: str,
     *,
     data_dir: str | None = None,
-    n_chunks: int = 256,
+    n_chunks: int = 512,
     fisher_chunks: int = 64,
     target_fpr: float = 0.01,
     harness_cfg: HarnessConfig | None = None,
@@ -242,7 +302,8 @@ def calibrate_model(
         log(f"[calibrate] {model_id}: physics, {n_chunks} chunks of generated episodes")
         fisher = estimate_fisher_diag(model, fisher_seqs(), chunk=L, n_chunks=fisher_chunks, device=device)
 
-    runner = TransactionRunner(model, cfg, hcfg, calibration=None, suite=suite, device=device)
+    # the observation runner carries the Fisher so fisher_update is observed and calibrated
+    runner = TransactionRunner(model, cfg, hcfg, calibration=Calibration(fisher=fisher), suite=suite, device=device)
     cal = calibrate_from_runner(
         runner, stream(), n_chunks=n_chunks, model_signature=store.model_signature(model_id),
         target_fpr=target_fpr, fisher=fisher, reset_every=4,

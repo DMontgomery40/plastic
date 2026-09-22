@@ -318,7 +318,7 @@ def build_parser() -> argparse.ArgumentParser:
     cal.add_argument("model_id")
     cal.add_argument("--artifacts-root", default="artifacts")
     cal.add_argument("--data", default=None, help="text corpus dir with validation.bin")
-    cal.add_argument("--chunks", type=int, default=256)
+    cal.add_argument("--chunks", type=int, default=512)
     cal.add_argument("--fisher-chunks", type=int, default=64)
     cal.add_argument("--fpr", type=float, default=0.01)
     cal.add_argument("--device", default="cpu")

@@ -114,3 +114,54 @@ def test_physics_episode_three_way(physics_model):
     assert s.runner.pos == 32
     s.reset()
     assert s.runner.pos == 0 and store.load_session_meta("ph1")["pos"] == 0
+
+
+def test_fork_drops_pending_and_starts_from_committed_state(text_model):
+    store, mid = text_model
+    s = Session.create(store, model_id=mid, harness_cfg=HarnessConfig(enable_projection=False), session_id="mid1")
+    s.runner.feed_tokens([5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])  # 8 committed + 3 pending
+    child_id = s.fork("mid1_child")
+    c = Session.open(store, child_id)
+    assert c.runner.pos == 8 and not c.runner.pending and c.runner.n_transactions == 0
+    for a, b in zip(c.runner.committed.layers, s.runner.committed.layers):
+        assert torch.equal(a.S, b.S)
+    assert store.load_session_meta(child_id)["pos"] == 8 and store.load_session_meta(child_id)["forked_at_pos"] == 8
+
+
+def _short_prompt_fixture(tmp_path, rule):
+    root = str(tmp_path / rule)
+    d = os.path.join(root, "data")
+    os.makedirs(d)
+    tok = Tokenizer.train(DOCS, vocab_size=300)
+    tok.save(os.path.join(d, "tokenizer.json"))
+    encode_documents_to_bin(tok, DOCS, os.path.join(d, "train.bin"))
+    encode_documents_to_bin(tok, DOCS[:1], os.path.join(d, "validation.bin"))
+    cfg = TrainConfig(
+        domain="text", model=ModelConfig(d_model=32, n_heads=2, n_layers=1, chunk=8, vocab_size=tok.vocab_size, rule=rule),
+        artifacts_root=root, data_dir=d, steps=2, batch_size=2, seq_len=32, warmup_steps=1, eval_every=0, save_every=0,
+        eval_batches=1, log_every=1, device="cpu", mqar_frac=0.0,
+    )
+    mid = train(cfg, log=lambda s: None)
+    return ArtifactStore(root), mid
+
+
+def test_short_prompt_is_learned_before_generation_delta_rule(tmp_path):
+    store, mid = _short_prompt_fixture(tmp_path, "delta")
+    s = Session.create(store, model_id=mid, harness_cfg=HarnessConfig(enable_projection=False), session_id="d1")
+    r = s.chat("alpha", max_new_tokens=6, seed=0)  # short prompt, then generation crosses the boundary
+    assert r.n_tokens_in < 8
+    # the prompt is transacted as its own partial chunk before generation begins
+    assert r.transactions[0]["decision"]["kind"] == "commit" and r.transactions[0]["signals"]["n_tokens"] == r.n_tokens_in
+    # the delta rule learns per token, so a sub-chunk prompt does move the memory
+    assert any(float(l.S.abs().sum()) > 0 for l in s.runner.committed.layers)
+
+
+def test_short_prompt_chunk_rule_is_transacted_not_discarded(tmp_path):
+    # the chunk rule is mini-batch: a sub-chunk prompt applies no update (documented), but it must
+    # be transacted as its own boundary before generation, never silently discarded
+    store, mid = _short_prompt_fixture(tmp_path, "chunk")
+    s = Session.create(store, model_id=mid, harness_cfg=HarnessConfig(enable_projection=False), session_id="cr1")
+    r = s.chat("alpha", max_new_tokens=6, seed=0)
+    assert r.n_tokens_in < 8
+    assert r.transactions[0]["decision"]["kind"] == "commit" and r.transactions[0]["signals"]["n_tokens"] == r.n_tokens_in
+    assert r.transactions[0]["signals"]["pos_end"] == r.n_tokens_in  # a real boundary at the prompt end

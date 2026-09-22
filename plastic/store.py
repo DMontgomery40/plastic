@@ -300,6 +300,9 @@ class SessionStoreMixin:
             root_id = str(parent.get("root_session_id", parent_session_id))
             forked_at = parent.get("pos", 0)
         now = int(time.time())
+        committed_pos = int((runner_state or {}).get("committed", {}).get("pos", 0)) if runner_state else 0
+        if parent_session_id is not None:
+            forked_at = committed_pos  # a fork starts from the parent's committed state
         meta: dict[str, Any] = {
             "session_id": session_id,
             "model_id": model_id,
@@ -311,7 +314,7 @@ class SessionStoreMixin:
             "created_at_unix": now,
             "updated_at_unix": now,
             "harness": harness_cfg.to_dict() if hasattr(harness_cfg, "to_dict") else dict(harness_cfg),
-            "pos": 0 if runner_state is None else int(runner_state.get("working", {}).get("pos", 0)),
+            "pos": 0 if runner_state is None else int(runner_state.get("committed", {}).get("pos", runner_state.get("working", {}).get("pos", 0))),
             "n_transactions": 0,
             "commits": 0,
             "rollbacks": 0,
@@ -386,8 +389,12 @@ class SessionStoreMixin:
     def fork_session(self, parent_session_id: str, child_session_id: str) -> dict[str, Any]:
         from plastic.harness.config import HarnessConfig
 
+        from plastic.harness.transaction import fork_state_dict
+
         parent = self.load_session_meta(parent_session_id)
         state = self.load_runner_state(parent_session_id)
+        if state:
+            state = fork_state_dict(state)
         meta = self.create_session(
             child_session_id,
             model_id=str(parent["model_id"]),
