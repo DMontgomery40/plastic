@@ -103,6 +103,33 @@ def test_models_listing(api):
     assert by_id[api.physics]["domain"] == "physics"
 
 
+def test_models_listing_survives_non_finite_eval_and_sleep(api):
+    # A model whose consolidation ran against an empty canary set carries NaN in its sleep
+    # manifest (score_suite returns NaN for an empty probe set); an unevaluated model's eval
+    # can be NaN/Inf too. GET /api/models is the first call every dashboard tab makes, so a
+    # single non-finite float there must render as null, not 500 the whole response.
+    api.store.register_model(
+        "nan_probe",
+        {
+            "domain": "text",
+            "status": "completed",
+            "params": 1,
+            "eval": {"heldout_loss": float("nan"), "memory_value": float("inf")},
+            "sleep": {
+                "accepted": True,
+                "canary_before": {"coherence": float("nan"), "poison": 0.1},
+                "canary_after": {"coherence": float("nan"), "poison": float("-inf")},
+            },
+        },
+    )
+    resp = api.client.get("/api/models")
+    assert resp.status_code == 200
+    rec = {m["model_id"]: m for m in resp.json()}["nan_probe"]
+    assert rec["eval"]["heldout_loss"] is None and rec["eval"]["memory_value"] is None
+    assert rec["sleep"]["canary_before"]["coherence"] is None and rec["sleep"]["canary_before"]["poison"] == 0.1
+    assert rec["sleep"]["canary_after"]["coherence"] is None and rec["sleep"]["canary_after"]["poison"] is None
+
+
 def test_model_detail_and_log(api):
     body = api.client.get(f"/api/models/{api.text}").json()
     assert body["record"]["model_id"] == api.text
