@@ -182,6 +182,33 @@ the source record, derivation, ablations, and review are the auditable evidence.
   Preserve the dashboard floor: no emoji, no text below 11px, color tokens throughout,
   and no opacity-based text de-emphasis.
 
+## GitHub and Hugging Face are one maintained project
+
+- Maintain all three public surfaces together: [GitHub source and history](https://github.com/DMontgomery40/plastic),
+  [Hugging Face models and source](https://huggingface.co/dmontgomery40/plastic), and
+  [the live Space](https://huggingface.co/spaces/dmontgomery40/plastic). Neither host
+  is a secondary copy that may silently go stale. This applies to every agent.
+- GitHub `main` is the publication source. `.github/workflows/sync-to-hub.yml`
+  automatically syncs its committed source, documentation, README body, and shared
+  agent rules to BOTH Hugging Face repositories using the official Hub sync action.
+  Keep that workflow working; do not replace it with ad hoc one-sided publishing.
+- Hugging Face owns the published `text/` and `physics/` checkpoint bundles and
+  destination-specific README metadata. The export preserves those bundles and
+  metadata and supplies the Space's root Dockerfile from `deploy/huggingface/`.
+  New model artifacts require an explicit compatible release; a source sync does
+  not publish local checkpoints or prove the deployed model learned anything.
+- After a `main` push, verify BOTH sync jobs and their `source_snapshot.json`
+  identities. For runtime/UI changes, also verify the Space build and affected live
+  journey. A GitHub push alone is not completion of a public release. If a target
+  fails, repair that delivery or report the exact unsynced target; do not say both
+  are current. Preserve README cross-links and describe actual hosted capabilities.
+- Make ordinary source/docs edits in GitHub. If an urgent HF-side edit is needed,
+  bring it back to GitHub before the next sync. Never sync private scratchpads,
+  local session data, credentials, or unfinished experiment artifacts.
+- Development-branch pushes back up committed work without deploying it. Say which
+  branches were saved and that ignored artifacts remain local; do not call a backup
+  a release or force unfinished research onto `main` merely to preserve it.
+
 ## Artifacts, compute, and Git
 
 - Generated `artifacts/` and `training_data/` contents are generally ignored; a Git
