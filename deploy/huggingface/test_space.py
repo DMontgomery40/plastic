@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from deploy.huggingface.app import PublicDemoGate
+from deploy.huggingface.pretrained import MODEL_ID
 
 
 def fake_app():
@@ -26,7 +27,7 @@ def test_expensive_or_unbounded_mutations_are_closed(path):
         assert client.post(path, json={}).status_code == 403
 
 
-@pytest.mark.parametrize('path', ['/api/health', '/api/models', '/api/models/lm_wikitext_l4', '/api/models/qwen3_5_0_8b', '/api/models/qwen3_5_0_8b/log', '/api/sessions', '/api/sessions/demo_text/state', '/api/train/jobs', '/api/data'])
+@pytest.mark.parametrize('path', ['/api/health', '/api/models', '/api/models/lm_wikitext_l4', f'/api/models/{MODEL_ID}', f'/api/models/{MODEL_ID}/log', f'/api/train/{MODEL_ID}', f'/api/train/{MODEL_ID}/log', '/api/sessions', '/api/sessions/demo_text/state', '/api/train/jobs', '/api/data'])
 def test_existing_dashboard_reads_work(path):
     with TestClient(fake_app()) as client:
         assert client.get(path).status_code == 200
@@ -64,6 +65,9 @@ def test_unknown_sessions_methods_and_large_bodies_fail_closed():
         assert client.post('/api/sessions/demo_text/chat', content='x' * 8193).status_code == 413
         assert client.post('/api/sessions/demo_text/chat', content='{').status_code == 422
         assert client.get('/api/models/unknown').status_code == 404
+        assert client.get('/api/models/qwen3_5_0_8b').status_code == 404
+        assert client.get(f'/api/models/{MODEL_ID}_unknown/log').status_code == 404
+        assert client.get(f'/api/models/{MODEL_ID}/private').status_code == 404
         assert client.get('/assets/main.js').status_code == 200
 
 
@@ -137,6 +141,8 @@ def test_public_notice_survives_real_dashboard_body_attributes(tmp_path, body_ta
         assert 'public and shared' in page.text
         assert 'Do not enter private information' in page.text
         assert 'Qwen3.5-0.8B' in page.text
+        assert 'abliterated research model' in page.text
+        assert 'not the original aligned checkpoint' in page.text
         assert 'observational guard: no rollback protection' in page.text
         assert page.text.index('public and shared') < page.text.index('id="root"')
 

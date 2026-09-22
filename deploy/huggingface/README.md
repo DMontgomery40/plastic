@@ -24,9 +24,12 @@ push is a backup and does not trigger deployment. To retry delivery, use the wor
 
 The Space serves the existing React dashboard and Python model API on one port.
 The deployment adapter adds a visible public-session notice and restricts the API
-to bounded operations on `demo_text` and `demo_physics`. The text session uses the pinned official Qwen3.5-0.8B checkpoint through the
+to bounded operations on `demo_text` and `demo_physics`. The text session uses pinned
+`huihui-ai/Huihui-Qwen3.5-0.8B-abliterated`, a refusal-ablated Qwen3.5-0.8B derivative, through the
 existing native backend. It is **log-only / observational**: proposed context
-updates are recorded and retained, without rollback protection. The optional
+updates are recorded and retained, without rollback protection. It supports exploratory
+prompts without a fixed attack list or prior calibration. No original-checkpoint thresholds
+are installed as calibrated decisions for this derivative. The optional
 physics session keeps the original Plastic model and harness.
 
 Both sessions are shared by all visitors. Prompts and outputs are public; storage
@@ -81,5 +84,5 @@ npm --prefix dashboard run build
 The Space uses `Dockerfile` copied from this directory at publication time, port
 7860, and Hugging Face's free `cpu-basic` hardware. No paid inference service or
 training job is needed. Its build installs CPU PyTorch and Transformers 5.17.0, downloads the pinned
-official Qwen checkpoint, and compiles the React UI. The public text session is
-`qwen3_5_0_8b`; the old `text/` weights remain available for research reproduction.
+Huihui Qwen derivative, and compiles the React UI. The public text model is
+`qwen3_5_0_8b_abliterated`; the old `text/` weights remain available for research reproduction.

@@ -7,10 +7,10 @@ from pathlib import Path
 from plastic.harness.config import HarnessConfig
 from plastic.store import ArtifactStore
 
-MODEL_ID = 'qwen3_5_0_8b'
-REPO_ID = 'Qwen/Qwen3.5-0.8B'
-REVISION = '2fc06364715b967f1860aea9cf38778875588b17'
-CHECKPOINT_DIGEST = '8c6664cac05a9f4394a9167a6c90f6836d498081b9ffd71026a959b06dbd073c'
+MODEL_ID = 'qwen3_5_0_8b_abliterated'
+REPO_ID = 'huihui-ai/Huihui-Qwen3.5-0.8B-abliterated'
+REVISION = '4813135658fe51b2e535b8e77927d2f23909ce42'
+CHECKPOINT_DIGEST = '594479f86b804ce6899eb2985a85ae6fc4b5ea6b404140d7d37f08a8b9c7a575'
 TEXT_PARAMETERS = 752393024
 
 

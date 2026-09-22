@@ -10,8 +10,9 @@ import re
 
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from deploy.huggingface.pretrained import MODEL_ID
 
-MODELS = ('qwen3_5_0_8b', 'lm_wikitext_l4', 'phys_mps_3k')
+MODELS = (MODEL_ID, 'lm_wikitext_l4', 'phys_mps_3k')
 SESSIONS = ('demo_text', 'demo_physics')
 MAX_BODY = 8192
 
@@ -65,7 +66,8 @@ class PublicDemoGate:
 
         reads = ('/api/health', '/api/models', '/api/sessions', '/api/train/jobs', '/api/data', '/api/redteam')
         session_read = re.fullmatch(r'/api/sessions/(demo_text|demo_physics)(?:/(state|transactions))?', path)
-        model_read = re.fullmatch(r'/api/(models|train)/(qwen3_5_0_8b|lm_wikitext_l4|phys_mps_3k)(?:/log)?', path)
+        model_read = re.fullmatch(r'/api/(models|train)/([^/]+)(?:/log)?', path)
+        model_read = model_read and model_read.group(2) in MODELS
         if method in ('GET', 'HEAD'):
             if path not in reads and not session_read and not model_read:
                 return await reject(404, 'This public demo exposes only its published models and shared sessions.')
@@ -113,8 +115,9 @@ class PublicDemoGate:
 
 
 NOTICE = '''<aside class="bg-surface-overlay text-ink-primary border-b border-edge text-sm px-5 py-3">
-<strong>Qwen3.5-0.8B · pretrained chat · free CPU</strong><br>
-Open <strong>Chat</strong> with <strong>demo_text</strong> and ask a question.
+<strong>Huihui Qwen3.5-0.8B · abliterated research model · free CPU</strong><br>
+Open <strong>Chat</strong> with <strong>demo_text</strong> to explore prompts and inspect context changes.
+This is Huihui's refusal-ablated derivative of Qwen, not the original aligned checkpoint.
 Text uses native context updates with an <strong>observational guard: no rollback protection</strong>.
 The turn-boundary retention policy is experimental and is not enabled here.
 The optional <strong>demo_physics</strong> session keeps the Plastic research model.<br>

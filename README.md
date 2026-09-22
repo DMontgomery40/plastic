@@ -1,7 +1,7 @@
 # Plastic
 
 - **[Try the live Hugging Face playground](https://huggingface.co/spaces/dmontgomery40/plastic)** —
-  chat with pretrained **Qwen3.5-0.8B**, inspect its native context updates and
+  explore **Huihui's abliterated Qwen3.5-0.8B**, inspect its native context updates and
   transaction records, or try the optional physics benchmark. Runs on free CPU.
   Text uses an **observational guard, with no rollback protection**.
 - **[Get the models and complete project on Hugging Face](https://huggingface.co/dmontgomery40/plastic/tree/main)** —
@@ -14,13 +14,13 @@
   [research notes](https://github.com/DMontgomery40/plastic/tree/main/docs/research)
   alongside the complete recorded commit history.
 
-**Chat with a pretrained model—and inspect its changing context.**
+**Explore a pretrained research model—and inspect its changing context.**
 
 Plastic is a research workbench for models with memory that changes during inference.
 It combines a selective state-space recurrence, gradient-updated fast memory, and an
 external harness that can accept, scale, project, or roll back a proposed memory update.
 The research model core handles text prediction and a 2D physics task with hidden friction.
-The live text playground uses the separate pretrained Qwen backend: its recurrent
+The live text playground uses Huihui's refusal-ablated Qwen derivative through the separate native backend: its recurrent
 state carries context; this is not the original meta-trained fast-weight research model.
 The experimental turn-boundary retention policy is not enabled in the public demo.
 
@@ -32,11 +32,16 @@ The experimental turn-boundary retention policy is not enabled in the public dem
 4. Inspect the completion and transaction records. Text runs in native/log-only mode:
    context updates are retained, and guard observations do not reject them.
 
-The model is the official [Qwen3.5-0.8B](https://huggingface.co/Qwen/Qwen3.5-0.8B)
-checkpoint, pinned to revision `2fc06364715b967f1860aea9cf38778875588b17`.
+The model is [Huihui-Qwen3.5-0.8B-abliterated](https://huggingface.co/huihui-ai/Huihui-Qwen3.5-0.8B-abliterated),
+a third-party derivative of [Qwen3.5-0.8B](https://huggingface.co/Qwen/Qwen3.5-0.8B),
+pinned to revision `4813135658fe51b2e535b8e77927d2f23909ce42`.
 Its text backbone has 752,393,024 parameters. It is pretrained, can make factual
 errors, and runs on shared free CPU, so longer replies take time. This release
-makes no claim of safety protection or useful learned adaptation for Qwen.
+makes no claim of safety protection or useful learned adaptation for Qwen. The derivative's
+refusal reduction is the publisher's claim, not a guarantee that it never refuses.
+Try exploratory prompts and inspect the observed loss and proposed/accepted recurrent-state
+change. That state-change norm is not a measured gradient. Exploratory use does not require a
+fixed attack list; quantitative safety claims need separate controlled comparisons.
 
 Both demo sessions are **public and shared**. Prompts and outputs are visible to
 other visitors; do not enter private information. Reset a session to start fresh.
@@ -72,7 +77,7 @@ The Hugging Face **Files** tab contains this source snapshot plus both original 
 Each model includes weights, configuration, saved evaluation, training logs, harness
 reference artifacts, a checksum manifest, and a loading example. GitHub holds the
 ongoing development history. The linked Space runs the actual frontend and backend, and downloads the pinned
-Qwen checkpoint from its official repository during the Docker build.
+Qwen derivative from its pinned upstream repository during the Docker build.
 
 ## Run everything locally, without training first
 
