@@ -207,10 +207,41 @@ def transactions_page(store: ArtifactStore, session_id: str, *, limit: int, offs
     return {"total": len(items), "items": items[offset : offset + limit]}
 
 
+def _native_state_payload(session: Any) -> dict[str, Any]:
+    """State view for a pretrained Protocol backend (Qwen): honest per-memory-unit recurrent norms
+    and drift-from-anchor over the backend's own memory units, with a ``kind`` discriminator so the
+    client renders the GDN path distinctly. No fabricated per-head S / singular values / h tensors —
+    those are the toy Plastic shape and do not exist here; the backend reports what it actually has."""
+    runner = session.runner
+    backend = runner.backend
+    norms = backend.state_norms(runner.committed)
+    per = list(norms.get("recurrent_norm", []))
+    try:
+        drift = [float(t.float().norm()) for t in backend.state_delta(runner.committed, runner.anchor)]
+    except Exception:  # noqa: BLE001 - a degenerate/empty state must not fail the route
+        drift = []
+    units = [
+        {"index": i, "recurrent_norm": float(per[i]), "drift_from_anchor": float(drift[i]) if i < len(drift) else 0.0}
+        for i in range(len(per))
+    ]
+    return {
+        "kind": "recurrent",
+        "backend": getattr(session, "backend_kind", "qwen"),
+        "pos": int(runner.pos),
+        "units": units,
+        "recurrent_norm_total": float(norms.get("recurrent_norm_total", 0.0)),
+    }
+
+
 def state_payload(session: Any) -> dict[str, Any]:
-    """Per-layer view of the committed state for the weights panel."""
+    """Per-layer view of the committed state for the weights panel.
+
+    The toy Plastic state is per-layer ``S``/``h``; a pretrained backend (Qwen) has no such shape, so
+    it gets a distinct native payload rather than a 500 or fabricated tensors."""
     committed = session.runner.committed
     anchor = session.runner.anchor
+    if not hasattr(committed, "layers"):
+        return _native_state_payload(session)
     layers: list[dict[str, Any]] = []
     for i, layer in enumerate(committed.layers):
         s = layer.S[0].detach().float().cpu()  # (H, d_h, d_h)
@@ -229,7 +260,7 @@ def state_payload(session: Any) -> dict[str, Any]:
                 "drift_from_anchor": drift,
             }
         )
-    return {"layers": layers, "pos": int(session.runner.pos)}
+    return {"kind": "plastic", "layers": layers, "pos": int(session.runner.pos)}
 
 
 # ---------------------------------------------------------------------- red team

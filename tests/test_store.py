@@ -24,6 +24,29 @@ def test_register_and_list(tmp_path):
     assert store.load_model_record(a)["created_at_unix"] == 10
 
 
+def test_model_exists_is_backend_aware(tmp_path):
+    # ASTRA-081 #5: a Qwen model is registered with an EXTERNAL checkpoint dir (no local plastic
+    # checkpoint.pt/config), so model_exists must recognize it by its record + checkpoint dir rather
+    # than 404 the session/model/redteam/sleep routes that gate on it.
+    store = ArtifactStore(str(tmp_path))
+    ckpt_dir = tmp_path / "qwen-ckpt"
+    ckpt_dir.mkdir()
+
+    ok = store.new_model_id("qwen")
+    store.register_model(ok, {"backend": "qwen", "checkpoint_dir": str(ckpt_dir), "domain": "text", "chunk": 8})
+    assert store.model_exists(ok) is True  # record present and its checkpoint dir is on disk
+
+    missing_dir = store.new_model_id("qwen")
+    store.register_model(missing_dir, {"backend": "qwen", "checkpoint_dir": str(tmp_path / "nope"), "domain": "text"})
+    assert store.model_exists(missing_dir) is False  # registered but its checkpoint dir is absent
+
+    plastic_no_ckpt = store.new_model_id("lm")
+    store.register_model(plastic_no_ckpt, {"backend": "plastic", "status": "running"})
+    assert store.model_exists(plastic_no_ckpt) is False  # a plastic model still needs its checkpoint/config
+
+    assert store.model_exists("model-that-was-never-registered") is False
+
+
 def test_qwen_model_signature_and_session_lifecycle(tmp_path):
     # A pretrained-backend (Qwen) model has no local plastic checkpoint; its signature comes from the
     # registered backend + content digest, and sessions create/verify against it without a checkpoint.

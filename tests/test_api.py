@@ -274,11 +274,48 @@ def test_transactions_paging(api):
 
 def test_state(api):
     body = api.client.get("/api/sessions/t1/state").json()
+    assert body["kind"] == "plastic"  # the toy per-layer S/h shape, discriminated for the client
     assert body["pos"] > 0 and len(body["layers"]) == 2
     layer = body["layers"][0]
     assert len(layer["s_norm_per_head"]) == 2 and layer["h_norm"] >= 0.0
     assert len(layer["singular_values"]) == 2 and len(layer["singular_values"][0]) <= 8
     assert layer["drift_from_anchor"] >= 0.0
+
+
+def test_state_payload_native_backend_has_no_plastic_layers():
+    # ASTRA-081 #5: a pretrained (Qwen) session's committed state has no per-layer S/h shape, so the
+    # /state route must return an honest recurrent payload instead of a 500 (committed.layers) or
+    # fabricated tensors. Driven with a fake session so it needs no model/isolated deps.
+    import torch
+
+    from plastic.api.service import state_payload
+
+    class _QwenLikeState:  # no `.layers`, exactly like QwenState
+        pass
+
+    class _FakeBackend:
+        def state_norms(self, _s):
+            return {"recurrent_norm": [1.5, 2.0], "recurrent_norm_total": 2.5}
+
+        def state_delta(self, _a, _b):
+            return [torch.tensor([3.0, 4.0]), torch.tensor([0.0])]  # per-unit norms 5.0, 0.0
+
+    class _FakeRunner:
+        committed = _QwenLikeState()
+        anchor = _QwenLikeState()
+        pos = 12
+        backend = _FakeBackend()
+
+    class _FakeSession:
+        runner = _FakeRunner()
+        backend_kind = "qwen"
+
+    body = state_payload(_FakeSession())
+    assert body["kind"] == "recurrent" and body["backend"] == "qwen" and body["pos"] == 12
+    assert body["recurrent_norm_total"] == 2.5
+    assert [u["recurrent_norm"] for u in body["units"]] == [1.5, 2.0]
+    assert body["units"][0]["drift_from_anchor"] == 5.0 and body["units"][1]["drift_from_anchor"] == 0.0
+    assert "layers" not in body  # never the plastic shape, never fabricated S/h tensors
 
 
 def test_fork(api):

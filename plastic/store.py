@@ -142,6 +142,16 @@ class ArtifactStore:
         return dict(rec)
 
     def model_exists(self, model_id: str) -> bool:
+        # backend-aware readiness: a pretrained backend (Qwen) is registered with an EXTERNAL
+        # checkpoint directory, not a local plastic checkpoint.pt/config, so requiring those would
+        # wrongly report a valid Qwen model as absent (a 404 from the session/model/redteam/sleep
+        # routes). It exists if its record is present and its checkpoint directory is on disk.
+        rec = self._load_index()["models"].get(model_id)
+        if rec is not None and rec.get("backend", "plastic") != "plastic":
+            cd = rec.get("checkpoint_dir")
+            return bool(cd) and os.path.isdir(cd)
+        # a plastic model (or a raw checkpoint saved without a registry record) exists iff its local
+        # checkpoint.pt and config are on disk — unchanged from the original file-based check
         return os.path.exists(self.checkpoint_path(model_id)) and os.path.exists(self.config_path(model_id))
 
     # ---- checkpoints ----
