@@ -121,8 +121,9 @@ def build_split(rows: list[dict[str, Any]], encode_chat, *, counts: dict[str, in
         "n_context_groups": len(ctx_groups),
         # an immutable raw export of the selected records (full text + full hash), so the exact corpus
         # is pinned regardless of any Hub revision drift (ASTRA-086)
-        "selected_records": {k: [{"id": r["id"], "instruction": r["instruction"], "context": r["context"],
-                                  "category": r["category"], "sha256": r["text_sha256"]} for r in v]
+        "selected_records": {k: [{"id": r["id"], "prompt": r["prompt"], "instruction": r["instruction"],
+                                  "context": r["context"], "category": r["category"], "sha256": r["text_sha256"]}
+                                 for r in v]
                              for k, v in split.items()},
     }
     return split, manifest
@@ -320,16 +321,46 @@ def _write_json(path: str, obj: dict[str, Any]) -> None:
     os.replace(tmp, path)  # atomic, so a kill mid-write never leaves a truncated manifest/run record
 
 
-def _reconcile_run(out_dir: str, manifest: dict[str, Any], settings_identity: str, new_model_id) -> tuple[str, str]:
+def _split_identity(split: dict[str, list[dict[str, Any]]]) -> str:
+    """Ordered per-split id identity. A cross-split swap or a within-split reorder changes it, unlike
+    the order- and split-independent corpus_hash (a sorted union of text hashes) -- so this is what
+    certifies a resumed run evaluates exactly the original selection (ASTRA-098)."""
+    payload = {name: [r["id"] for r in split.get(name, [])] for name in ("fit", "cusum", "dev", "eval")}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def _split_from_manifest(manifest: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    """Reconstruct the exact ordered per-split records from the immutable manifest, so a resumed run
+    calibrates and evaluates on precisely the original selection rather than a freshly rebuilt split
+    whose membership could differ while the set-of-prompts corpus_hash stays the same (ASTRA-098)."""
+    sel = manifest.get("selected_records") or {}
+    out: dict[str, list[dict[str, Any]]] = {}
+    for name in ("fit", "cusum", "dev", "eval"):
+        recs = sel.get(name) or []
+        for r in recs:
+            if "prompt" not in r:
+                raise RunConflict(
+                    f"the pinned manifest predates ordered-split resume (no prompt in selected_records); use a fresh --out.")
+        out[name] = [{"id": r["id"], "prompt": r["prompt"], "context": r.get("context", ""),
+                      "category": r.get("category", ""), "text_sha256": r.get("sha256", "")} for r in recs]
+    return out
+
+
+def _reconcile_run(out_dir: str, manifest: dict[str, Any], split: dict[str, list[dict[str, Any]]],
+                   settings_identity: str, new_model_id) -> tuple[str, str, dict[str, Any], dict[str, list[dict[str, Any]]]]:
     """Decide whether this invocation is a fresh run or a continuation of an existing one in ``out_dir``.
 
-    Returns ``(mode, model_id)`` where mode is 'fresh' or 'resume'. A fresh run mints a model id and
-    writes the manifest + run record. A matching re-run reuses the recorded model id and LEAVES the
-    pinned manifest untouched (so a continuation never rewrites the immutable selection). A run whose
-    settings or corpus differ raises RunConflict WITHOUT writing anything, so a mismatched resume can
-    never clobber the original manifest (ASTRA-092)."""
+    Returns ``(mode, model_id, manifest, split)`` where mode is 'fresh' or 'resume'. A fresh run mints
+    a model id and writes the manifest + run record. A matching re-run reuses the recorded model id
+    and returns the exact ordered split RESTORED FROM the pinned manifest -- never this invocation's
+    freshly rebuilt split, whose membership could differ while the union corpus_hash stays the same
+    (ASTRA-098 leakage). A run whose settings, corpus, or ordered split identity differ raises
+    RunConflict WITHOUT writing anything. A directory that already holds run artifacts but has NO run
+    record (an interrupted initialization, or a pre-run-record output dir) is likewise preserved, never
+    silently overwritten as fresh (ASTRA-092/098)."""
     run_path = os.path.join(out_dir, "run-record.json")
     manifest_path = os.path.join(out_dir, "split-manifest.json")
+    split_identity = _split_identity(split)
     if os.path.exists(run_path):
         run = json.load(open(run_path, encoding="utf-8"))
         if run.get("settings_identity") != settings_identity:
@@ -338,12 +369,26 @@ def _reconcile_run(out_dir: str, manifest: dict[str, Any], settings_identity: st
         if run.get("corpus_hash") != manifest["corpus_hash"]:
             raise RunConflict(
                 f"the corpus under {out_dir} differs from the pinned manifest (dataset drift?); refusing to overwrite. Use a fresh --out.")
-        return "resume", str(run["model_id"])
+        saved = json.load(open(manifest_path, encoding="utf-8"))
+        saved_split = _split_from_manifest(saved)
+        if run.get("split_identity") != _split_identity(saved_split):
+            raise RunConflict(
+                f"the pinned manifest's split does not match the recorded run identity; refusing to resume. Use a fresh --out.")
+        return "resume", str(run["model_id"]), saved, saved_split
+    # no run record: a genuinely fresh dir has NO prior run artifacts. If a manifest/checkpoint/result
+    # is present, this is an interrupted initialization or a pre-run-record output dir -> preserve it.
+    prior = [os.path.basename(p) for p in (manifest_path, os.path.join(out_dir, "calibration.ckpt"),
+                                           os.path.join(out_dir, "screen-result.json")) if os.path.exists(p)]
+    if prior:
+        raise RunConflict(
+            f"{out_dir} holds prior run artifacts ({', '.join(prior)}) but no run-record.json; refusing to "
+            f"overwrite. Use a fresh --out (or remove the directory deliberately).")
     mid = new_model_id()
-    _write_json(manifest_path, manifest)  # written ONLY for a fresh run
+    _write_json(manifest_path, manifest)  # written ONLY for a genuinely fresh run
     _write_json(run_path, {"model_id": mid, "settings_identity": settings_identity,
-                           "corpus_hash": manifest["corpus_hash"], "created_at_unix": int(time.time())})
-    return "fresh", mid
+                           "corpus_hash": manifest["corpus_hash"], "split_identity": split_identity,
+                           "created_at_unix": int(time.time())})
+    return "fresh", mid, manifest, split
 
 
 def _run_followups(backend, cfg, calibration, gen, seed0, fixture_path, hcfg, deadline, *, _runner=None, _drive=None, _fixture=None):
@@ -454,7 +499,9 @@ def main() -> None:
     settings_identity = _settings_identity(args, manifest["checkpoint_digest"], revision)
     store = ArtifactStore(os.path.join(args.out, "store"))
     try:
-        mode, mid = _reconcile_run(args.out, manifest, settings_identity, lambda: store.new_model_id("qwen"))
+        # on resume this restores the exact ordered split from the pinned manifest (not the rebuild),
+        # so completed fit prompts can never enter a resumed evaluation
+        mode, mid, manifest, split = _reconcile_run(args.out, manifest, split, settings_identity, lambda: store.new_model_id("qwen"))
     except RunConflict as err:
         print(f"[oppoint] run conflict: {err}")
         return

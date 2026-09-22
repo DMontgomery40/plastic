@@ -288,40 +288,93 @@ def test_settings_identity_changes_with_each_determining_setting():
     assert base != _settings_identity(_fake_args(), "digestX", "rev2")           # dataset revision changed
 
 
-def _driver_manifest(corpus_hash="h1"):
-    return {"corpus_hash": corpus_hash, "actual_counts": {"fit": 8}, "excluded_over_cap": 0}
+def _split_of(ids_per):
+    return {name: [{"id": i, "prompt": f"p{i}", "context": "", "category": "c", "text_sha256": f"h{i}"} for i in ids]
+            for name, ids in ids_per.items()}
 
 
-def test_reconcile_run_fresh_then_resume_preserves_manifest(tmp_path):
+def _manifest_of(corpus_hash, split):
+    return {
+        "corpus_hash": corpus_hash,
+        "actual_counts": {k: len(v) for k, v in split.items()},
+        "excluded_over_cap": 0,
+        "selected_records": {name: [{"id": r["id"], "prompt": r["prompt"], "instruction": r["prompt"],
+                                     "context": r["context"], "category": r["category"], "sha256": r["text_sha256"]}
+                                    for r in recs]
+                             for name, recs in split.items()},
+    }
+
+
+def test_split_identity_detects_membership_and_order_changes():
+    from scripts.experiments.qwen_operating_point import _split_identity
+    base = _split_of({"fit": [0, 1], "cusum": [2], "dev": [3], "eval": [4, 5]})
+    assert _split_identity(base) == _split_identity(_split_of({"fit": [0, 1], "cusum": [2], "dev": [3], "eval": [4, 5]}))
+    swap = _split_of({"fit": [4, 1], "cusum": [2], "dev": [3], "eval": [0, 5]})  # 0<->4 cross-split swap
+    assert _split_identity(base) != _split_identity(swap)
+    reorder = _split_of({"fit": [1, 0], "cusum": [2], "dev": [3], "eval": [4, 5]})  # within-fit reorder
+    assert _split_identity(base) != _split_identity(reorder)
+
+
+def test_split_from_manifest_reconstructs_ordered_split_and_refuses_legacy():
+    import pytest
+
+    from scripts.experiments.qwen_operating_point import RunConflict, _split_from_manifest
+    split = _split_of({"fit": [0, 1], "cusum": [2], "dev": [3], "eval": [4, 5]})
+    recon = _split_from_manifest(_manifest_of("h1", split))
+    assert [r["id"] for r in recon["eval"]] == [4, 5]
+    assert [r["prompt"] for r in recon["fit"]] == ["p0", "p1"]
+    # a manifest predating ordered-split resume (no prompt) cannot be safely reconstructed
+    with pytest.raises(RunConflict):
+        _split_from_manifest({"selected_records": {"fit": [{"id": 0, "sha256": "h0"}], "cusum": [], "dev": [], "eval": []}})
+
+
+def test_reconcile_run_resume_restores_pinned_split_not_the_rebuild(tmp_path):
+    # ASTRA-098 [P1]: a resume must evaluate the ORIGINAL split, never a rebuild whose membership
+    # changed while the union corpus_hash stayed the same -- else a completed fit prompt leaks into eval
     from scripts.experiments.qwen_operating_point import _reconcile_run
+    split_a = _split_of({"fit": [0], "cusum": [1], "dev": [2], "eval": [3]})
     minted = []
 
     def mint():
         minted.append(f"qwen_{len(minted) + 1}")
         return minted[-1]
 
-    man = _driver_manifest()
-    mode, mid = _reconcile_run(str(tmp_path), man, "idA", mint)
+    mode, mid, _m, _s = _reconcile_run(str(tmp_path), _manifest_of("h1", split_a), split_a, "idA", mint)
     assert mode == "fresh" and mid == "qwen_1" and len(minted) == 1
-    assert (tmp_path / "split-manifest.json").exists() and (tmp_path / "run-record.json").exists()
     manifest_bytes = (tmp_path / "split-manifest.json").read_bytes()
 
-    # a matching re-run reuses the recorded model id, mints nothing new, and leaves the manifest untouched
-    mode2, mid2 = _reconcile_run(str(tmp_path), man, "idA", mint)
+    # resume passing a DIFFERENT rebuilt split with the SAME union corpus_hash (cross-split swap)
+    split_b = _split_of({"fit": [3], "cusum": [2], "dev": [1], "eval": [0]})
+    mode2, mid2, _m2, s2 = _reconcile_run(str(tmp_path), _manifest_of("h1", split_b), split_b, "idA", mint)
     assert mode2 == "resume" and mid2 == "qwen_1" and len(minted) == 1
-    assert (tmp_path / "split-manifest.json").read_bytes() == manifest_bytes
+    assert [r["id"] for r in s2["eval"]] == [3] and [r["id"] for r in s2["fit"]] == [0]  # the ORIGINAL split
+    assert (tmp_path / "split-manifest.json").read_bytes() == manifest_bytes  # manifest untouched
 
 
-def test_reconcile_run_refuses_and_preserves_on_settings_or_corpus_change(tmp_path):
+def test_reconcile_run_refuses_on_settings_corpus_or_prior_artifacts(tmp_path):
     import pytest
 
     from scripts.experiments.qwen_operating_point import RunConflict, _reconcile_run
-    _reconcile_run(str(tmp_path), _driver_manifest("h1"), "idA", lambda: "qwen_1")
+    split_a = _split_of({"fit": [0], "cusum": [1], "dev": [2], "eval": [3]})
+    _reconcile_run(str(tmp_path), _manifest_of("h1", split_a), split_a, "idA", lambda: "qwen_1")
     before = (tmp_path / "split-manifest.json").read_bytes()
-
     with pytest.raises(RunConflict):  # a different configuration
-        _reconcile_run(str(tmp_path), _driver_manifest("h1"), "idB", lambda: "qwen_x")
-    with pytest.raises(RunConflict):  # same settings but a drifted corpus
-        _reconcile_run(str(tmp_path), _driver_manifest("h2"), "idA", lambda: "qwen_x")
+        _reconcile_run(str(tmp_path), _manifest_of("h1", split_a), split_a, "idB", lambda: "qwen_x")
+    with pytest.raises(RunConflict):  # same settings but a drifted corpus union
+        _reconcile_run(str(tmp_path), _manifest_of("h2", split_a), split_a, "idA", lambda: "qwen_x")
+    assert (tmp_path / "split-manifest.json").read_bytes() == before  # never overwritten on a conflict
 
-    assert (tmp_path / "split-manifest.json").read_bytes() == before  # the pinned manifest is never overwritten
+
+def test_reconcile_run_preserves_prior_artifacts_without_run_record(tmp_path):
+    # ASTRA-098 [P2]: a manifest present with NO run-record (interrupted init, or a pre-run-record dir)
+    # must be preserved, not overwritten as a fresh run
+    import pytest
+
+    from scripts.experiments.qwen_operating_point import RunConflict, _reconcile_run
+    (tmp_path / "split-manifest.json").write_text('{"corpus_hash": "old"}')
+    before = (tmp_path / "split-manifest.json").read_bytes()
+    split_new = _split_of({"fit": [0], "cusum": [1], "dev": [2], "eval": [3]})
+    with pytest.raises(RunConflict):
+        _reconcile_run(str(tmp_path), _manifest_of("new", split_new), split_new, "idA", lambda: "qwen_x")
+    assert (tmp_path / "split-manifest.json").read_bytes() == before
+    assert not (tmp_path / "run-record.json").exists()
