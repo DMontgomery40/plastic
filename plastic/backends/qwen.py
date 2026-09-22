@@ -155,7 +155,7 @@ class QwenBackend:
         self.dtype = next(model.parameters()).dtype
         self.vocab_size = int(config.vocab_size)
         self.checkpoint_digest = checkpoint_digest  # content digest for the session-identity check
-        self._schema_cache: list[tuple] | None = None
+        self._schema_cache: tuple | None = None
         # Overlapping GPU work aborts the MPS runtime (Metal command-buffer assertion, exit 134,
         # ASTRA-053), and the thread-local freeze flag does not make concurrent forwards safe. All
         # model/cache/probe execution on this shared backend is serialized through one lock, with
@@ -335,37 +335,46 @@ class QwenBackend:
             "tokenizer_vocab": int(getattr(self.tokenizer, "vocab_size", 0)),
         }
 
-    def _schema(self) -> list[tuple]:
-        """The expected per-layer cache structure of THIS backend, derived once from a fresh
-        ``init_state`` and cached: an ordered list of ``("linear", recurrent_shape, recurrent_dtype,
-        conv_shape)`` and ``("dynamic",)`` descriptors. Loads are validated against this trusted
-        reference — never against payload-supplied counts, which an attacker controls (ASTRA-066)."""
+    def _schema(self) -> tuple:
+        """The expected cache structure of THIS backend, derived once from a one-token WARM reference
+        (so it captures the attention K/V head/feature dims and dtype as well as the recurrent/conv
+        shapes and dtypes) and cached. Loads are validated against this trusted reference — never
+        against payload-supplied counts, which an attacker controls (ASTRA-066/069). Returns
+        ``(per_layer_specs, kv_heads, kv_feat, kv_dtype)``."""
         if self._schema_cache is None:
-            st = self.init_state()
-            schema: list[tuple] = []
-            for layer in st.cache.layers:
+            ref = self.init_state()
+            _, ref = self.process([0], ref)  # one token populates the attention K/V for the dims
+            specs: list[tuple] = []
+            kv_heads = kv_feat = kv_dtype = None
+            for layer in ref.cache.layers:
                 rs = getattr(layer, "recurrent_states", None)
-                if rs is not None and 0 in rs and rs[0] is not None:
+                if rs is not None and rs.get(0) is not None:
                     r = rs[0]
                     c = getattr(layer, "conv_states", {}).get(0)
-                    schema.append(("linear", tuple(r.shape), r.dtype, None if c is None else tuple(c.shape)))
+                    specs.append(("linear", tuple(r.shape), r.dtype, tuple(c.shape), c.dtype))
                 else:
-                    schema.append(("dynamic",))
-            self._schema_cache = schema
+                    specs.append(("dynamic",))
+                    k = getattr(layer, "keys", None)
+                    if k is not None and kv_heads is None:
+                        kv_heads, kv_feat, kv_dtype = int(k.shape[1]), int(k.shape[-1]), k.dtype
+            self._schema_cache = (specs, kv_heads, kv_feat, kv_dtype)
         return self._schema_cache
 
     def _validate_cache(self, cache) -> None:
-        """Refuse a malformed persisted cache clearly, rather than letting a bad payload fail on the
-        next forward (ASTRA-066). Checks the layer count and kinds against the trusted schema; each
-        linear layer's recurrent unit is present, correctly shaped and typed, with a present conv;
-        each dynamic layer carries no recurrent unit and consistent-length K/V; a position-zero cache
-        has all-zero recurrent memory; and every stored tensor is finite."""
-        schema = self._schema()
+        """Refuse a malformed persisted cache clearly, rather than letting a bad payload change or
+        break the next forward (ASTRA-066/069). Validates against the trusted schema: layer count and
+        kinds; each linear layer's recurrent and conv units present with the right shape/dtype and its
+        ``has_previous_state`` flag set; each attention layer carries no recurrent unit and, when it
+        has K/V, correct head/feature dims and dtype, equal-shaped K and V, and an ``is_initialized``
+        flag; K/V is present in ALL attention layers (a warm state) or NONE (position-zero, whose
+        recurrent memory must then be zero); every K/V length agrees; and all tensors are finite."""
+        specs, kv_heads, kv_feat, kv_dtype = self._schema()
         layers = getattr(cache, "layers", None)
-        if layers is None or len(layers) != len(schema):
-            raise ValueError(f"Qwen state layer count {None if layers is None else len(layers)} != expected {len(schema)}")
+        if layers is None or len(layers) != len(specs):
+            raise ValueError(f"Qwen state layer count {None if layers is None else len(layers)} != expected {len(specs)}")
         kv_lengths: list[int] = []
-        for idx, (layer, spec) in enumerate(zip(layers, schema)):
+        n_dynamic = n_dynamic_with_kv = 0
+        for idx, (layer, spec) in enumerate(zip(layers, specs)):
             if spec[0] == "linear":
                 rs = getattr(layer, "recurrent_states", None)
                 if not rs or rs.get(0) is None:
@@ -376,23 +385,33 @@ class QwenBackend:
                 cs = getattr(layer, "conv_states", None)
                 if not cs or cs.get(0) is None:
                     raise ValueError(f"layer {idx}: missing conv state")
-                if spec[3] is not None and tuple(cs[0].shape) != spec[3]:
-                    raise ValueError(f"layer {idx}: conv shape {tuple(cs[0].shape)} != expected {spec[3]}")
+                if tuple(cs[0].shape) != spec[3] or cs[0].dtype != spec[4]:
+                    raise ValueError(f"layer {idx}: conv shape/dtype {tuple(cs[0].shape)}/{cs[0].dtype} != expected {spec[3]}/{spec[4]}")
+                hp = getattr(layer, "has_previous_state", None)
+                if not hp or not hp.get(0):
+                    raise ValueError(f"layer {idx}: linear layer not initialized (has_previous_state)")
             else:  # dynamic (full-attention) layer
+                n_dynamic += 1
                 if getattr(layer, "recurrent_states", None) is not None:
                     raise ValueError(f"layer {idx}: expected a full-attention layer, found a recurrent one")
                 k, v = getattr(layer, "keys", None), getattr(layer, "values", None)
                 if (k is None) != (v is None):
                     raise ValueError(f"layer {idx}: inconsistent attention K/V (one present, one absent)")
                 if k is not None:
-                    if k.shape[-2] != v.shape[-2]:
-                        raise ValueError(f"layer {idx}: K/V length mismatch {k.shape[-2]} != {v.shape[-2]}")
+                    n_dynamic_with_kv += 1
+                    if not getattr(layer, "is_initialized", False):
+                        raise ValueError(f"layer {idx}: attention layer has K/V but is_initialized is False")
+                    if int(k.shape[1]) != kv_heads or int(k.shape[-1]) != kv_feat or k.dtype != kv_dtype:
+                        raise ValueError(f"layer {idx}: K/V heads/feature/dtype {tuple(k.shape)}/{k.dtype} != expected heads={kv_heads} feat={kv_feat} {kv_dtype}")
+                    if tuple(v.shape) != tuple(k.shape):
+                        raise ValueError(f"layer {idx}: K/V shape mismatch {tuple(k.shape)} != {tuple(v.shape)}")
                     kv_lengths.append(int(k.shape[-2]))
+        # K/V must be present in every attention layer (a warm state) or none (position-zero)
+        if n_dynamic_with_kv not in (0, n_dynamic):
+            raise ValueError(f"attention K/V present in {n_dynamic_with_kv} of {n_dynamic} layers (must be all or none)")
         if len(set(kv_lengths)) > 1:
             raise ValueError(f"inconsistent attention KV lengths across layers: {sorted(set(kv_lengths))}")
-        # a cache with no KV is position-zero; its recurrent memory must be exactly zero (a warm state
-        # with KV stripped would otherwise masquerade as position-zero)
-        if not kv_lengths:
+        if not kv_lengths:  # position-zero: recurrent memory must be exactly zero
             for idx, layer in enumerate(layers):
                 rs = getattr(layer, "recurrent_states", None)
                 if rs and rs.get(0) is not None and int(torch.count_nonzero(rs[0])) != 0:

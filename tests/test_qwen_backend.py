@@ -316,6 +316,52 @@ def test_load_state_dict_rejects_incompatible_and_malformed(backend):
     with pytest.raises(ValueError, match="position-zero"):
         backend.load_state_dict(m)
 
+    # ASTRA-069: initialization flags and attention dims that change/break the next forward
+    def first_dynamic(cache):
+        return next(l for l in cache.layers if getattr(l, "keys", None) is not None)
+
+    m = fresh()  # a linear layer with has_previous_state cleared (would change continuation)
+    first_linear(m["cache"]).has_previous_state[0] = False
+    with pytest.raises(ValueError, match="has_previous_state"):
+        backend.load_state_dict(m)
+
+    m = fresh()  # an attention layer with populated K/V but is_initialized False
+    first_dynamic(m["cache"]).is_initialized = False
+    with pytest.raises(ValueError, match="is_initialized"):
+        backend.load_state_dict(m)
+
+    m = fresh()  # a sliced attention key head-count (would crash the next forward)
+    d = first_dynamic(m["cache"])
+    d.keys = d.keys[:, :1]
+    with pytest.raises(ValueError, match="heads/feature/dtype"):
+        backend.load_state_dict(m)
+
+    m = fresh()  # K/V removed from ONE attention layer (others keep it) -> not all-or-none
+    d = first_dynamic(m["cache"])
+    d.keys = None
+    d.values = None
+    with pytest.raises(ValueError, match="all or none"):
+        backend.load_state_dict(m)
+
+    m = fresh()  # conv cast to a dtype the backend does not use
+    l = first_linear(m["cache"])
+    l.conv_states[0] = l.conv_states[0].to(torch.bfloat16)
+    with pytest.raises(ValueError, match="conv shape/dtype"):
+        backend.load_state_dict(m)
+
+
+def test_position_zero_state_persists_and_loads(backend):
+    # ASTRA-069: the supported position-zero initialization must still round-trip (no KV, zero
+    # recurrent) — the tightened validation must not reject a valid fresh state.
+    st = backend.init_state()
+    back = backend.load_state_dict(backend.state_dict(st))
+    assert back.position == 0
+    assert all(int(torch.count_nonzero(t)) == 0 for t in back.recurrent_leaves())
+    # and it can be forwarded after loading
+    ids = backend.encode("A short continuation from a reloaded position-zero state here today.")
+    y, _ = backend.process(ids[:4], back)
+    assert torch.isfinite(y).all()
+
 
 def test_forward_beta_scale_and_freeze_semantics(backend):
     ids = backend.encode("A sentence long enough for a clean forward and beta-scale check across it.")
