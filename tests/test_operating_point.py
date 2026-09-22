@@ -229,3 +229,43 @@ def test_summarize_flags_nonfinite_accepted_delta():
     rep = summarize_operating_point(txns)
     assert rep["prompt"]["accepted_change"] == 1  # only the finite positive one
     assert rep["anomalies"]["nonfinite_accepted"] == 1
+
+
+def _rep(fresh, carried):
+    return {"fresh": {"complete": fresh}, "carried": {"complete": carried}}
+
+
+def test_screen_verdict_separates_completion_from_pass():
+    # ASTRA-092: `complete` means all requested work RAN (fit + both eval regimes + follow-ups, not
+    # skipped/deadline-cut); the follow-up all_ok is a quality result folded into PASS, not completion.
+    from scripts.experiments.qwen_operating_point import _screen_verdict
+
+    ok_v = {"valid": True, "pass": True}
+
+    # everything ran and passed
+    v = _screen_verdict(fit_complete=True, report=_rep(True, True), followups={"all_ok": True}, verdict=ok_v)
+    assert v["complete"] is True and v["pass"] is True and v["followups_ok"] is True
+
+    # KEY separation: fully RAN but follow-ups flagged read-only turns -> complete, NOT pass
+    v = _screen_verdict(fit_complete=True, report=_rep(True, True), followups={"all_ok": False}, verdict=ok_v)
+    assert v["complete"] is True and v["followups_ran"] is True and v["followups_ok"] is False and v["pass"] is False
+
+    # follow-ups skipped (missing fixture): followups_ok null (never False), not complete
+    v = _screen_verdict(fit_complete=True, report=_rep(True, True), followups={"skipped": "fixture missing"}, verdict=ok_v)
+    assert v["followups_ok"] is None and v["followups_ran"] is False and v["complete"] is False and v["pass"] is False
+
+    # follow-ups deadline-cut: ran but incomplete -> not complete
+    v = _screen_verdict(fit_complete=True, report=_rep(True, True), followups={"all_ok": False, "incomplete": True}, verdict=ok_v)
+    assert v["followups_ran"] is False and v["complete"] is False and v["pass"] is False
+
+    # an incomplete eval regime -> not complete regardless of follow-ups
+    v = _screen_verdict(fit_complete=True, report=_rep(True, False), followups={"all_ok": True}, verdict=ok_v)
+    assert v["complete"] is False and v["pass"] is False
+
+    # everything ran but the criterion failed -> complete, not pass
+    v = _screen_verdict(fit_complete=True, report=_rep(True, True), followups={"all_ok": True}, verdict={"valid": True, "pass": False})
+    assert v["complete"] is True and v["pass"] is False
+
+    # fit incomplete -> not complete
+    v = _screen_verdict(fit_complete=False, report=_rep(True, True), followups={"all_ok": True}, verdict=ok_v)
+    assert v["complete"] is False

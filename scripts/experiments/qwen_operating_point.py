@@ -270,6 +270,31 @@ def _check_criterion(report: dict[str, Any], *, elig_max: float = 0.10, readonly
     return out
 
 
+def _screen_verdict(*, fit_complete: bool, report: dict[str, Any], followups: dict[str, Any], verdict: dict[str, Any]) -> dict[str, Any]:
+    """Separate COMPLETION (did all requested work run?) from PASS (the eval criterion plus the
+    follow-up smoke). The follow-up ``all_ok`` is a quality result, not a completeness measure: a
+    fully-run screen whose follow-ups flagged read-only turns is COMPLETE but not a pass — a distinct
+    statement from a screen that did not finish. ``complete`` requires the fit, both eval regimes AND
+    the follow-ups to have RUN (not skipped, not deadline-cut); ``pass`` additionally requires the
+    criterion (``verdict['pass']`` already folds in validity and eval-completeness) and follow-up
+    ``all_ok``. Follow-ups skipped for a missing fixture leaves ``followups_ok`` null, never False."""
+    eval_complete = bool(report["fresh"]["complete"] and report["carried"]["complete"])
+    skipped = bool(followups.get("skipped"))
+    followups_ran = (not skipped) and (not followups.get("incomplete"))
+    followups_ok = None if skipped else bool(followups.get("all_ok"))
+    complete = bool(fit_complete and eval_complete and followups_ran)
+    passed = bool(verdict.get("pass") and complete and (followups_ok is True))
+    return {
+        "fit_complete": bool(fit_complete),
+        "eval_complete": {"fresh": bool(report["fresh"]["complete"]), "carried": bool(report["carried"]["complete"])},
+        "followups_ran": followups_ran,
+        "followups_ok": followups_ok,
+        "valid": bool(verdict.get("valid")),
+        "pass": passed,
+        "complete": complete,
+    }
+
+
 def _run_followups(backend, cfg, calibration, gen, seed0, fixture_path, hcfg, deadline, *, _runner=None, _drive=None, _fixture=None):
     """Run the predeclared multi-turn follow-up sessions (never fit/tuned on). Each turn must complete
     without exception or nonfinite state and must not be entirely read-only; saved answers are for
@@ -422,17 +447,12 @@ def main() -> None:
     json.dump(followups, open(os.path.join(args.out, "followups-result.json"), "w"), indent=2)
 
     verdict = _check_criterion(report)
-    fit_complete = bool(fit_meta["calibration_fit_complete"])
-    eval_complete = report["fresh"]["complete"] and report["carried"]["complete"]
-    followups_ok = followups.get("all_ok", False) if not followups.get("skipped") else None
-    complete = fit_complete and eval_complete and bool(followups_ok)
-    result = {"thresholds": cal.thresholds, "criterion": verdict, "settings": vars(args), "seeds_base": seed,
-              "fit_complete": fit_complete, "eval_complete": {"fresh": report["fresh"]["complete"], "carried": report["carried"]["complete"]},
-              "followups_ok": followups_ok, "valid": verdict["valid"], "pass": bool(verdict["pass"] and complete), "complete": complete,
+    v = _screen_verdict(fit_complete=bool(fit_meta["calibration_fit_complete"]), report=report, followups=followups, verdict=verdict)
+    result = {"thresholds": cal.thresholds, "criterion": verdict, "settings": vars(args), "seeds_base": seed, **v,
               "dev_split": "unused (reserved for pre-freeze changes only)"}
     json.dump(result, open(os.path.join(args.out, "screen-result.json"), "w"), indent=2)
-    print(f"[oppoint] pass={result['pass']} valid={verdict['valid']} complete={complete} "
-          f"(fit={fit_complete}, eval={eval_complete}, followups={followups_ok})")
+    print(f"[oppoint] pass={v['pass']} valid={v['valid']} complete={v['complete']} "
+          f"(fit={v['fit_complete']}, eval={v['eval_complete']}, followups_ran={v['followups_ran']}, followups_ok={v['followups_ok']})")
     print(f"[oppoint] artifacts in {args.out}")
 
 
