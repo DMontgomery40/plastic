@@ -75,6 +75,39 @@ def fit_h(chains_z: list[list[list[float]]], *, k: float, max_rate: float, grid:
     return None, None
 
 
+def h_profile(chains_z: list[list[list[float]]], *, k: float, grid: list[float]) -> list[dict[str, Any]]:
+    """DESCRIPTIVE diagnostic only (never used to choose h or change the rule): for each h under lifecycle L,
+    the alarming turns, which CUSUM side(s) crossed h, and at which turn index within the chain."""
+    from plastic.harness.stats import Cusum
+
+    out = []
+    for h in grid:
+        n_turns = n_alarm = upper = lower = 0
+        by_turn: dict[int, int] = {}
+        for chain in chains_z:
+            state = (0.0, 0.0)
+            for t, zs in enumerate(chain):
+                c = Cusum(k, h)
+                c.s_hi, c.s_lo = state
+                hit_hi = hit_lo = False
+                for z in zs:
+                    pre_hi, pre_lo = c.s_hi, c.s_lo
+                    if c.update(float(z)):
+                        hit_hi = hit_hi or (pre_hi + float(z) - k > h)
+                        hit_lo = hit_lo or (pre_lo - float(z) - k > h)
+                n_turns += 1
+                if hit_hi or hit_lo:
+                    n_alarm += 1
+                    upper += hit_hi
+                    lower += hit_lo
+                    by_turn[t] = by_turn.get(t, 0) + 1
+                else:
+                    state = (c.s_hi, c.s_lo)
+        out.append({"h": h, "alarm_turns": n_alarm, "rate": n_alarm / n_turns if n_turns else None,
+                    "upper_side_turns": upper, "lower_side_turns": lower, "alarm_turns_by_turn_index": by_turn})
+    return out
+
+
 def decide(g1: float | None, g2: float | None, alarm: bool, th: dict[str, float]) -> tuple[bool, list[str]]:
     """The declared boundary rule: DISCARD iff G1 > tau1 or G2 > tau2 or the CUSUM alarmed in the turn.
     A turn with no scored chunk cannot fire G1/G2 (declared)."""
@@ -246,9 +279,21 @@ def main() -> None:
     fit_summary = {"n_turns": len(maxima), "tau1_chunk_loss": tau1, "tau1_achievable": ach1, "tau2_log_delta_norm": tau2,
                    "tau2_achievable": ach2, "cusum_h": h, "cusum_fit_turn_alarm_rate": h_rate, "cusum_reference_n": len(ref),
                    "fit_turn_maxima": maxima, "seconds": round(time.time() - t0, 1)}
-    print("[t1] fit:", json.dumps({k: v for k, v in fit_summary.items() if k != "fit_turn_maxima"}), flush=True)
+    fit_summary["h_profile_descriptive"] = h_profile(chains_z, k=CUSUM_K, grid=H_GRID)
+    print("[t1] fit:", json.dumps({k: v for k, v in fit_summary.items() if k not in ("fit_turn_maxima", "h_profile_descriptive")}), flush=True)
     if h is None:
-        raise SystemExit("no CUSUM h on the declared grid meets the declared fit rate; report and stop (FABLE-097 #5)")
+        # the declared stop (FABLE-097 #5): persist the fit evidence BEFORE stopping, so the stop is diagnosable
+        os.makedirs(args.out, exist_ok=True)
+        with open(out_path + ".tmp", "w", encoding="utf-8") as f:
+            json.dump({"kind": "T1 STOPPED at calibration (FABLE-097 #5): no CUSUM h on the declared grid meets the "
+                               "declared per-turn fit alarm rate; DEV not evaluated",
+                       "declaration": "SHARED_SCRATCHPAD FABLE-097", "fit": fit_summary, "fit_turns": fit_turns,
+                       "fit_chains_z": chains_z, "provenance": _invocation_provenance(args.device),
+                       "checkpoint_digest": manifest["checkpoint_digest"]}, f, indent=2)
+        os.replace(out_path + ".tmp", out_path)
+        for row in fit_summary["h_profile_descriptive"][::4]:
+            print("[t1] h_profile:", json.dumps(row), flush=True)
+        raise SystemExit("no CUSUM h on the declared grid meets the declared fit rate; fit evidence saved; stop (FABLE-097 #5)")
 
     # ---- EVAL on DEV: 4 chains x 4 turns, three arms
     dev_chains = chains_of(dev, lambda i: SEED + DEV_SEED_OFFSET + i)

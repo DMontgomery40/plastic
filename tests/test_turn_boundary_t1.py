@@ -113,3 +113,15 @@ def test_candidate_chain_nonfinite_state_is_restored_and_ends_the_chain():
     assert len(out) == 1 and out[0]["decision"] == "discard"
     assert "execution_failure:nonfinite_state" in out[0]["reasons"] and out[0]["chain_ended"] == "execution_failure"
     assert out[0]["restore_equals_turn_start"] is True
+
+
+def test_h_profile_matches_fit_h_counts_and_attributes_the_alarming_side():
+    from scripts.experiments.qwen_turn_boundary_t1 import h_profile
+    upper = [[[1.5], [3.5], [3.1]]]                       # the fit_h case above: 2/3 turns alarm at h=3.5 (upper)
+    row = h_profile(upper, k=0.5, grid=[3.5])[0]
+    assert (row["alarm_turns"], row["upper_side_turns"], row["lower_side_turns"]) == (2, 2, 0)
+    assert row["alarm_turns_by_turn_index"] == {1: 1, 2: 1}
+    assert fit_h(upper, k=0.5, max_rate=2 / 3, grid=[3.5]) == (3.5, 2 / 3)   # same count as the fit
+    lower = [[[-3.0, -3.0]]]                              # s_lo 2.5 -> 5.0 > 4: a lower-side alarm
+    row = h_profile(lower, k=0.5, grid=[4.0])[0]
+    assert (row["alarm_turns"], row["upper_side_turns"], row["lower_side_turns"]) == (1, 0, 1)
