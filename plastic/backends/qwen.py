@@ -253,12 +253,16 @@ class QwenBackend:
         """Every persisted tensor a commit or restore would carry must be finite: the recurrent
         memory and conv history on the linear-attention layers, and the attention KV on the
         full-attention layers. Missing/empty fields (e.g. KV before any token) are skipped."""
+        # A genuinely uninitialized cache carries {0: None} slots (Transformers cache_utils), so guard
+        # None — is_finite is a finiteness check, not a structure check, and must not raise on an
+        # uninitialized state. Whether a *persisted* state is missing an expected initialized unit is
+        # validated in load_state_dict, which rejects it rather than skipping it silently (ASTRA-063).
         for layer in getattr(state.cache, "layers", []):
             tensors: list[torch.Tensor] = []
             for attr in ("recurrent_states", "conv_states"):
                 d = getattr(layer, attr, None)
                 if d:
-                    tensors.extend(d.values())
+                    tensors.extend(v for v in d.values() if v is not None)
             for attr in ("keys", "values"):
                 t = getattr(layer, attr, None)
                 if t is not None:
@@ -376,21 +380,28 @@ class QwenBackend:
         return out
 
     def canary_gradient(self, state: Any, suite: Any) -> list[torch.Tensor]:
-        """∂(coherence-probe NLL)/∂(recurrent leaves) at ``state``, frozen — the projection
-        direction, summed over the coherence probes (they share the same underlying state, matching
-        plastic's batch sum). Returns 18 correctly-shaped zero tensors when there is no coherence
-        probe, so the harness never skips its first projection."""
+        """∂(coherence score)/∂(recurrent leaves) at ``state``, frozen — the projection direction.
+
+        This must differentiate the SAME scalar ``score_suite`` reports: the mean per-probe NLL over
+        the scorable coherence probes (equal weight per probe). So the per-probe frozen gradients are
+        summed and **divided by the scorable-probe count** — a plain sum would be N× the reported
+        score's derivative (ASTRA-064). Empty/one-token probes do not enter the count. Returns 18
+        correctly-shaped zero tensors when there is no scorable coherence probe, so the harness never
+        skips its first projection. Qwen weights each probe equally here and in ``score_suite``; this
+        differs from plastic's per-token weighting on ragged probes — the chosen Qwen objective."""
         leaves0 = state.recurrent_leaves()
         total: list[torch.Tensor] | None = None
+        n = 0
         for p in getattr(suite, "coherence", None) or []:
             ids = [int(t) for t in p]
             if len(ids) < 2:
                 continue
             g = self.recurrent_grad(state, ids[:-1], ids[1:])
             total = g if total is None else [a + b for a, b in zip(total, g)]
+            n += 1
         if total is None:
             return [torch.zeros_like(t) for t in leaves0]
-        return [t.detach() for t in total]
+        return [(t / n).detach() for t in total]
 
     @torch.no_grad()
     def apply_projected(self, working: QwenState, committed: QwenState, projected: list[torch.Tensor]) -> None:

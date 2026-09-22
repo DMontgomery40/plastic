@@ -186,6 +186,18 @@ def test_is_finite_covers_recurrent_conv_and_kv(backend):
     assert injected and not backend.is_finite(st_k)
 
 
+def test_is_finite_does_not_raise_on_uninitialized_cache(backend):
+    # ASTRA-063: a genuinely uninitialized cache carries {0: None} recurrent/conv slots; is_finite is
+    # a finiteness check, not a structure check, and must not raise TypeError on None (structural
+    # validation of a persisted state belongs to load_state_dict).
+    from transformers import DynamicCache
+
+    from plastic.backends.qwen import QwenState
+
+    st = QwenState(DynamicCache(config=backend.config))
+    assert backend.is_finite(st) is True  # nothing non-finite is present
+
+
 def test_forward_beta_scale_and_freeze_semantics(backend):
     ids = backend.encode("A sentence long enough for a clean forward and beta-scale check across it.")
     # forward matches process on the plain path and returns an empty per-token signal list
@@ -252,6 +264,24 @@ def test_score_suite_is_read_only_and_gradient_is_defined(backend):
     z = backend.canary_gradient(st, _Empty())
     assert len(z) == 18 and all(int(torch.count_nonzero(x)) == 0 for x in z)
     assert scores["coherence"] != scores["poison"]  # sanity: the two sets score differently
+
+    # ASTRA-064: canary_gradient differentiates the mean-per-probe coherence score, so duplicating a
+    # coherence probe leaves BOTH the score and the gradient unchanged (a plain sum would double the
+    # gradient).
+    class _One:
+        domain = "text"
+        coherence = [ids[:8]]
+        poison: list = []
+
+    class _Two:
+        domain = "text"
+        coherence = [ids[:8], ids[:8]]
+        poison: list = []
+
+    g1 = backend.canary_gradient(st, _One())
+    g2 = backend.canary_gradient(st, _Two())
+    assert all(torch.allclose(a, b, atol=1e-5) for a, b in zip(g1, g2))
+    assert backend.score_suite(st, _One())["coherence"] == pytest.approx(backend.score_suite(st, _Two())["coherence"])
 
 
 def test_apply_projected_overwrites_recurrent_from_committed(backend):
