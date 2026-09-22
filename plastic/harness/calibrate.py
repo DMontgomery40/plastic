@@ -173,9 +173,11 @@ def calibrated_cusum_h(zs: list[float], *, k: float, h_min: float, target_fpr: f
         if rate <= target_fpr:
             best_h, best_rate = h, rate
             break
-    # Zero alarms over n benign chunks means "rate <= ~1/n at this sample size", not exactly 0 —
-    # report the finite-sample resolution floor, the same way the conformal achievable rates do.
-    return best_h, max(best_rate, 1.0 / (n + 1))
+    # best_rate is the empirical alarm frequency at best_h (alarms / n) on the calibration
+    # z-sequence — reported verbatim, including 0.0 when no alarm fired. Zero observed alarms is
+    # an observation, not a claim of zero population risk; do not floor it to a resolution
+    # convention (that would report a rate the replay never produced).
+    return best_h, best_rate
 
 
 def _continuous_cusum_vals(runner, stream_iter, *, n: int, k_signal: str = "log_delta_norm") -> list[float]:

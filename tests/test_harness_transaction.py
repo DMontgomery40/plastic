@@ -305,9 +305,17 @@ def test_calibrated_cusum_h_holds_benign_alarm_rate():
     assert got is not None
     h, rate = got
     assert h >= 5.0 and rate <= 0.01 + 1e-9
+    # The reported rate is the empirical alarm frequency at h — exactly alarms/n on a replay, not
+    # a floored resolution convention.
     c = Cusum(0.5, h)
     alarms = sum(1 for z in zc if c.update(z))
-    assert alarms / len(zc) <= 0.01 + 1e-9
+    assert rate == alarms / len(zc)
+    # Zero-alarm case: a stream that never alarms at h_min must report exactly 0.0, not a floor.
+    for n in (16, 64, 256):
+        zz = [0.0] * n  # every z below k=0.5, so s_hi/s_lo never grow -> no alarm at any h >= h_min
+        hz, rz = calibrated_cusum_h(zz, k=0.5, h_min=5.0, target_fpr=0.01)
+        cz = Cusum(0.5, hz)
+        assert rz == sum(1 for z in zz if cz.update(z)) / n == 0.0
     # A biased signal (nonzero benign mean) needs a strictly higher threshold to hold the same
     # finite-stream rate — it would still ratchet on a longer stream. This is exactly the bias a
     # shared reset-every-N reference induces, and why the CUSUM gets its own continuous reference.

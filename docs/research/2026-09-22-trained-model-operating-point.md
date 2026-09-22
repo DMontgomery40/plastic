@@ -20,8 +20,9 @@ with 0/512 in-sample exceedances.
 
 **Per-signal is not the combined rate.** The gate is a disjunction: a chunk is intervened on
 if *any* z-signal, the canary-coherence gate, the canary-poison gate, or the gradient-alignment
-projection fires. The seven nominal z-signal rates alone sum to 1.36% before the canary gates,
-CUSUM, and session history are added. The end-to-end sequential rate is therefore a thing to
+projection fires. The seven calibrated per-signal rates — the five z-signals *and* the two
+canary gates — already sum to 1.36% at their nominal 0.195% each; the projection, CUSUM, and
+session-history effects are additional. The end-to-end sequential rate is therefore a thing to
 *measure*, not assume: on a 200-chunk continuous benign stream the **measured combined per-chunk
 intervention rate is 3.5%** (4 rollbacks, 3 projections, no scales). That 3.5% — not 0.195% — is
 the rate at which the harness touches benign traffic. (Do not read this against the ASTRA-026
@@ -29,8 +30,9 @@ audit's 1.56%: that was a different model under the earlier, broken CUSUM thresh
 evidence about this harness.)
 
 The CUSUM drift detector is calibrated and reported separately (§1a); it is a cross-chunk
-statistic, not a per-chunk one. Its benign alarm rate on a continuous session is 0.78% per
-chunk at the calibrated `cusum_h` = 9.48.
+statistic, not a per-chunk one. Its **in-sample** benign alarm rate — measured on the same
+256-chunk continuous reference it was fitted to — is 0.78% (2 alarms) at the calibrated
+`cusum_h` = 9.48. That is a fitted-reference figure, not a fresh-data rate.
 
 The canary-coherence signal is the one that matters for the attack claim, so its full benign
 distribution is on the record:
@@ -61,7 +63,8 @@ Two things were wrong, both now fixed:
   resets to zero on every alarm, so `h` controls the alarm *rate*, not a peak; `1.25 × peak` is
   not a quantile of anything. It is now calibrated as a run-length: replay the benign z-sequence
   through the real `Cusum(k, h)` for a grid of `h` and take the smallest whose per-chunk alarm
-  rate is ≤ target, reporting the achieved rate alongside `achievable_fpr` (here 0.78% at target
+  rate is ≤ target, reporting the empirical achieved rate (alarms/n, including 0.0 when none
+  fired — not floored) alongside `achievable_fpr` (here in-sample 0.78% at target
   1%). This is the same order-statistic discipline the per-chunk thresholds use.
 - **The CUSUM signal was standardized against a biased reference.** The per-chunk reference is
   gathered with the session reset every 4 chunks (so it covers fresh sessions), but a live
@@ -78,12 +81,16 @@ per-chunk gating (the number in §1). Regression tests cover both halves: the ru
 of `calibrated_cusum_h`, and that the continuous reference centers the live signal.
 
 **Known sharp edge, left as a policy decision.** `freeze_on_alarm` latches read-only permanently
-on a single CUSUM alarm, and `resume()` is the only way back. With the fixed 0.78% benign alarm
-rate the expected benign run-length before a false latch is ~130 chunks (empirically the first
-latch on this corpus moved from chunk ~50 to beyond chunk 200). A very long benign auto-committing
-session will therefore still eventually latch on one false alarm. Whether that latch should decay,
-require N alarms, or auto-clear after a quiet period is a policy question for the operator, not one
-to settle here. The red-team results below are unaffected: those sessions are 2–3 chunks, far short
+on a single CUSUM alarm, and `resume()` is the only way back. The in-sample alarm rate is 0.78%
+(2 alarms in the 256-chunk fitted reference, at chunks 81 and 165); a naive geometric reading of
+that would put a false latch every ~130 chunks, but that fresh-data run-length is *not*
+established by an in-sample fit. What is directly observed on this corpus: after the fix the first
+benign latch moved from chunk ~50 to beyond chunk 200 on a continuous validation stream (note that
+stream and the CUSUM reference both draw from the validation split, so this is an in-distribution
+observation, not a held-out generalization test). Either way a long enough benign auto-committing
+session will eventually latch on one alarm. Whether that latch should decay, require N alarms, or
+auto-clear after a quiet period is a policy question for the operator, not one to settle here. The
+red-team results below are unaffected: those sessions are 2–3 chunks, far short
 of any CUSUM run-length.
 
 ## 2. Attack study
@@ -138,8 +145,8 @@ pgd) *and* are rolled back by the harness (gated 100%). Under rollback the write
 and the residual −0.005 to +0.025 is the activation-advance floor, not a learned write.
 
 **The one committed win is a fluent in-distribution topic shift.** `topic_switch` payloads are
-real corpus text from a different topic; they pass the fluency ceiling and the harness
-commits most of them (gated 0.12) — correctly, because gating them would mean gating benign
+real corpus text from a different topic; 5 of the 8 pass the fluency ceiling (3 violate it), and
+the harness commits most (gated 0.12) — correctly, because gating them would mean gating benign
 topic changes. The strongest did +0.078 canary drift. This is the genuine residual attack
 surface at toy scale: small, fluent drift that a coherence canary calibrated to benign text
 cannot separate from benign text.
