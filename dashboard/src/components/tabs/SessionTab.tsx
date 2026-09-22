@@ -55,7 +55,31 @@ function BudgetMeter({ used, total }: { used: number; total: number | null }) {
   );
 }
 
-function CanaryPanel({ transactions }: { transactions: TransactionRecord[] }) {
+/**
+ * Which empty/populated state the canary panel is in. Absence of measurements is
+ * a fact about this session's traffic, not about the model: only an explicit
+ * `has_canary === false` licenses the "no canary suite" claim. When the suite is
+ * present (or its presence is not yet known) but nothing has been scored, the
+ * honest statement is that no measurements are recorded yet.
+ */
+export type CanaryPanelState = 'populated' | 'no-suite' | 'no-measurements';
+
+export function canaryPanelState(
+  hasMeasurements: boolean,
+  hasCanarySuite: boolean | null | undefined,
+): CanaryPanelState {
+  if (hasMeasurements) return 'populated';
+  if (hasCanarySuite === false) return 'no-suite';
+  return 'no-measurements';
+}
+
+function CanaryPanel({
+  transactions,
+  hasCanarySuite,
+}: {
+  transactions: TransactionRecord[];
+  hasCanarySuite: boolean | null;
+}) {
   // Three curves, not two. `signals.*_after` is the PROPOSED update's effect,
   // measured before the decision; `accepted.*_after` is what was actually
   // committed. On a rolled-back chunk they diverge, and that gap is the whole
@@ -69,15 +93,28 @@ function CanaryPanel({ transactions }: { transactions: TransactionRecord[] }) {
     poison_proposed: tx.signals.canary_poison_after,
     poison_accepted: tx.accepted?.canary_poison_after ?? null,
   }));
-  const hasCanary = rows.some((r) => isNum(r.coherence_before) || isNum(r.poison_before));
+  const hasMeasurements = rows.some((r) => isNum(r.coherence_before) || isNum(r.poison_before));
+  const state = canaryPanelState(hasMeasurements, hasCanarySuite);
 
-  if (!hasCanary) {
+  if (state === 'no-suite') {
     return (
       <Panel title="Canary suite" subtitle="Coherence must not get worse; poison must not get better.">
         <Empty
-          title="No canary probes ran on these chunks."
-          detail="This model has no canary suite, so every canary number on this session is unavailable, not zero."
+          title="This model has no canary suite."
+          detail="Without a calibration there are no canary probes, so every canary number on this session is unavailable, not zero. Calibrating the model builds the suite."
           command="uv run plastic calibrate <model_id> --data artifacts/data/wikitext"
+        />
+      </Panel>
+    );
+  }
+
+  if (state === 'no-measurements') {
+    return (
+      <Panel title="Canary suite" subtitle="Coherence must not get worse; poison must not get better.">
+        <Empty
+          title="No canary measurements recorded yet."
+          detail="No canary probes have been scored on this session's chunks so far. Feed the session and each chunk is scored before and after its update; the numbers are unavailable here only because none have been taken yet."
+          command={'uv run plastic chat <session_id> "a first prompt"'}
         />
       </Panel>
     );
@@ -485,7 +522,7 @@ export function SessionTab() {
         </Panel>
       ) : null}
 
-      <CanaryPanel transactions={transactions} />
+      <CanaryPanel transactions={transactions} hasCanarySuite={model?.record.has_canary ?? null} />
 
       <Panel
         title="Calibrated rates against what this session did"

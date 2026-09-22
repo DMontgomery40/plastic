@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { hasRunningJob, initialState, isPolling, mergeSessionSummary, startJobPolling, stopJobPolling, useStore } from './index';
 import {
+  HARNESS_OVERRIDES,
   applyOverride,
   boolOverrideState,
   boolOverrideValue,
   buildLineageForest,
 } from '../components/tabs/SessionsTab';
+import { canaryPanelState } from '../components/tabs/SessionTab';
 import { maxUnprotectedDamage } from '../components/tabs/RedTeamTab';
 import { bestHeldoutLoss } from '../components/tabs/TrainTab';
 import { countsFromSession, interventionRate } from '../components/panels/RatePanel';
@@ -747,6 +749,37 @@ describe('harness boolean overrides are tri-state', () => {
     expect('log_only' in ov).toBe(false);
     // the create-session form sends the object only when at least one key is set
     expect(Object.keys(ov).length > 0).toBe(true);
+  });
+
+  it('documents that the rollback flag does not gate statistical or CUSUM rollbacks', () => {
+    const flag = HARNESS_OVERRIDES.find((o) => o.key === 'enable_rollback');
+    // the label must not read as a switch for all rollbacks
+    expect(flag?.label.toLowerCase()).not.toBe('rollback enabled');
+    // and the help text must state that the statistical / CUSUM rollbacks stay on
+    const hint = flag?.hint?.toLowerCase() ?? '';
+    expect(hint).toContain('cusum');
+    expect(hint).toContain('statist');
+    expect(hint).toMatch(/stay active|remain active|still active/);
+  });
+});
+
+describe('canary panel empty state', () => {
+  it('claims no canary suite only when the model summary says has_canary is false', () => {
+    expect(canaryPanelState(false, false)).toBe('no-suite');
+  });
+
+  it('says measurements are missing, not the suite, when a calibrated model has no traffic yet', () => {
+    // has_canary true, zero recorded measurements: an evidence-availability state
+    expect(canaryPanelState(false, true)).toBe('no-measurements');
+    // presence unknown (model detail not loaded) must not assert absence either
+    expect(canaryPanelState(false, null)).toBe('no-measurements');
+    expect(canaryPanelState(false, undefined)).toBe('no-measurements');
+  });
+
+  it('shows the populated view whenever measurements exist', () => {
+    expect(canaryPanelState(true, true)).toBe('populated');
+    expect(canaryPanelState(true, false)).toBe('populated');
+    expect(canaryPanelState(true, null)).toBe('populated');
   });
 });
 

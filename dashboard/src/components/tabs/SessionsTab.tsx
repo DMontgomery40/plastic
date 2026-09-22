@@ -70,12 +70,22 @@ function TreeRow({ node, depth, current, onSelect }: { node: TreeNode; depth: nu
   );
 }
 
-const HARNESS_OVERRIDES: Array<{ key: keyof HarnessConfig; label: string; kind: 'number' | 'bool' }> = [
+export const HARNESS_OVERRIDES: Array<{
+  key: keyof HarnessConfig;
+  label: string;
+  kind: 'number' | 'bool';
+  hint?: string;
+}> = [
   { key: 'budget_chunk', label: 'Budget per chunk', kind: 'number' },
   { key: 'budget_session', label: 'Budget per session', kind: 'number' },
   { key: 'z_rollback', label: 'z rollback', kind: 'number' },
   { key: 'z_scale', label: 'z scale', kind: 'number' },
-  { key: 'enable_rollback', label: 'Rollback enabled', kind: 'bool' },
+  {
+    key: 'enable_rollback',
+    label: 'Canary / Fisher rollback',
+    kind: 'bool',
+    hint: 'Gates the canary-coherence, canary-poison, and Fisher-drift rollbacks only. Statistical (z-score / threshold) and CUSUM rollbacks are governed by the statistics gate and stay active even when this is off.',
+  },
   { key: 'enable_projection', label: 'Projection enabled', kind: 'bool' },
   { key: 'log_only', label: 'Log only (decide, never apply)', kind: 'bool' },
   { key: 'learn_from_generation', label: 'Learn from generated tokens', kind: 'bool' },
@@ -283,20 +293,23 @@ export function SessionsTab() {
               <p className="text-label font-semibold uppercase tracking-wide text-ink-muted">Harness overrides</p>
               {HARNESS_OVERRIDES.map((item) =>
                 item.kind === 'bool' ? (
-                  <div key={item.key} className="flex items-center gap-2">
-                    <label htmlFor={`ov-${item.key}`} className="w-44 shrink-0 text-xs text-ink-secondary">
-                      {item.label}
-                    </label>
-                    <Select
-                      id={`ov-${item.key}`}
-                      value={boolOverrideState(overrides[item.key] as boolean | undefined)}
-                      onChange={(v) => setOverride(item.key, boolOverrideValue(v as BoolOverrideState))}
-                      options={[
-                        { value: 'inherit', label: 'Inherit default' },
-                        { value: 'on', label: 'On' },
-                        { value: 'off', label: 'Off' },
-                      ]}
-                    />
+                  <div key={item.key} className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <label htmlFor={`ov-${item.key}`} className="w-44 shrink-0 text-xs text-ink-secondary">
+                        {item.label}
+                      </label>
+                      <Select
+                        id={`ov-${item.key}`}
+                        value={boolOverrideState(overrides[item.key] as boolean | undefined)}
+                        onChange={(v) => setOverride(item.key, boolOverrideValue(v as BoolOverrideState))}
+                        options={[
+                          { value: 'inherit', label: 'Inherit default' },
+                          { value: 'on', label: 'On' },
+                          { value: 'off', label: 'Off' },
+                        ]}
+                      />
+                    </div>
+                    {item.hint ? <p className="text-micro text-ink-muted">{item.hint}</p> : null}
                   </div>
                 ) : (
                   <div key={item.key} className="flex items-center gap-2">
