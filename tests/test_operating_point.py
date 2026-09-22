@@ -400,3 +400,80 @@ def test_apply_exclusions_reserves_ids_duplicates_and_context_groups():
     # an empty spec keeps everything
     kept2, report2 = _apply_exclusions(rows, ids=set(), hash_prefixes=())
     assert len(kept2) == 5 and report2["n_excluded_total"] == 0
+
+
+def _seed_drive(runner, tok, prompt, *, max_new_tokens, temperature, top_k, gen):
+    # two commits per turn (prompt + generation source); the completion encodes the seed so a resume's
+    # equivalence can be checked by the per-turn completion
+    runner.transactions.append({"sources": {"user": 8, "model": 0}, "decision": {"kind": "commit"}, "eligible": True, "accepted": {"delta_norm": 1.0}})
+    runner.transactions.append({"sources": {"user": 0, "model": 8}, "decision": {"kind": "commit"}, "eligible": True, "accepted": {"delta_norm": 1.0}})
+    return (f"s{gen.initial_seed()}", [1], [2])
+
+
+def _eval_sig(rep):
+    return {reg: ([s["ids"] for s in rep[reg]["sessions"]],
+                  [[t["completion"] for t in s["turns"]] for s in rep[reg]["sessions"]],
+                  rep[reg]["complete"]) for reg in ("fresh", "carried")}
+
+
+def test_eval_resume_extends_to_uninterrupted_equivalence(monkeypatch):
+    # ASTRA-092: an interrupted-then-resumed eval reproduces the uninterrupted result exactly -- same
+    # per-regime session ids, per-turn seeds (via completions) and complete flags -- with no leakage
+    # (the same pinned groups) and matched seeds preserved across the interruption
+    import scripts.experiments.qwen_operating_point as qop
+    from scripts.experiments.qwen_operating_point import _eval_sessions
+
+    prompts = [{"id": i, "prompt": f"p{i}"} for i in range(6)]
+    ref = _eval_sessions(None, None, None, prompts, hcfg=None, gen=_gen_settings(), seed_base=700, chains=3,
+                         deadline=1e18, _runner=_FakeRunner(["commit"] * 400), _drive=_seed_drive)
+    assert ref["fresh"]["complete"] and ref["carried"]["complete"]
+    full = _eval_sig(ref)
+
+    clock = {"t": 0.0}
+    monkeypatch.setattr(qop.time, "time", lambda: clock["t"])
+
+    def clock_drive(runner, tok, prompt, *, max_new_tokens, temperature, top_k, gen):
+        out = _seed_drive(runner, tok, prompt, max_new_tokens=max_new_tokens, temperature=temperature, top_k=top_k, gen=gen)
+        clock["t"] += 1.0
+        return out
+
+    cap = {"fresh": [], "carried": []}
+
+    def prog(regime, rec, txns, next_group):
+        cap[regime].append({"record": rec, "txns": txns})
+
+    # deadline mid-way: some fresh sessions complete, then the run is cut
+    _eval_sessions(None, None, None, prompts, hcfg=None, gen=_gen_settings(), seed_base=700, chains=3,
+                   deadline=3.5, on_progress=prog, _runner=_FakeRunner(["commit"] * 400), _drive=clock_drive)
+    assert 0 < len(cap["fresh"]) < 6  # genuinely interrupted mid fresh regime
+
+    resumed = _eval_sessions(None, None, None, prompts, hcfg=None, gen=_gen_settings(), seed_base=700, chains=3,
+                             deadline=1e18, restore=cap, _runner=_FakeRunner(["commit"] * 400), _drive=clock_drive)
+    assert _eval_sig(resumed) == full  # the resumed run reproduces the uninterrupted result exactly
+
+
+def test_eval_operating_point_aggregates_complete_sessions_only(monkeypatch):
+    # ASTRA-092: a cut group is durable evidence in raw_transactions/sessions but must NOT enter the
+    # operating_point aggregate (no mixed denominator)
+    import scripts.experiments.qwen_operating_point as qop
+    from scripts.experiments.qwen_operating_point import _eval_sessions
+
+    clock = {"t": 0.0}
+    monkeypatch.setattr(qop.time, "time", lambda: clock["t"])
+
+    def clock_drive(runner, tok, prompt, *, max_new_tokens, temperature, top_k, gen):
+        out = _seed_drive(runner, tok, prompt, max_new_tokens=max_new_tokens, temperature=temperature, top_k=top_k, gen=gen)
+        clock["t"] += 1.0
+        return out
+
+    prompts = [{"id": i, "prompt": f"p{i}"} for i in range(4)]
+    # fresh's 4 singleton turns finish (clock 0->4); the carried chain of 4 starts at clock 4 and is
+    # cut after 2 turns (clock ->6), so the carried regime has one partial (incomplete) group
+    rep = _eval_sessions(None, None, None, prompts, hcfg=None, gen=_gen_settings(), seed_base=0, chains=1,
+                         deadline=5.5, _runner=_FakeRunner(["commit"] * 100), _drive=clock_drive)
+    carried = rep["carried"]
+    assert carried["complete"] is False and carried["n_complete_sessions"] == 0
+    assert len(carried["raw_transactions"]) == 4          # the 2 completed turns' transactions are evidence
+    # but the operating point aggregated zero complete sessions -> no eligible denominator from the partial
+    assert carried["operating_point"]["prompt"]["eligible"] == 0
+    assert carried["operating_point"]["generation"]["eligible"] == 0

@@ -158,12 +158,22 @@ def _cat_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
     return out
 
 
-def _eval_sessions(backend, cfg, calibration, prompts, *, hcfg, gen, seed_base, chains, deadline, _runner=None, _drive=None):
+def _eval_sessions(backend, cfg, calibration, prompts, *, hcfg, gen, seed_base, chains, deadline,
+                   restore=None, on_progress=None, _runner=None, _drive=None):
     """Evaluate the locked set through the frozen harness in two regimes on ONE reused backend/runner
     (fresh sessions reset between; carried chains retain state within a chain), via the shared
     drive_chat_turn. Records per-session eligible/accepted-by-source, read-only, completions and
     outcomes, and the ordered raw transactions; the deadline is honored per turn; completion is by
-    processed-vs-expected ids. ``_runner``/``_drive`` allow a fake runner/drive for tests."""
+    processed-vs-expected ids.
+
+    Resumable across invocations: ``restore`` = {regime: [{"record", "txns"}, ...]} restores the
+    COMPLETE sessions already collected, and ``on_progress(regime, record, txns, next_group)`` is
+    called after each newly completed session so the caller can append it durably. Each turn's seed is
+    the row's ordinal position in the ordered prompt list (seed_base + position), so an interruption
+    never shifts a seed and fresh row i / carried row i still share it. A group cut mid-way is reported
+    as durable evidence (incomplete) but NOT persisted; it re-runs from its start on resume (reset() is
+    a clean slate). The operating point aggregates COMPLETE sessions only, never a partial group.
+    ``_runner``/``_drive`` allow a fake runner/drive for tests."""
     import torch
 
     from plastic.harness.calibrate import summarize_operating_point
@@ -204,36 +214,55 @@ def _eval_sessions(backend, cfg, calibration, prompts, *, hcfg, gen, seed_base, 
 
     def _run(regime: str, groups: list[list[dict]], seed0: int) -> dict[str, Any]:
         expected = [r["id"] for g in groups for r in g]
-        sessions, all_tx, processed, salt = [], [], [], 0
+        # per-group starting ordinal (the row's position in the ordered prompt list); the per-turn seed
+        # is seed0 + ordinal, so it depends only on position and an interruption cannot shift it
+        offsets, off = [], 0
         for g in groups:
+            offsets.append(off)
+            off += len(g)
+        restored = (restore or {}).get(regime) or []
+        complete = [x["record"] for x in restored]                      # COMPLETE sessions only
+        complete_tx = [t for x in restored for t in x["txns"]]
+        processed = [i for rec in complete for i in rec["ids"]]
+        partial: list[tuple[dict, list[dict]]] = []                     # a cut group: reported, not persisted
+        gi = len(restored)
+        while gi < len(groups):
             if time.time() > deadline:
                 break
+            g = groups[gi]
             runner.reset()
             turns = []
-            for r in g:
+            for j, r in enumerate(g):
                 if time.time() > deadline:
                     break
-                turns.append(_turn(r["prompt"], seed0 + salt))
-                processed.append(r["id"])
-                salt += 1
-            incomplete = len(turns) != len(g)
-            if turns:  # keep the completed turns' records even if the chain was cut (durable evidence)
-                rec, txns = _session_record([r["id"] for r in g[:len(turns)]], regime, turns)
-                rec["incomplete"] = incomplete
-                sessions.append(rec)
-                all_tx.extend(txns)
-            if incomplete:
+                turns.append(_turn(r["prompt"], seed0 + offsets[gi] + j))
+            if len(turns) != len(g):  # cut mid-group: durable evidence only; re-run from start on resume
+                if turns:
+                    rec, txns = _session_record([r["id"] for r in g[:len(turns)]], regime, turns)
+                    rec["incomplete"] = True
+                    partial.append((rec, txns))
                 break
-        return {"operating_point": summarize_operating_point(all_tx), "sessions": sessions,
-                "expected_ids": expected, "processed_ids": processed,
+            rec, txns = _session_record([r["id"] for r in g], regime, turns)
+            rec["incomplete"] = False
+            complete.append(rec)
+            complete_tx.extend(txns)
+            processed.extend(r["id"] for r in g)
+            gi += 1
+            if on_progress is not None:
+                on_progress(regime, rec, txns, gi)
+        report_sessions = complete + [rec for rec, _ in partial]
+        report_tx = complete_tx + [t for _, txns in partial for t in txns]
+        processed_all = processed + [i for rec, _ in partial for i in rec["ids"]]
+        return {"operating_point": summarize_operating_point(complete_tx), "sessions": report_sessions,
+                "expected_ids": expected, "processed_ids": processed_all,
                 "n_expected_sessions": len(groups),
-                "n_complete_sessions": sum(1 for s in sessions if not s.get("incomplete")),
-                "complete": processed == expected, "raw_transactions": all_tx}
+                "n_complete_sessions": len(complete),
+                "complete": processed_all == expected, "raw_transactions": report_tx}
 
     fresh_groups = [[r] for r in prompts]
     carried_groups = _split_into_chains(prompts, chains)
-    # ASTRA-083: the SAME per-row eval seed in fresh and carried (salt == the row's position in both),
-    # so the only difference between the regimes is fresh vs carried state, not the RNG
+    # ASTRA-083: the SAME per-row eval seed in fresh and carried (seed0 + the row's ordinal position in
+    # both), so the only difference between the regimes is fresh vs carried state, not the RNG
     return {"fresh": _run("fresh", fresh_groups, seed_base), "carried": _run("carried", carried_groups, seed_base)}
 
 
