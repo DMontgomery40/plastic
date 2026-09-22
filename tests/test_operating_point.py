@@ -543,3 +543,52 @@ def test_eval_restore_rejects_records_not_matching_pinned_groups():
     with pytest.raises(RunConflict):
         _eval_sessions(None, None, None, prompts, hcfg=None, gen=_gen_settings(), seed_base=0, chains=2,
                        deadline=1e18, restore=bad, _runner=_FakeRunner(["commit"] * 100), _drive=_seed_drive)
+
+
+def test_eval_persistence_round_trip_no_regeneration_or_mixing(tmp_path, monkeypatch):
+    # ASTRA-104: prove that across a simulated interruption/re-invocation, the real eval-progress
+    # persistence round-trip resumes to the uninterrupted result, re-appends no completed group, and
+    # never writes a partial (incomplete) group into the completed log
+    import scripts.experiments.qwen_operating_point as qop
+    from scripts.experiments.qwen_operating_point import (
+        _append_eval_progress, _init_eval_progress, _load_eval_progress, _eval_sessions,
+    )
+
+    prompts = [{"id": i, "prompt": f"p{i}"} for i in range(6)]
+    path = str(tmp_path / "eval-progress.jsonl")
+    identity = "eid"
+
+    ref = _eval_sessions(None, None, None, prompts, hcfg=None, gen=_gen_settings(), seed_base=700, chains=3,
+                         deadline=1e18, _runner=_FakeRunner(["commit"] * 400), _drive=_seed_drive)
+    full = _eval_sig(ref)
+
+    clock = {"t": 0.0}
+    monkeypatch.setattr(qop.time, "time", lambda: clock["t"])
+
+    def clock_drive(runner, tok, prompt, *, max_new_tokens, temperature, top_k, gen):
+        out = _seed_drive(runner, tok, prompt, max_new_tokens=max_new_tokens, temperature=temperature, top_k=top_k, gen=gen)
+        clock["t"] += 1.0
+        return out
+
+    def append(regime, rec, txns, ng):
+        _append_eval_progress(path, regime, rec, txns)
+
+    # invocation 1: init + run cut by a deadline, appending complete sessions to the real on-disk log
+    _init_eval_progress(path, identity)
+    _eval_sessions(None, None, None, prompts, hcfg=None, gen=_gen_settings(), seed_base=700, chains=3,
+                   deadline=3.5, restore={"fresh": [], "carried": []}, on_progress=append,
+                   _runner=_FakeRunner(["commit"] * 400), _drive=clock_drive)
+    restore = _load_eval_progress(path, identity)  # a fresh process reloads from disk
+    assert 0 < sum(len(v) for v in restore.values()) < 9  # genuinely partial across the two regimes
+
+    # invocation 2: resume from the reloaded cursor to completion
+    resumed = _eval_sessions(None, None, None, prompts, hcfg=None, gen=_gen_settings(), seed_base=700, chains=3,
+                             deadline=1e18, restore=restore, on_progress=append,
+                             _runner=_FakeRunner(["commit"] * 400), _drive=clock_drive)
+    assert _eval_sig(resumed) == full  # no regeneration: the resumed screen equals the uninterrupted one
+
+    final = _load_eval_progress(path, identity)
+    ids = [(regime, tuple(s["record"]["ids"])) for regime, v in final.items() for s in v]
+    assert len(ids) == len(set(ids))  # each completed session written exactly once (no re-append)
+    assert sum(len(v) for v in final.values()) == 9  # fresh 6 singletons + carried 3 chains, all complete
+    assert all(s["record"].get("incomplete") is False for v in final.values() for s in v)  # no partial persisted
