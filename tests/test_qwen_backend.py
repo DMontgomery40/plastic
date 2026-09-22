@@ -198,6 +198,58 @@ def test_is_finite_does_not_raise_on_uninitialized_cache(backend):
     assert backend.is_finite(st) is True  # nothing non-finite is present
 
 
+def test_state_dict_round_trips_through_save_load(backend):
+    import io
+
+    ids = backend.encode("Enough tokens to populate recurrent, conv, and KV before the persistence check.")
+    st = backend.init_state()
+    _, st = backend.process(ids[:8], st)
+    cont = ids[8:12]
+    ref, _ = backend.process(cont, backend.clone(st))
+
+    # the state_dict survives a real torch.save/load boundary (as the session store persists it)
+    sd = backend.state_dict(st)
+    buf = io.BytesIO()
+    torch.save(sd, buf)
+    buf.seek(0)
+    reloaded = torch.load(buf, weights_only=False)
+    back = backend.load_state_dict(reloaded)
+
+    assert back.position == st.position
+    assert all(torch.equal(a, b) for a, b in zip(st.recurrent_leaves(), back.recurrent_leaves()))
+    assert all(b.dtype == torch.float32 for b in back.recurrent_leaves())  # float32 accumulator preserved
+    # continuation from the loaded state is byte-identical to continuation from the original
+    got, _ = backend.process(cont, backend.clone(back))
+    assert (ref - got).abs().max().item() == 0.0
+
+
+def test_load_state_dict_rejects_incompatible_and_malformed(backend):
+    ids = backend.encode("A short state for the persistence rejection checks here today please.")
+    st = backend.init_state()
+    _, st = backend.process(ids[:6], st)
+
+    # an incompatible identity (different checkpoint/tokenizer) is refused
+    bad = backend.state_dict(st)
+    bad["identity"] = {**bad["identity"], "vocab_size": bad["identity"]["vocab_size"] + 1}
+    with pytest.raises(ValueError, match="incompatible"):
+        backend.load_state_dict(bad)
+
+    # a persisted state missing an initialized recurrent unit is refused, not silently skipped
+    malformed = backend.state_dict(st)
+    for layer in malformed["cache"].layers:
+        rs = getattr(layer, "recurrent_states", None)
+        if rs:
+            for i in list(rs):
+                rs[i] = None
+            break
+    with pytest.raises(ValueError, match="missing an initialized recurrent unit"):
+        backend.load_state_dict(malformed)
+
+    # a non-Qwen payload is refused
+    with pytest.raises(ValueError, match="not a Qwen"):
+        backend.load_state_dict({"backend": "plastic"})
+
+
 def test_forward_beta_scale_and_freeze_semantics(backend):
     ids = backend.encode("A sentence long enough for a clean forward and beta-scale check across it.")
     # forward matches process on the plain path and returns an empty per-token signal list

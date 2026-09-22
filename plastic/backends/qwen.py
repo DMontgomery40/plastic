@@ -272,6 +272,88 @@ class QwenBackend:
                     return False
         return True
 
+    # ------------------------------------------------------------------ persistence
+    def _identity(self) -> dict[str, Any]:
+        """A compatibility signature for save/load: a session saved under one checkpoint/tokenizer
+        must be rejected on load under a different one. Derived from the config and tokenizer, so two
+        backends loaded from the same checkpoint match and a different model does not."""
+        c = self.config
+        return {
+            "backend": "qwen",
+            "vocab_size": int(c.vocab_size),
+            "num_hidden_layers": int(getattr(c, "num_hidden_layers", 0)),
+            "hidden_size": int(getattr(c, "hidden_size", 0)),
+            "linear_num_value_heads": int(getattr(c, "linear_num_value_heads", 0)),
+            "linear_key_head_dim": int(getattr(c, "linear_key_head_dim", 0)),
+            "tokenizer_vocab": int(getattr(self.tokenizer, "vocab_size", 0)),
+        }
+
+    @staticmethod
+    def _map_cache_tensors(cache, fn) -> None:
+        """Apply ``fn`` in place to every stored tensor of ``cache`` (recurrent, conv, and attention
+        KV), across both layer kinds — used to move a serialized cache CPU->device and back without
+        reconstructing it (reconstruction via lazy_initialization loses the stored values)."""
+        for layer in getattr(cache, "layers", []):
+            for attr in ("recurrent_states", "conv_states"):
+                d = getattr(layer, attr, None)
+                if d:
+                    for i, v in list(d.items()):
+                        if v is not None:
+                            d[i] = fn(v)
+            for attr in ("keys", "values"):
+                t = getattr(layer, attr, None)
+                if t is not None:
+                    setattr(layer, attr, fn(t))
+
+    def state_dict(self, state: QwenState) -> dict[str, Any]:
+        """Full serialization: the complete native cache (recurrent memory, conv history, attention
+        KV, positions and init flags) via a deep copy — the same faithful copy ``clone`` uses, so a
+        load reproduces continuation logits exactly — with tensors moved to CPU for portable storage,
+        plus the backend/checkpoint/tokenizer identity and a structural count for the load check."""
+        with self._serialized():
+            snap = copy.deepcopy(state.cache)
+        self._map_cache_tensors(snap, lambda t: t.detach().cpu())
+        n_recurrent = sum(
+            1 for layer in getattr(snap, "layers", []) for v in (getattr(layer, "recurrent_states", None) or {}).values() if v is not None
+        )
+        return {
+            "backend": "qwen",
+            "identity": self._identity(),
+            "num_layers": len(getattr(snap, "layers", [])),
+            "recurrent_leaves": n_recurrent,
+            "cache": snap,
+        }
+
+    def load_state_dict(self, data: dict[str, Any]) -> QwenState:
+        """Reconstruct a session state, rejecting an incompatible or malformed persisted state rather
+        than loading it silently. The identity must match this backend's checkpoint/tokenizer, the
+        layer/recurrent counts must match what was saved, and no recurrent unit may be missing — a
+        persisted state that lost an initialized memory unit is refused (ASTRA-063)."""
+        if not isinstance(data, dict) or data.get("backend") != "qwen":
+            raise ValueError("not a Qwen backend state")
+        if data.get("identity") != self._identity():
+            raise ValueError(f"incompatible Qwen session: saved identity {data.get('identity')} != current {self._identity()}")
+        cache = data.get("cache")
+        if cache is None:
+            raise ValueError("Qwen state has no cache")
+        layers = getattr(cache, "layers", [])
+        if len(layers) != data.get("num_layers"):
+            raise ValueError(f"Qwen state layer count {len(layers)} != saved {data.get('num_layers')}")
+        n_recurrent = 0
+        for layer in layers:
+            rs = getattr(layer, "recurrent_states", None)
+            if rs is None:
+                continue
+            for v in rs.values():
+                if v is None:
+                    raise ValueError("persisted Qwen state is missing an initialized recurrent unit")
+                n_recurrent += 1
+        if n_recurrent != data.get("recurrent_leaves"):
+            raise ValueError(f"Qwen state recurrent-unit count {n_recurrent} != saved {data.get('recurrent_leaves')}")
+        with self._serialized():
+            self._map_cache_tensors(cache, lambda t: t.to(self.device))
+        return QwenState(cache)
+
     # ------------------------------------------------------------------ forward
     @torch.no_grad()
     def process(self, ids: list[int], state: QwenState, *, freeze: bool = False) -> tuple[torch.Tensor, QwenState]:
