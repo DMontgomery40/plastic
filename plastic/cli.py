@@ -265,6 +265,16 @@ def cmd_sleep(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serve(args: argparse.Namespace) -> int:
+    import uvicorn
+
+    from plastic.api.app import create_app
+
+    app = create_app(args.artifacts_root, device=args.device)
+    uvicorn.run(app, host=args.host, port=args.port, log_level=args.log_level)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="plastic", description="plastic: a tiny test-time-training state-space model with a transactional safety harness")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -394,6 +404,14 @@ def build_parser() -> argparse.ArgumentParser:
     sl.add_argument("--device", default="cpu")
     sl.add_argument("--seed", type=int, default=0)
     sl.set_defaults(fn=cmd_sleep)
+
+    srv = sub.add_parser("serve", help="run the API over an artifact store")
+    srv.add_argument("--artifacts-root", default="artifacts")
+    srv.add_argument("--host", default="127.0.0.1")
+    srv.add_argument("--port", type=int, default=13579)
+    srv.add_argument("--device", default="cpu")
+    srv.add_argument("--log-level", default="info")
+    srv.set_defaults(fn=cmd_serve)
     return p
 
 

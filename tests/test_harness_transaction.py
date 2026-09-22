@@ -304,3 +304,147 @@ def test_read_only_chunks_do_not_feed_statistics():
     sig = r.transactions[1]["signals"]
     assert all(v is None for v in sig["z"].values()) and not sig["cusum_alarm"]
     assert r.cusum.state() == before
+
+
+def test_nonfinite_in_any_carried_field_is_refused():
+    torch.manual_seed(0)
+    cfg = ModelConfig(d_model=32, n_heads=2, n_layers=1, chunk=8, rule="chunk", vocab_size=64)
+    lm = PlasticLM(cfg)
+    for field_name in ("M", "conv_ssm", "conv_mem", "chunk.A", "chunk.Bv", "chunk.alpha_sum"):
+        r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)
+        r.feed_tokens(_ids(3))
+        layer = r.working.layers[0]
+        target = layer.chunk if field_name.startswith("chunk.") else layer
+        name = field_name.split(".")[-1]
+        getattr(target, name).fill_(float("nan"))
+        r.feed_tokens(_ids(5, seed=1))
+        rec = r.transactions[-1]
+        assert rec["decision"]["kind"] == "rollback" and any("nonfinite" in x for x in rec["decision"]["reasons"]), field_name
+        assert TransactionRunner._finite(r.committed), field_name
+
+
+def test_chunk_cap_refusal_does_not_exhaust_a_large_session_budget():
+    cfg, lm = _lm()
+    r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)
+    r.feed_tokens(_ids(32))
+    r.hcfg = HarnessConfig(enable_projection=False, budget_chunk=1e-4, budget_session=1e6)
+    r.feed_tokens(_ids(8, seed=9))
+    rec = r.transactions[-1]
+    assert rec["decision"]["kind"] in ("rollback", "scale")
+    assert not r.read_only, r.read_only_reason
+
+
+def test_generated_only_chunk_does_not_feed_cusum():
+    cfg, lm = _lm()
+    r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)
+    for s in range(8):
+        r.feed_tokens(_ids(8, seed=s))
+    before = r.cusum.state()
+    r.feed_tokens(_ids(8, seed=100), source="model")
+    sig = r.transactions[-1]["signals"]
+    assert all(v is None for v in sig["z"].values()) and not sig["cusum_alarm"]
+    assert r.cusum.state() == before and not r.read_only
+
+
+def test_projection_rechecks_the_stored_delta_against_a_tiny_cap():
+    cfg, lm = _lm()
+    suite = _fake_suite(cfg)
+    cap = 1e-6
+    hcfg = HarnessConfig(project_eps_cos=-1.0, canary_delta_max=1e9, poison_delta_min=-1e9, enable_stats=False, budget_chunk=cap)
+    r = TransactionRunner(lm, cfg, hcfg, suite=suite, device=CPU)
+    r.feed_tokens(_ids(32))  # warm state so representation error matters
+    before = r.committed.clone()
+    r.feed_tokens(_ids(8, seed=3))
+    rec = r.transactions[-1]
+    moved = _delta(r.committed, before)
+    if rec["decision"]["kind"] == "project":
+        assert moved <= cap * (1 + 1e-6), moved
+    else:
+        assert rec["decision"]["kind"] == "rollback" and moved == 0.0
+
+
+def test_log_only_never_enforces_budgets():
+    cfg, lm = _lm()
+    r = TransactionRunner(lm, cfg, log_only(HarnessConfig(budget_chunk=1e-9, budget_session=1e-9, enable_projection=False)), device=CPU)
+    r.feed_tokens(_ids(16))
+    kinds = [t["decision"]["kind"] for t in r.transactions]
+    assert kinds == ["commit", "commit"] and not r.read_only
+    assert _delta(r.committed, lm.init_state(1)) > 1e-3
+
+
+def test_fork_state_starts_from_committed_without_pending():
+    from plastic.harness.transaction import fork_state_dict
+
+    cfg, lm = _lm()
+    r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)
+    r.feed_tokens(_ids(11))  # one committed chunk, three pending tokens
+    d = fork_state_dict(r.state_dict())
+    child = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)
+    child.load_state_dict(d)
+    assert child.pos == 8 and not child.pending and child.n_transactions == 0
+    assert _same_state(child.committed, r.committed) and _same_state(child.working, r.committed)
+    assert child.budget_used == r.budget_used
+
+
+def test_calibration_reports_achievable_fpr_and_cusum_threshold():
+    from plastic.harness.calibrate import conformal_threshold
+
+    cfg, lm = _lm()
+    suite = _fake_suite(cfg)
+    r = TransactionRunner(lm, cfg, log_only(HarnessConfig(enable_projection=False)), suite=suite, device=CPU)
+    cal = calibrate_from_runner(r, [_ids(8, seed=s) for s in range(40)], n_chunks=40, model_signature="sig", target_fpr=0.01, reset_every=8)
+    assert "cusum_h" in cal.thresholds and cal.thresholds["cusum_h"] >= HarnessConfig().cusum_h
+    assert "canary_delta_poison" in cal.thresholds
+    for name, a in cal.achievable_fpr.items():
+        assert a >= 1.0 / 41 - 1e-9, (name, a)
+    vals = [float(i) for i in range(1, 41)]
+    thr, ach = conformal_threshold(vals, 0.001)
+    assert thr == 40.0 and abs(ach - 1 / 41) < 1e-9
+    thr, ach = conformal_threshold(vals, 0.1)
+    assert thr == 37.0 and abs(ach - 0.1) < 1e-9
+    lo, _ = conformal_threshold(vals, 0.1, side="lower")
+    assert lo == 4.0
+
+
+def test_transaction_record_reports_accepted_metrics_distinct_from_proposed():
+    cfg, lm = _lm()
+    suite = _fake_suite(cfg)
+    # a forced rollback: the proposed delta is large, the accepted delta must be zero
+    hcfg = HarnessConfig(canary_delta_max=-1e9, poison_delta_min=-1e9, enable_projection=False)
+    r = TransactionRunner(lm, cfg, hcfg, suite=suite, device=CPU)
+    r.feed_tokens(_ids(8))
+    rec = r.transactions[0]
+    assert rec["decision"]["kind"] == "rollback"
+    assert rec["signals"]["delta_norm"] > 0.0            # proposed change was nonzero
+    assert rec["accepted"]["delta_norm"] == 0.0          # nothing was committed
+    assert rec["accepted"]["budget_charge"] == 0.0
+    # the memory S is unchanged, but the SSM activation state advanced (the chunk was read,
+    # not learned), so the rescored canary moves a little: much less than the proposed change
+    assert abs(rec["accepted"]["canary_delta_coherence"]) < abs(rec["signals"]["canary_delta_coherence"]) + 1e-9
+    assert abs(rec["accepted"]["canary_delta_coherence"]) < 1e-2
+
+
+def test_accepted_delta_matches_scaled_commit():
+    cfg, lm = _lm()
+    zero = lm.init_state(1)
+    hcfg = HarnessConfig(budget_chunk=1e-6, enable_projection=False)  # forces a scale
+    r = TransactionRunner(lm, cfg, hcfg, device=CPU)
+    r.feed_tokens(_ids(8))
+    rec = r.transactions[0]
+    assert rec["decision"]["kind"] == "scale"
+    assert rec["signals"]["delta_norm"] > rec["accepted"]["delta_norm"]  # proposed > accepted
+    assert abs(rec["accepted"]["delta_norm"] - _delta(r.committed, zero)) < 1e-9
+    assert rec["accepted"]["delta_norm"] <= 1e-6 * (1 + 1e-6)
+    assert abs(rec["accepted"]["budget_charge"] - rec["accepted"]["delta_norm"]) < 1e-9
+
+
+def test_accepted_metrics_on_a_plain_commit():
+    cfg, lm = _lm()
+    zero = lm.init_state(1)
+    r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)
+    r.feed_tokens(_ids(8))
+    rec = r.transactions[0]
+    assert rec["decision"]["kind"] == "commit"
+    assert abs(rec["accepted"]["delta_norm"] - rec["signals"]["delta_norm"]) < 1e-6  # commit keeps the proposal
+    assert abs(rec["accepted"]["delta_norm"] - _delta(r.committed, zero)) < 1e-9
+    assert rec["accepted"]["budget_used"] == r.budget_used

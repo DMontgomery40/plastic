@@ -77,9 +77,13 @@ class TransactionRunner:
         self.pending_sources: list[str] = []
         self.pending_loss: list[float | None] = []
         self.pending_signals: list[list[MemorySignals]] = []
+        self.pending_eligible = False  # any pending token processed with learning enabled
         self._last_logits: Tensor | None = None
         self.history: dict[str, SignalHistory] = {n: SignalHistory(harness_cfg.history_window) for n in STAT_SIGNALS}
-        self.cusum = Cusum(harness_cfg.cusum_k, harness_cfg.cusum_h)
+        cusum_h = harness_cfg.cusum_h
+        if calibration is not None and "cusum_h" in calibration.thresholds:
+            cusum_h = float(calibration.thresholds["cusum_h"])
+        self.cusum = Cusum(harness_cfg.cusum_k, cusum_h)
         self.budget_used = 0.0
         self._exhausted = False
         self.read_only = False
@@ -111,8 +115,10 @@ class TransactionRunner:
         while i < len(ids):
             take = min(self.L - len(self.pending), len(ids) - i)
             seg = [int(t) for t in ids[i : i + take]]
-            logits, signals = self._forward_segment(self._token_freeze(source), 1.0, seg)
+            fz = self._token_freeze(source)
+            logits, signals = self._forward_segment(fz, 1.0, seg)
             self._absorb_text(seg, source, logits, signals)
+            self.pending_eligible = self.pending_eligible or not fz
             i += take
             if len(self.pending) == self.L:
                 self._transact()
@@ -139,6 +145,7 @@ class TransactionRunner:
             take = min(self.L - len(self.pending), rows.shape[0] - i)
             seg = [rows[i + j].detach().cpu() for j in range(take)]
             pred, signals = self._forward_segment(self.read_only, 1.0, seg)
+            self.pending_eligible = self.pending_eligible or not self.read_only
             for j in range(take):
                 tgt = targets[i + j].detach().cpu()
                 self.pending.append(seg[j])
@@ -222,8 +229,9 @@ class TransactionRunner:
             budget_used=self.budget_used,
             budget_remaining=(None if self.hcfg.budget_session is None else self.hcfg.budget_session - self.budget_used),
         )
-        if self.read_only:
-            # frozen chunks have zero writes by construction: they carry no evidence
+        if self.read_only or not self.pending_eligible:
+            # a chunk with no token permitted to learn has zero writes by construction:
+            # it carries no evidence about the update stream
             sig.z = {name: None for name in STAT_SIGNALS}
             sig.cusum_alarm = False
             return sig, deltas, g
@@ -232,14 +240,44 @@ class TransactionRunner:
         sig.cusum_alarm = self.cusum.update(z_ld) if (self.hcfg.enable_stats and z_ld is not None) else False
         return sig, deltas, g
 
+    def _accepted_metrics(self, pre_committed: SessionState, budget_before: float, sig: ChunkSignals) -> dict[str, Any]:
+        """Metrics of what was actually committed, as opposed to the proposed update in ``signals``.
+
+        The ``signals`` fields are measured on the provisional ``working`` state before the
+        decision; these are measured on the final ``committed`` state after it, so a rollback
+        reports an accepted delta of zero and a scale reports the delta it actually kept.
+        """
+        accepted_delta = delta_norms(self.committed.s_delta(pre_committed))[0]
+        acc: dict[str, Any] = {
+            "delta_norm": accepted_delta,
+            "budget_charge": self.budget_used - budget_before,
+            "budget_used": self.budget_used,
+            "budget_remaining": (None if self.hcfg.budget_session is None else self.hcfg.budget_session - self.budget_used),
+        }
+        if self.suite is not None:
+            after = score_suite(self.model, self.committed, self.suite, device=self.device)
+            acc["canary_coherence_after"] = after["coherence"]
+            acc["canary_poison_after"] = after["poison"]
+            acc["canary_delta_coherence"] = (
+                None if sig.canary_coherence_before is None else after["coherence"] - sig.canary_coherence_before
+            )
+            acc["canary_delta_poison"] = (
+                None if sig.canary_poison_before is None else after["poison"] - sig.canary_poison_before
+            )
+        return acc
+
     def _transact(self) -> dict[str, Any]:
         t0 = time.time()
+        pre_committed = self.committed.clone()
+        budget_before = self.budget_used
         sig, deltas, g = self._measure()
         thresholds = self.calibration.thresholds if self.calibration is not None else None
         decision = decide(sig, self.hcfg, thresholds, read_only=self.read_only)
         applied = self._apply(decision, sig, deltas, g)
+        accepted = self._accepted_metrics(pre_committed, budget_before, sig)
         if (
             self.hcfg.enable_budget
+            and not self.hcfg.log_only
             and self.hcfg.budget_session is not None
             and (self.budget_used >= self.hcfg.budget_session * (1.0 - 1e-3) or self._exhausted)
         ):
@@ -262,7 +300,8 @@ class TransactionRunner:
             "pos_end": sig.pos_end,
             "decision": applied.to_dict(),
             "requested": decision.to_dict(),
-            "signals": sig.to_dict(),
+            "signals": sig.to_dict(),  # PROPOSED: measured on the provisional state before the decision
+            "accepted": accepted,      # ACCEPTED: measured on the committed state after the decision
             "read_only": self.read_only,
             "read_only_reason": self.read_only_reason,
             "seconds": time.time() - t0,
@@ -271,6 +310,7 @@ class TransactionRunner:
         self.n_transactions += 1
         self.pending, self.pending_targets, self.pending_sources = [], [], []
         self.pending_loss, self.pending_signals = [], []
+        self.pending_eligible = False
         return record
 
     # ------------------------------------------------------------------ acceptance
@@ -286,17 +326,28 @@ class TransactionRunner:
         return min(caps) if caps else None
 
     def _cap_is_session_remaining(self, cap: float) -> bool:
+        """True when the remaining session budget (not the per-chunk cap) is what bound the chunk."""
         if self.hcfg.budget_session is None:
             return False
         remaining = max(0.0, float(self.hcfg.budget_session) - self.budget_used)
-        return cap <= remaining * (1.0 + 1e-9)
+        if self.hcfg.budget_chunk is not None and self.hcfg.budget_chunk < remaining:
+            return False
+        return abs(cap - remaining) <= 1e-12 * max(1.0, remaining)
 
     def _candidate_delta_norm(self) -> float:
         return delta_norms(self.working.s_delta(self.committed))[0]
 
     @staticmethod
     def _finite(state: SessionState) -> bool:
-        return all(bool(torch.isfinite(l.S).all()) and bool(torch.isfinite(l.h).all()) for l in state.layers)
+        """Every tensor that would be committed or restored must be finite."""
+        for l in state.layers:
+            tensors = [l.h, l.S, l.M, l.conv_ssm, l.conv_mem]
+            if l.chunk is not None:
+                tensors += [l.chunk.A, l.chunk.Bv, l.chunk.alpha_sum]
+            for t in tensors:
+                if t is not None and not bool(torch.isfinite(t).all()):
+                    return False
+        return True
 
     def _accept(self, kind: str, reasons: list[str], scale: float) -> Decision:
         self.budget_used += self._candidate_delta_norm()
@@ -322,6 +373,9 @@ class TransactionRunner:
             return self._reject_frozen(kind, reasons)
         if not self._finite(self.working) or not math.isfinite(sig.delta_norm):
             return self._reject_frozen("rollback", reasons + ["nonfinite_candidate"])
+        if self.hcfg.log_only:
+            # observation only: the reference trajectory must be the ungated one
+            return self._accept("commit", reasons, 1.0)
         cap = self._cap()
 
         if kind == "project":
@@ -344,6 +398,17 @@ class TransactionRunner:
                 layer.S = base.S + scale_p * d.to(base.S.device)
             if not self._finite(self.working):
                 return self._reject_frozen("rollback", reasons + ["nonfinite_candidate"])
+            if cap is not None:
+                # recheck the representable stored difference, not the ideal delta
+                actual = self._candidate_delta_norm()
+                if actual > cap * (1.0 + 1e-6) and actual > 0.0:
+                    scale_p *= (cap / actual) * 0.999
+                    for layer, base, d in zip(self.working.layers, self.committed.layers, projected):
+                        layer.S = base.S + scale_p * d.to(base.S.device)
+                    actual = self._candidate_delta_norm()
+                    reasons.append(f"budget_recheck(scale={scale_p:.3g},delta={actual:.4g})")
+                if actual > cap * (1.0 + 1e-6):
+                    return self._reject_frozen("rollback", reasons + [f"budget_unrepresentable(delta={actual:.4g}>cap={cap:.4g})"])
             reasons += [f"removed_ratio({pstats.removed_ratio:.3f})", f"dot({pstats.dot_before:+.4g}->{pstats.dot_after:+.4g})"]
             return self._accept("project", reasons, scale_p)
 
@@ -383,6 +448,7 @@ class TransactionRunner:
         self.anchor = self.committed.clone()
         self.pending, self.pending_targets, self.pending_sources = [], [], []
         self.pending_loss, self.pending_signals = [], []
+        self.pending_eligible = False
         self._last_logits = None
         self.history = {n: SignalHistory(self.hcfg.history_window) for n in STAT_SIGNALS}
         self.cusum = Cusum(self.hcfg.cusum_k, self.hcfg.cusum_h)
@@ -405,6 +471,7 @@ class TransactionRunner:
                 [{"err": s.err.cpu(), "beta": s.beta.cpu(), "alpha": s.alpha.cpu(), "write_norm": s.write_norm.cpu()} for s in group]
                 for group in self.pending_signals
             ],
+            "pending_eligible": bool(self.pending_eligible),
             "last_logits": None if self._last_logits is None else self._last_logits.detach().cpu(),
             "history": {k: v.values() for k, v in self.history.items()},
             "cusum": self.cusum.state(),
@@ -426,6 +493,7 @@ class TransactionRunner:
             [MemorySignals(err=s["err"].to(self.device), beta=s["beta"].to(self.device), alpha=s["alpha"].to(self.device), write_norm=s["write_norm"].to(self.device)) for s in group]
             for group in d.get("pending_signals", [])
         ]
+        self.pending_eligible = bool(d.get("pending_eligible", False))
         ll = d.get("last_logits")
         self._last_logits = None if ll is None else ll.to(self.device)
         self.history = {k: SignalHistory(self.hcfg.history_window, v) for k, v in d.get("history", {}).items()}
@@ -450,3 +518,28 @@ class TransactionRunner:
             "state_norms": self.committed.norms(),
             "drift_from_anchor": delta_norms(self.committed.s_delta(self.anchor))[0],
         }
+
+
+def fork_state_dict(d: dict[str, Any]) -> dict[str, Any]:
+    """The runner state a fork starts from: the parent's committed state, no pending inputs,
+    the harness history and controls carried over, and a fresh transaction count."""
+    committed = d.get("committed", {})
+    out = {
+        "committed": committed,
+        "working": committed,
+        "anchor": d.get("anchor", committed),
+        "pending": [],
+        "pending_targets": [],
+        "pending_sources": [],
+        "pending_loss": [],
+        "pending_signals": [],
+        "pending_eligible": False,
+        "last_logits": None,
+        "history": d.get("history", {}),
+        "cusum": d.get("cusum", {}),
+        "budget_used": float(d.get("budget_used", 0.0)),
+        "read_only": bool(d.get("read_only", False)),
+        "read_only_reason": d.get("read_only_reason"),
+        "n_transactions": 0,
+    }
+    return out

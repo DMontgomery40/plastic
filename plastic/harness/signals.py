@@ -24,6 +24,13 @@ STAT_SIGNALS: tuple[str, ...] = ("chunk_loss", "surprise_mean", "log_delta_norm"
 
 @dataclass
 class ChunkSignals:
+    """Signals of one chunk, measured on the PROVISIONAL (post-forward, pre-decision) state.
+
+    These describe the update the policy saw, not what was committed: for a rollback the
+    ``delta_norm`` and ``canary_delta_*`` here are the proposed change, while the accepted
+    change is zero. The transaction record carries the accepted metrics separately.
+    """
+
     pos_start: int
     pos_end: int
     n_tokens: int
