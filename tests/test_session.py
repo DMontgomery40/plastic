@@ -165,3 +165,16 @@ def test_short_prompt_chunk_rule_is_transacted_not_discarded(tmp_path):
     assert r.n_tokens_in < 8
     assert r.transactions[0]["decision"]["kind"] == "commit" and r.transactions[0]["signals"]["n_tokens"] == r.n_tokens_in
     assert r.transactions[0]["signals"]["pos_end"] == r.n_tokens_in  # a real boundary at the prompt end
+
+
+def test_verify_calibration_signature_gating():
+    # ASTRA-078: a persisted calibration installs only if its signature matches the model's actual
+    # identity; a mismatched or unsigned calibration is discarded (never silently trusted).
+    from plastic.harness.calibrate import Calibration
+    from plastic.session.runner import _verify_calibration
+
+    cal = Calibration(model_signature="sig-A", thresholds={"chunk_loss": 1.0})
+    assert _verify_calibration(cal, "sig-A") == (cal, "installed")
+    assert _verify_calibration(cal, "sig-B") == (None, "rejected_signature_mismatch")
+    assert _verify_calibration(Calibration(model_signature=""), "sig-A") == (None, "rejected_unsigned")
+    assert _verify_calibration(None, "sig-A") == (None, "absent")

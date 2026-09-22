@@ -108,6 +108,20 @@ def _counts(transactions: list[dict[str, Any]]) -> dict[str, int]:
     return out
 
 
+def _verify_calibration(cal: Any, model_identity: str) -> tuple[Any, str]:
+    """Install a persisted calibration only if it was built for THIS model's actual content. A
+    mismatched or unsigned calibration is discarded — its thresholds would misgate a different model
+    (ASTRA-078) — and the reason is returned for observability. Never silently trusts an unsigned or
+    mismatched signature."""
+    if cal is None:
+        return None, "absent"
+    if not cal.model_signature:
+        return None, "rejected_unsigned"
+    if cal.model_signature != model_identity:
+        return None, "rejected_signature_mismatch"
+    return cal, "installed"
+
+
 class Session:
     def __init__(self, store: ArtifactStore, session_id: str, *, device: torch.device | str = "cpu") -> None:
         self.store = store
@@ -120,7 +134,7 @@ class Session:
         record = store.load_model_record(self.model_id)
         self.backend_kind = str(record.get("backend", "plastic"))
         model_dir = store.model_dir(self.model_id)
-        self.calibration = Calibration.load(model_dir) if Calibration.exists(model_dir) else None
+        loaded_cal = Calibration.load(model_dir) if Calibration.exists(model_dir) else None
         canary_path = store.canary_path(self.model_id)
         self.suite = CanarySuite.load(canary_path) if os.path.exists(canary_path) else None
         if self.backend_kind == "qwen":
@@ -131,17 +145,20 @@ class Session:
             self.cfg = ModelConfig(domain="text", chunk=int(record.get("chunk", 8)))
             self.model = None
             self.tokenizer: Any = _QwenTextIO(self.backend)
-            self.runner = TransactionRunner(
-                None, self.cfg, self.hcfg, calibration=self.calibration, suite=self.suite,
-                device=self.device, backend=self.backend,
-            )
+            # bind to the ACTUAL loaded checkpoint content, not the (possibly stale) registry digest,
+            # so a calibration built for a different checkpoint is refused even if the registry agrees
+            model_identity = f"qwen:{self.backend.checkpoint_digest}"
         else:
             self.cfg, self.model, _ = store.load_checkpoint(self.model_id, self.device)
             self.backend = None
             self.tokenizer = Tokenizer.load(store.tokenizer_path(self.model_id)) if self.cfg.domain == "text" else None
-            self.runner = TransactionRunner(
-                self.model, self.cfg, self.hcfg, calibration=self.calibration, suite=self.suite, device=self.device
-            )
+            model_identity = store.model_signature(self.model_id)  # hashes the actual checkpoint content
+        # install a persisted calibration only if it was built for THIS model's actual content
+        self.calibration, self.calibration_status = _verify_calibration(loaded_cal, model_identity)
+        self.runner = TransactionRunner(
+            self.model, self.cfg, self.hcfg, calibration=self.calibration, suite=self.suite,
+            device=self.device, backend=self.backend,
+        )
         state = store.load_runner_state(session_id)
         if state:
             self.runner.load_state_dict(state)

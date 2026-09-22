@@ -652,6 +652,43 @@ def test_qwen_session_chat_end_to_end(tmp_path):
     assert sess2.runner.pos == pos_before_zero + res3.n_tokens_in + close_len
 
 
+def test_qwen_session_calibration_identity(tmp_path):
+    # ASTRA-078: a Qwen session installs a persisted calibration only if its signature matches the
+    # ACTUAL loaded checkpoint content — not a stale registry digest — on create and on reopen.
+    import gc
+
+    from plastic.backends.qwen import _checkpoint_digest
+    from plastic.harness.calibrate import Calibration
+    from plastic.harness.config import HarnessConfig
+    from plastic.session.runner import Session
+    from plastic.store import ArtifactStore
+
+    store = ArtifactStore(str(tmp_path))
+    actual = _checkpoint_digest(CKPT)
+    mid = store.new_model_id("qwen")
+    # register with a STALE digest that does not match the actual checkpoint content
+    store.register_model(mid, {"backend": "qwen", "checkpoint_dir": CKPT, "checkpoint_digest": "stale-registered", "domain": "text", "chunk": 8, "status": "completed"})
+    model_dir = store.model_dir(mid)
+
+    def _cal(sig):
+        return Calibration(model_signature=sig, thresholds={"chunk_loss": 0.0}, reference={"chunk_loss": [1.0] * 8})
+
+    # a calibration matching only the stale registry digest is refused even though the registry agrees
+    _cal("qwen:stale-registered").save(model_dir)
+    sess = Session.create(store, model_id=mid, harness_cfg=HarnessConfig(enable_projection=False), device="cpu")
+    assert sess.calibration_status == "rejected_signature_mismatch"
+    assert sess.calibration is None and sess.runner.calibration is None
+    sid = sess.session_id
+    del sess
+    gc.collect()
+
+    # a calibration matching the ACTUAL loaded checkpoint content is installed on reopen
+    _cal(f"qwen:{actual}").save(model_dir)
+    sess2 = Session.open(store, sid, device="cpu")
+    assert sess2.calibration_status == "installed"
+    assert sess2.runner.calibration is not None and sess2.runner.calibration.thresholds["chunk_loss"] == 0.0
+
+
 def test_encode_chat_returns_integer_ids(backend):
     # apply_chat_template defaults to a dict in tf 5.17; encode_chat must return native integer ids
     # that tensorize, for empty / ascii / unicode, matching render-then-tokenize.
