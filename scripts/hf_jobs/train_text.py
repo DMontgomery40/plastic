@@ -50,20 +50,25 @@ def main() -> None:
     else:
         sh(f"git clone --depth 1 --branch {shlex.quote(repo_ref)} {shlex.quote(repo_url)} {work}")
     os.chdir(work)
-    sh("python -c 'import torch; print(\"torch\", torch.__version__, \"cuda\", torch.cuda.is_available())'")
-    sh("pip install -q uv && uv pip install --system -q --no-deps -e . && "
-       "uv pip install --system -q 'numpy>=2.0' 'tokenizers>=0.21' 'datasets>=3.0' 'huggingface_hub>=1.32' "
-       "'fastapi>=0.128' 'uvicorn>=0.30' 'pydantic>=2.7'")
+    # `hf jobs uv run` executes this script in an isolated uv environment; the image's
+    # torch lives in its conda Python, so every model command uses that interpreter.
+    py = os.environ.get("PYBIN") or next(
+        (c for c in ("/opt/conda/bin/python", "/usr/local/bin/python", "/usr/bin/python3") if os.path.exists(c)),
+        sys.executable,
+    )
+    sh(f"{py} -c 'import torch; print(\"torch\", torch.__version__, \"cuda\", torch.cuda.is_available())'")
+    sh(f"{py} -m pip install -q --no-deps -e . && {py} -m pip install -q 'numpy>=2.0' 'tokenizers>=0.21' "
+       f"'datasets>=3.0' 'huggingface_hub>=1.32' 'fastapi>=0.128' 'uvicorn>=0.30' 'pydantic>=2.7'")
     print(f"[job] source ready ({time.time() - t0:.0f}s)", flush=True)
 
     data_dir = os.path.join(out_dir, "data", corpus)
     if not os.path.exists(os.path.join(data_dir, "train.bin")):
-        sh(f"python -m plastic.cli data prepare --corpus {corpus} --out {shlex.quote(data_dir)} --vocab {vocab}")
+        sh(f"{py} -m plastic.cli data prepare --corpus {corpus} --out {shlex.quote(data_dir)} --vocab {vocab}")
     print(f"[job] data ready ({time.time() - t0:.0f}s)", flush=True)
 
     artifacts = os.path.join(out_dir, "artifacts")
     cmd = (
-        f"python -m plastic.cli train text --data {shlex.quote(data_dir)} --artifacts-root {shlex.quote(artifacts)} "
+        f"{py} -m plastic.cli train text --data {shlex.quote(data_dir)} --artifacts-root {shlex.quote(artifacts)} "
         f"--steps {steps} --batch-size {batch} --seq-len {seq_len} --eval-every {eval_every} --device cuda "
         f"--save-every {eval_every} --log-every 10"
     )
