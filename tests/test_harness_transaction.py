@@ -203,6 +203,59 @@ def test_projection_respects_budget():
     assert _delta(r.committed, lm.init_state(1)) <= cap * (1 + 1e-6)
 
 
+def test_projection_budget_recheck_float_rounding():
+    # ASTRA-061: at committed S = 2**20 the float32 ULP is 0.125, so a scaled projected delta can
+    # round to a *representable* stored change that still violates the budget cap — the branch that
+    # fires the SECOND apply_projected (the recheck) in _apply. In exact arithmetic the first scaled
+    # apply lands precisely at the cap, so this branch is unreachable through ordinary token
+    # forwards; the committed/working S, the proposed delta, and the (orthogonal) canary gradient
+    # are therefore set directly. The three caps make ULP rounding give, respectively: accept in one
+    # apply, accept-zero after a recheck, and a budget_unrepresentable rollback that charges zero.
+    from plastic.harness.policy import Decision
+    from plastic.harness.signals import ChunkSignals
+
+    for domain in ("text", "physics"):
+        for rule in ("delta", "chunk"):
+            for cap, kind, applies in ((0.14, "project", 1), (0.07, "project", 2), (0.10, "rollback", 2)):
+                torch.manual_seed(813)
+                cfg = ModelConfig(domain=domain, rule=rule, d_model=16, n_heads=2, n_layers=2, chunk=4, vocab_size=64)
+                model = (PlasticLM(cfg) if domain == "text" else PlasticDynamics(cfg)).eval()
+                r = TransactionRunner(
+                    model, cfg, HarnessConfig(budget_chunk=cap, enable_stats=False, project_max_removed=1.0), device=CPU
+                )
+                if domain == "text":
+                    r.feed_tokens([7])
+                else:
+                    r.feed_physics(torch.zeros(1, cfg.input_dim), torch.zeros(1, cfg.obs_dim))
+                for a, z in zip(r.committed.layers, r.working.layers):
+                    a.S.fill_(2 ** 20)
+                    z.S.copy_(a.S)
+                r.working.layers[0].S.reshape(-1)[0] += 1.0  # a single-unit proposed delta at index 0
+                deltas = r.backend.state_delta(r.working, r.committed)
+                gradients = [torch.zeros_like(d) for d in deltas]
+                gradients[0].reshape(-1)[1] = 1.0  # orthogonal to the delta: projection keeps it whole
+                sig = ChunkSignals(
+                    pos_start=0, pos_end=1, n_tokens=1, chunk_loss=1.0, surprise_mean=0.0, surprise_max=0.0,
+                    beta_mean=1.0, alpha_mean=1.0, write_norm_sum=1.0, delta_norm=1.0,
+                )
+                calls: list[int] = []
+                base_apply = r.backend.apply_projected
+
+                def counted(*a, _b=base_apply, **k):
+                    calls.append(1)
+                    return _b(*a, **k)
+
+                r.backend.apply_projected = counted
+                decision = r._apply(Decision("project", []), sig, deltas, gradients)
+                ctx = (domain, rule, cap, decision.to_dict(), len(calls))
+                assert decision.kind == kind and len(calls) == applies, ctx
+                if applies == 2:
+                    assert any("budget_recheck" in s for s in decision.reasons), ctx
+                if kind == "rollback":
+                    assert any("budget_unrepresentable" in s for s in decision.reasons), ctx
+                assert r.budget_used <= cap * (1 + 1e-6), ctx
+
+
 def test_nonfinite_candidate_is_rejected():
     cfg, lm = _lm()
     r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)
