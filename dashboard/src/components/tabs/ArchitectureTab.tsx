@@ -4,11 +4,15 @@ import { fmtInt, fmtParams } from '../../utils/formatting';
 import { BlockDiagram, HarnessDiagram } from '../architecture/BlockDiagram';
 import { Empty, KeyValue, Panel, Select } from '../panels';
 
-const RESEARCH_DOCS: Array<{ file: string; what: string }> = [
+const RESEARCH_DOCS: Array<{ file: string; what: string; experimental?: boolean }> = [
   { file: 'docs/research/2026-09-21-architecture-memo.md', what: 'The block equations, verified on CPU and MPS, with timing and parameter counts.' },
   { file: 'docs/research/2026-09-21-ttt-ssm-literature.md', what: 'TTT layers, Titans, LaCT, Gated DeltaNet, Mamba-3, and the 2026 delta-rule wave.' },
   { file: 'docs/research/2026-09-21-inference-time-learning-safety.md', what: 'Attacks on models that learn at inference, and the regex-free safety stack.' },
-  { file: 'docs/research/2026-09-21-plastic-coordinate-recurrence.md', what: 'The coordinate recurrence behind the chunked log-space scan.' },
+  {
+    file: 'docs/research/2026-09-21-plastic-coordinate-recurrence.md',
+    what: 'An experimental coordinate-recurrence proposal with required ablations, not the shipped mechanism. The baseline drawn above is the chunked log-space selective scan with the gated-delta fast-weight memory.',
+    experimental: true,
+  },
   { file: 'docs/research/2026-09-22-calibration-replay-audit.md', what: 'What the calibrated thresholds do and do not catch on replay.' },
   { file: 'docs/research/2026-09-22-copy-memory-content-audit.md', what: 'Copy and memory probes over the fast weights.' },
   { file: 'docs/research/2026-09-21-tooling-hf-jobs-torch.md', what: 'Hugging Face Jobs and torch on MPS.' },
@@ -139,7 +143,14 @@ export function ArchitectureTab() {
         <ul className="space-y-2">
           {RESEARCH_DOCS.map((doc) => (
             <li key={doc.file} className="border-b border-edge pb-2 last:border-b-0">
-              <p className="font-mono text-sm text-ink-primary">{doc.file}</p>
+              <p className="flex flex-wrap items-center gap-2 font-mono text-sm text-ink-primary">
+                {doc.file}
+                {doc.experimental ? (
+                  <span className="rounded border border-status-scale px-1.5 py-0.5 font-sans text-micro font-semibold uppercase tracking-wide text-status-scale">
+                    experimental · not implemented
+                  </span>
+                ) : null}
+              </p>
               <p className="mt-0.5 text-xs text-ink-secondary">{doc.what}</p>
             </li>
           ))}

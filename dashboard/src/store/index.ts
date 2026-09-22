@@ -19,6 +19,7 @@ import type {
   RedteamRequest,
   RedteamSummary,
   SessionDetail,
+  SessionMeta,
   SessionState,
   SessionSummary,
   TrainJob,
@@ -159,6 +160,42 @@ export function describeError(err: unknown): string {
   return String(err);
 }
 
+/** The summary-row fields of a loaded session, taken from its detail's meta. */
+export function summaryFromMeta(meta: SessionMeta): SessionSummary {
+  return {
+    session_id: meta.session_id,
+    model_id: meta.model_id,
+    domain: meta.domain,
+    parent_session_id: meta.parent_session_id,
+    root_session_id: meta.root_session_id,
+    forked_at_pos: meta.forked_at_pos,
+    created_at_unix: meta.created_at_unix,
+    updated_at_unix: meta.updated_at_unix,
+    pos: meta.pos,
+    n_transactions: meta.n_transactions,
+    commits: meta.commits,
+    rollbacks: meta.rollbacks,
+    scales: meta.scales,
+    projects: meta.projects,
+    readonly: meta.readonly,
+    budget_used: meta.budget_used,
+    read_only: meta.read_only,
+    read_only_reason: meta.read_only_reason,
+  };
+}
+
+/**
+ * Keep the sessions list in step with a session that was just (re)loaded, so a
+ * row and the header picker never show pos0/0tx while the detail shows the real
+ * position after chat or physics traffic. Membership stays the refreshSessions
+ * job: a session not already listed is left out rather than appended here.
+ */
+export function mergeSessionSummary(sessions: SessionSummary[], meta: SessionMeta): SessionSummary[] {
+  const updated = summaryFromMeta(meta);
+  if (!sessions.some((s) => s.session_id === updated.session_id)) return sessions;
+  return sessions.map((s) => (s.session_id === updated.session_id ? updated : s));
+}
+
 export const useStore = create<PlasticState>()((set, get) => {
   /**
    * Run a request with its loading flag set, recording any failure in `error`.
@@ -171,6 +208,11 @@ export const useStore = create<PlasticState>()((set, get) => {
       return await run();
     } catch (err) {
       if (!quiet) set({ error: describeError(err) });
+      // A network failure (ApiError status 0, "Failed to fetch") means the API is
+      // unreachable, so the health pill must not stay green: invalidate it and the
+      // header falls to "unreachable" until a check succeeds again. An HTTP error
+      // (status != 0) is a reachable API answering, so health is left alone.
+      if (err instanceof ApiError && err.status === 0) set({ health: null });
       return null;
     } finally {
       set((s) => ({ loading: { ...s.loading, [key]: false } }));
@@ -199,8 +241,11 @@ export const useStore = create<PlasticState>()((set, get) => {
     clearError: () => set({ error: null }),
 
     refreshHealth: async () => {
+      // A failed health check nulls the stored health (rather than keeping a stale
+      // ok:true), so the pill shows unreachable; a later success restores it. The
+      // cold-start null and the "gone offline" null read the same to the header.
       const health = await withLoading('health', api.getHealth);
-      if (health) set({ health });
+      set({ health });
     },
 
     refreshModels: async () => {
@@ -274,7 +319,11 @@ export const useStore = create<PlasticState>()((set, get) => {
     loadSession: async (sessionId) => {
       const detail = await withLoading('session', () => api.getSession(sessionId));
       if (!detail) return;
-      set({ sessionDetail: detail, currentSessionId: sessionId });
+      set((s) => ({
+        sessionDetail: detail,
+        currentSessionId: sessionId,
+        sessions: mergeSessionSummary(s.sessions, detail.meta),
+      }));
       await get().loadSessionState(sessionId);
     },
 

@@ -23,7 +23,7 @@ const SIGNAL_CHARTS: SignalChart[] = [
   { key: 'chunk_loss', label: 'Chunk loss', color: '#58a6ff', thresholdKey: 'chunk_loss', note: 'The out-of-distribution signal.' },
   { key: 'surprise_mean', label: 'Surprise, mean ‖e‖', color: '#c792ea', thresholdKey: 'surprise_mean', note: 'Inner-loop prediction error.' },
   { key: 'beta_mean', label: 'Write rate β, mean', color: '#3fd17a', thresholdKey: null, note: "The model's own gate. Never thresholded." },
-  { key: 'log_delta_norm', label: 'log ‖Δ‖', color: '#f0b429', thresholdKey: 'log_delta_norm', note: 'Size of the committed state change.' },
+  { key: 'log_delta_norm', label: 'log ‖Δ‖', color: '#f0b429', thresholdKey: 'log_delta_norm', note: 'Size of the proposed state change, before the decision.' },
 ];
 
 function BudgetMeter({ used, total }: { used: number; total: number | null }) {
@@ -391,7 +391,7 @@ export function SessionTab() {
           label="Mode"
           value={summary.read_only ? 'Read-only' : 'Learning'}
           tone={summary.read_only ? 'rollback' : 'commit'}
-          hint={summary.read_only_reason ?? 'writes accepted'}
+          hint={summary.read_only_reason ?? 'writes permitted (a write can still be rolled back)'}
         />
       </div>
 

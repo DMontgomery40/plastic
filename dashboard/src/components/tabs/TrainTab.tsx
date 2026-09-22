@@ -7,6 +7,20 @@ import { Button, Checkbox, Empty, Field, KeyValue, NumberInput, Panel, Select, S
 import { CalibratedRates, ObservedIntervention } from '../panels/RatePanel';
 import type { ModelSummary } from '../../api/types';
 
+/**
+ * The lowest held-out loss among a domain's models, or null when none has one.
+ * Kept per-domain because text loss is an NLL in nats and physics loss is an
+ * MSE: a single min over both would compare incomparable units.
+ */
+export function bestHeldoutLoss(models: ModelSummary[], domain: Domain): number | null {
+  return models
+    .filter((m) => m.domain === domain)
+    .reduce<number | null>((best, m) => {
+      const v = m.eval?.heldout_loss;
+      return isNum(v) && (best === null || v < best) ? v : best;
+    }, null);
+}
+
 function MqarChips({ ev }: { ev: EvalSummary | null | undefined }) {
   const mqar = ev?.mqar_accuracy;
   if (!mqar || Object.keys(mqar).length === 0) return <span className="text-ink-muted">{UNAVAILABLE}</span>;
@@ -193,24 +207,15 @@ export function TrainTab() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <StatTile label="Models" value={fmtInt(models.length)} hint={`${models.filter((m) => m.calibrated).length} calibrated`} />
         <StatTile label="Running jobs" value={fmtInt(jobs.filter((j) => j.status === 'running').length)} tone="accent" hint="polled every 2 s" />
         <StatTile label="Corpora" value={fmtInt(dataDirs.length)} hint="under artifacts/data" />
-        <StatTile
-          label="Best held-out loss"
-          value={fmt(
-            models.reduce<number | null>((best, m) => {
-              const v = m.eval?.heldout_loss;
-              return isNum(v) && (best === null || v < best) ? v : best;
-            }, null),
-            4,
-          )}
-          hint="lower is better"
-        />
+        <StatTile label="Best text loss" value={fmt(bestHeldoutLoss(models, 'text'), 4)} hint="NLL nats/token, lower is better" />
+        <StatTile label="Best physics loss" value={fmt(bestHeldoutLoss(models, 'physics'), 4)} hint="MSE, lower is better" />
       </div>
 
-      <Panel title="Models" subtitle="Every checkpoint ships three numbers: held-out loss, the value of the memory, and MQAR accuracy.">
+      <Panel title="Models" subtitle="Each checkpoint ships its held-out loss and the value of the memory; MQAR recall accuracy is a text-only probe and is unavailable for physics.">
         {models.length === 0 ? (
           <Empty
             title="No models yet."

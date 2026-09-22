@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { hasRunningJob, initialState, isPolling, startJobPolling, stopJobPolling, useStore } from './index';
-import { buildLineageForest } from '../components/tabs/SessionsTab';
+import { hasRunningJob, initialState, isPolling, mergeSessionSummary, startJobPolling, stopJobPolling, useStore } from './index';
+import {
+  applyOverride,
+  boolOverrideState,
+  boolOverrideValue,
+  buildLineageForest,
+} from '../components/tabs/SessionsTab';
+import { maxUnprotectedDamage } from '../components/tabs/RedTeamTab';
+import { bestHeldoutLoss } from '../components/tabs/TrainTab';
 import { countsFromSession, interventionRate } from '../components/panels/RatePanel';
 import {
   NO_VALID_PAYLOADS,
@@ -14,6 +21,7 @@ import {
 } from '../utils/formatting';
 import type {
   ChunkSignals,
+  HarnessConfig,
   Health,
   ModelDetail,
   ModelSummary,
@@ -690,5 +698,164 @@ describe('red team valid-only aggregates', () => {
     expect(fam?.n_valid).toBe(0);
     expect(fam?.unprotected_damage_mean).toBe(0.1536);
     expect(fam?.frozen_damage_mean).toBe(0.0121);
+  });
+
+  it('takes the worst undefended attack as a per-attack max, not a max of family means', () => {
+    // an individual unprotected attack of +0.078 must outrank a family mean of -0.14
+    const results = [{ damage_unprotected: 0.078 }, { damage_unprotected: -0.1397 }, { damage_unprotected: 0.031 }];
+    expect(maxUnprotectedDamage(results)).toBeCloseTo(0.078, 4);
+  });
+
+  it('reports no undefended worst case as null, never zero, when nothing carried a finite value', () => {
+    expect(maxUnprotectedDamage([])).toBeNull();
+    expect(maxUnprotectedDamage([{ damage_unprotected: null }])).toBeNull();
+  });
+});
+
+describe('harness boolean overrides are tri-state', () => {
+  it('keeps an explicit off as false instead of dropping it to inherit', () => {
+    expect(applyOverride({}, 'enable_rollback', false)).toEqual({ enable_rollback: false });
+  });
+
+  it('stores an explicit on as true', () => {
+    expect(applyOverride({}, 'enable_rollback', true)).toEqual({ enable_rollback: true });
+  });
+
+  it('clears a flag back to the model default when it inherits (null)', () => {
+    expect(applyOverride({ enable_rollback: false }, 'enable_rollback', null)).toEqual({});
+    expect(applyOverride({ enable_rollback: true }, 'enable_rollback', null)).toEqual({});
+  });
+
+  it('renders an inherited true as on (checked), an explicit false as off, an absent key as inherit', () => {
+    expect(boolOverrideState(undefined)).toBe('inherit');
+    expect(boolOverrideState(true)).toBe('on');
+    expect(boolOverrideState(false)).toBe('off');
+  });
+
+  it('round-trips a control state back to the value it submits', () => {
+    expect(boolOverrideValue('inherit')).toBeNull();
+    expect(boolOverrideValue('on')).toBe(true);
+    expect(boolOverrideValue('off')).toBe(false);
+  });
+
+  it('submits the three states as the right payload: on=true, off=false, inherit=absent', () => {
+    let ov: Partial<HarnessConfig> = {};
+    ov = applyOverride(ov, 'enable_rollback', boolOverrideValue('off'));
+    ov = applyOverride(ov, 'enable_projection', boolOverrideValue('on'));
+    ov = applyOverride(ov, 'log_only', boolOverrideValue('inherit'));
+    expect(ov).toEqual({ enable_rollback: false, enable_projection: true });
+    expect('log_only' in ov).toBe(false);
+    // the create-session form sends the object only when at least one key is set
+    expect(Object.keys(ov).length > 0).toBe(true);
+  });
+});
+
+describe('best held-out loss is split by domain', () => {
+  const textA: ModelSummary = { ...MODEL, model_id: 't1', domain: 'text', eval: { ...MODEL.eval!, heldout_loss: 3.2 } };
+  const textB: ModelSummary = { ...MODEL, model_id: 't2', domain: 'text', eval: { ...MODEL.eval!, heldout_loss: 2.9 } };
+  const phys: ModelSummary = { ...MODEL, model_id: 'p1', domain: 'physics', eval: { ...MODEL.eval!, heldout_loss: 0.0001 } };
+
+  it('never lets a physics MSE win the text ranking or vice versa', () => {
+    expect(bestHeldoutLoss([textA, textB, phys], 'text')).toBe(2.9);
+    expect(bestHeldoutLoss([textA, textB, phys], 'physics')).toBe(0.0001);
+  });
+
+  it('is null when a domain has no model carrying a finite loss', () => {
+    const noEval: ModelSummary = { ...MODEL, model_id: 'p2', domain: 'physics', eval: null };
+    expect(bestHeldoutLoss([textA, noEval], 'physics')).toBeNull();
+  });
+});
+
+describe('health reachability', () => {
+  it('drops health to offline when a check fails, then recovers on the next success', async () => {
+    mockRoutes(FULL_ROUTES);
+    await useStore.getState().refreshHealth();
+    expect(useStore.getState().health).toEqual(HEALTH);
+
+    mockRoutes(FULL_ROUTES, { '/api/health': 500 });
+    await useStore.getState().refreshHealth();
+    expect(useStore.getState().health).toBeNull();
+
+    mockRoutes(FULL_ROUTES);
+    await useStore.getState().refreshHealth();
+    expect(useStore.getState().health).toEqual(HEALTH);
+  });
+
+  it('invalidates health when any request hits a network failure', async () => {
+    mockRoutes(FULL_ROUTES);
+    await useStore.getState().refreshHealth();
+    expect(useStore.getState().health).toEqual(HEALTH);
+
+    // fetch throwing surfaces as ApiError status 0 ("Failed to fetch")
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch');
+      }),
+    );
+    await useStore.getState().refreshModels();
+    expect(useStore.getState().health).toBeNull();
+  });
+
+  it('keeps health online when a reachable API answers with an HTTP error', async () => {
+    mockRoutes(FULL_ROUTES);
+    await useStore.getState().refreshHealth();
+    mockRoutes(FULL_ROUTES, { '/api/models': 500 });
+    await useStore.getState().refreshModels();
+    // the API answered (500), so it is reachable: a health/loading failure is not
+    // the same as an empty-but-online collection, and neither ages the pill
+    expect(useStore.getState().health).toEqual(HEALTH);
+    expect(useStore.getState().error).toContain('HTTP 500');
+  });
+});
+
+describe('summary tracks the loaded detail', () => {
+  const detailAfterTraffic: SessionDetail = {
+    ...SESSION_DETAIL,
+    meta: { ...SESSION_DETAIL.meta, pos: 640, n_transactions: 10, commits: 8 },
+    summary: { ...RUNNER, pos: 640, n_transactions: 10 },
+  };
+
+  it('refreshes the affected session summary row after chat traffic', async () => {
+    mockRoutes({
+      ...FULL_ROUTES,
+      '/api/sessions': [SESSION_A, SESSION_B],
+      '/api/sessions/s1': detailAfterTraffic,
+      '/api/sessions/s1/chat': { prompt: 'hi', completion: 'there', transactions: [], n_tokens_in: 1, n_tokens_out: 1, summary: RUNNER },
+    });
+    useStore.setState({ currentSessionId: 's1', sessions: [SESSION_A, SESSION_B] });
+    await useStore.getState().sendChat({ prompt: 'hi' });
+    const s = useStore.getState();
+    const row = s.sessions.find((x) => x.session_id === 's1');
+    // the row now matches the detail, not the stale pos0/8tx it started with
+    expect(row?.pos).toBe(640);
+    expect(row?.n_transactions).toBe(10);
+    expect(s.sessionDetail?.meta.pos).toBe(640);
+    // the sibling row is left untouched
+    expect(s.sessions.find((x) => x.session_id === 's1b')?.pos).toBe(512);
+  });
+
+  it('refreshes the summary row after physics traffic too', async () => {
+    mockRoutes({
+      ...FULL_ROUTES,
+      '/api/sessions': [SESSION_A],
+      '/api/sessions/s1': detailAfterTraffic,
+      '/api/sessions/s1/physics': {
+        mu: 0.1,
+        steps: 4,
+        per_step: [],
+        transactions: [],
+        means: { base_mse: 1, frozen_mse: 1, adaptive_mse: 1 },
+        summary: RUNNER,
+      },
+    });
+    useStore.setState({ currentSessionId: 's1', sessions: [SESSION_A] });
+    await useStore.getState().runEpisode({ steps: 4 });
+    expect(useStore.getState().sessions.find((x) => x.session_id === 's1')?.pos).toBe(640);
+  });
+
+  it('never appends a session that the list does not already carry', () => {
+    const meta = { ...SESSION_DETAIL.meta, session_id: 'ghost' };
+    expect(mergeSessionSummary([SESSION_A], meta)).toEqual([SESSION_A]);
   });
 });

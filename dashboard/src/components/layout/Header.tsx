@@ -24,6 +24,7 @@ export function Header() {
   const health = useStore((s) => s.health);
   const healthLoading = useStore((s) => s.loading.health);
   const error = useStore((s) => s.error);
+  const models = useStore((s) => s.models);
   const sessions = useStore((s) => s.sessions);
   const currentSessionId = useStore((s) => s.currentSessionId);
   const activeTab = useStore((s) => s.activeTab);
@@ -64,8 +65,11 @@ export function Header() {
             {statusText}
           </span>
           {health ? (
+            // Counts come from the live store, not the health snapshot: a fork or a
+            // new session updates them at once, where health.n_* only refreshes on
+            // the next bootstrap.
             <span className="min-w-0 break-words font-mono text-micro text-ink-secondary">
-              {health.device} · {health.n_models} models · {health.n_sessions} sessions
+              {health.device} · {models.length} models · {sessions.length} sessions
             </span>
           ) : (
             <span className="font-mono text-micro text-ink-secondary">{state === 'connecting' ? 'waiting for /api/health' : (error ?? 'no response from /api/health')}</span>

@@ -4,7 +4,6 @@ import type { HarnessConfig, SessionSummary } from '../../api/types';
 import { fmt, fmtInt, fmtRelative } from '../../utils/formatting';
 import {
   Button,
-  Checkbox,
   Empty,
   Field,
   NumberInput,
@@ -82,6 +81,37 @@ const HARNESS_OVERRIDES: Array<{ key: keyof HarnessConfig; label: string; kind: 
   { key: 'learn_from_generation', label: 'Learn from generated tokens', kind: 'bool' },
 ];
 
+/**
+ * Apply one harness override to the pending set. A `null` value clears the key
+ * back to the model default (inherit); an explicit `true` or `false` is kept, so
+ * a flag can be turned OFF and submitted as `false` rather than dropped.
+ */
+export function applyOverride(
+  prev: Partial<HarnessConfig>,
+  key: keyof HarnessConfig,
+  value: number | boolean | null,
+): Partial<HarnessConfig> {
+  const next = { ...prev };
+  if (value === null) delete next[key];
+  else (next as Record<string, unknown>)[key] = value;
+  return next;
+}
+
+/** The three states a boolean override can be in. An absent key inherits the default. */
+export type BoolOverrideState = 'inherit' | 'on' | 'off';
+
+/** An absent override inherits; an explicit true/false renders as on/off (checked/unchecked). */
+export function boolOverrideState(value: boolean | undefined): BoolOverrideState {
+  if (value === undefined) return 'inherit';
+  return value ? 'on' : 'off';
+}
+
+/** Map a tri-state selection back to the value `applyOverride` stores. */
+export function boolOverrideValue(state: BoolOverrideState): boolean | null {
+  if (state === 'inherit') return null;
+  return state === 'on';
+}
+
 export function SessionsTab() {
   const models = useStore((s) => s.models);
   const sessions = useStore((s) => s.sessions);
@@ -104,12 +134,7 @@ export function SessionsTab() {
   const selectedModel = modelId || usableModels[0]?.model_id || '';
 
   const setOverride = (key: keyof HarnessConfig, value: number | boolean | null) => {
-    setOverrides((prev) => {
-      const next = { ...prev };
-      if (value === null) delete next[key];
-      else (next as Record<string, unknown>)[key] = value;
-      return next;
-    });
+    setOverrides((prev) => applyOverride(prev, key, value));
   };
 
   const submit = async () => {
@@ -258,13 +283,21 @@ export function SessionsTab() {
               <p className="text-label font-semibold uppercase tracking-wide text-ink-muted">Harness overrides</p>
               {HARNESS_OVERRIDES.map((item) =>
                 item.kind === 'bool' ? (
-                  <Checkbox
-                    key={item.key}
-                    id={`ov-${item.key}`}
-                    label={item.label}
-                    checked={Boolean(overrides[item.key])}
-                    onChange={(v) => setOverride(item.key, v ? true : null)}
-                  />
+                  <div key={item.key} className="flex items-center gap-2">
+                    <label htmlFor={`ov-${item.key}`} className="w-44 shrink-0 text-xs text-ink-secondary">
+                      {item.label}
+                    </label>
+                    <Select
+                      id={`ov-${item.key}`}
+                      value={boolOverrideState(overrides[item.key] as boolean | undefined)}
+                      onChange={(v) => setOverride(item.key, boolOverrideValue(v as BoolOverrideState))}
+                      options={[
+                        { value: 'inherit', label: 'Inherit default' },
+                        { value: 'on', label: 'On' },
+                        { value: 'off', label: 'Off' },
+                      ]}
+                    />
+                  </div>
                 ) : (
                   <div key={item.key} className="flex items-center gap-2">
                     <label htmlFor={`ov-${item.key}`} className="w-44 shrink-0 text-xs text-ink-secondary">

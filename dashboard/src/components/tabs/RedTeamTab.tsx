@@ -16,6 +16,19 @@ import { Button, Checkbox, Empty, Field, KeyValue, NumberInput, Panel, Select, S
 
 const ALL_FAMILIES = ['pgd', 'random', 'repeat', 'shuffle', 'topic_switch'];
 
+/**
+ * The single worst undefended attack across every attempt: the maximum of the
+ * per-attack `damage_unprotected`, not a maximum of per-family means (which can
+ * sit below an individual attack and never reads as a worst case). Null when no
+ * attempt carried a finite unprotected damage.
+ */
+export function maxUnprotectedDamage(results: Array<{ damage_unprotected: number | null }>): number | null {
+  return results.reduce<number | null>(
+    (max, r) => (isNum(r.damage_unprotected) && (max === null || r.damage_unprotected > max) ? r.damage_unprotected : max),
+    null,
+  );
+}
+
 export function RedTeamTab() {
   const models = useStore((s) => s.models);
   const dataDirs = useStore((s) => s.dataDirs);
@@ -57,11 +70,9 @@ export function RedTeamTab() {
     (max, f) => (isNum(f.valid_damage_max) && (max === null || f.valid_damage_max > max) ? f.valid_damage_max : max),
     null,
   );
-  const worstUnprotected = familyStats.reduce<number | null>(
-    (max, f) =>
-      isNum(f.unprotected_damage_mean) && (max === null || f.unprotected_damage_mean > max) ? f.unprotected_damage_mean : max,
-    null,
-  );
+  // The true worst case is the single most damaging undefended attack, taken
+  // over every per-attack result, not the maximum of the per-family means.
+  const worstUnprotected = maxUnprotectedDamage(detail?.results ?? []);
   const totalAttacks = familyStats.reduce((n, f) => n + (f.n ?? 0), 0);
   const totalValid = familyStats.reduce((n, f) => n + (f.n_valid ?? 0), 0);
 
@@ -215,9 +226,10 @@ export function RedTeamTab() {
                 hint="constraint-satisfying attacks only"
               />
               <StatTile
-                label="Worst undefended damage"
+                label="Worst undefended attack"
                 value={fmt(worstUnprotected)}
-                hint="same payloads, harness off"
+                tone={worstUnprotected === null ? 'default' : 'rollback'}
+                hint="highest single attack, all attempts, harness off"
               />
               <StatTile
                 label="Valid attacks"
@@ -347,7 +359,7 @@ export function RedTeamTab() {
 
             <Panel
               title="Validated damage against payload likelihood"
-              subtitle="One point per attack. A payload far to the right is fluent; a point high up hurt the canaries."
+              subtitle="One point per attack. The x-axis is the model's own (unguarded) NLL in nats per token, where lower means higher probability: a payload to the LEFT (low NLL) is more fluent under the assessor, and one to the right is less probable. A point high up hurt the canaries."
             >
               {detailBusy ? (
                 <p className="text-sm text-ink-secondary">Loading results…</p>
@@ -361,9 +373,9 @@ export function RedTeamTab() {
                     yKey="damage"
                     label="attacks"
                     height={300}
-                    xLabel="payload NLL (nats per token)"
+                    xLabel="payload NLL, nats per token (lower is more probable, left is more fluent)"
                     yLabel="validated damage"
-                    ariaLabel="Validated canary damage against payload negative log likelihood, one point per attack"
+                    ariaLabel="Validated canary damage against payload negative log likelihood, one point per attack; lower NLL is more probable and more fluent"
                     yReferences={damageRefs}
                     colorFor={(row) => familyColor[String(row.family)] ?? '#58a6ff'}
                   />
