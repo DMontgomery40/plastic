@@ -20,6 +20,11 @@ evaluation runs stats + rollback enabled, log_only=false, generation learning on
 with alarm_cooldown=0, no finite budget, target_fpr=0.01. Development data is for any changes; freeze
 before opening the locked evaluation. Reduce the counts (or --smoke) only to validate the wiring —
 label such runs as not the ASTRA-083 screen.
+
+Stages (``--stage`` is required, so the locked evaluation is never opened by default): ``dev`` runs the
+durable calibration, then the paired guarded vs log-only development diagnostic on the pinned DEV prompts
+only (ASTRA-088/109; log_only is the sole arm difference) and writes ``dev-diagnostic.json`` -- descriptive
+counts, not a policy result; ``screen`` runs the frozen locked evaluation and follow-ups.
 """
 
 from __future__ import annotations
@@ -38,7 +43,7 @@ WS = re.compile(r"\s+")
 # settings identity binds them (``_protocol``), so a changed sampler, seed schedule or harness policy is
 # refused on resume instead of being pooled into the same run or reusing its calibration (CODEX-001).
 SEED = 20260922
-EVAL_SEED_OFFSET, FOLLOWUP_SEED_OFFSET = 3000, 4000
+DEV_SEED_OFFSET, EVAL_SEED_OFFSET, FOLLOWUP_SEED_OFFSET = 2000, 3000, 4000
 TEMPERATURE, TOP_K = 0.9, 50
 CHUNK = 8
 TARGET_FPR = 0.01
@@ -52,7 +57,7 @@ def _protocol(max_new_tokens: int, *, fit_harness: dict[str, Any], eval_harness:
     """The full effective generation/seed/harness protocol of a run: decoding, seed base and per-phase
     offsets, chunking, target FPR, and the EFFECTIVE fit (log-only) and eval harness configs."""
     return {"gen": _gen(max_new_tokens), "seed": SEED,
-            "seed_offsets": {"eval": EVAL_SEED_OFFSET, "followups": FOLLOWUP_SEED_OFFSET},
+            "seed_offsets": {"dev": DEV_SEED_OFFSET, "eval": EVAL_SEED_OFFSET, "followups": FOLLOWUP_SEED_OFFSET},
             "chunk": CHUNK, "target_fpr": TARGET_FPR, "fit_harness": fit_harness, "eval_harness": eval_harness}
 
 
@@ -489,7 +494,7 @@ def _check_calibration_owner(fit_meta: dict[str, Any], settings_identity: str) -
                           "refusing to reuse or extend it. Use a fresh --out.")
 
 
-def _record_invocation(out_dir: str, provenance: dict[str, Any], mode: str) -> list[dict[str, Any]]:
+def _record_invocation(out_dir: str, provenance: dict[str, Any], mode: str, stage: str | None = None) -> list[dict[str, Any]]:
     """Append THIS invocation to the run's invocation record (``invocations.json``, rewritten atomically)
     and return every invocation recorded for the run. Calibration and eval both resume across
     invocations, so this -- not the per-session stamps alone -- is what shows whether every
@@ -512,7 +517,7 @@ def _record_invocation(out_dir: str, provenance: dict[str, Any], mode: str) -> l
         raise RunConflict(f"{path} already exists for a run being created fresh; refusing to adopt stale history.")
     if mode != "fresh" and not invocations:
         invocations = [{"t_unix": None, "mode": "unrecorded_prior", "provenance": None}]
-    invocations.append({"t_unix": int(time.time()), "mode": mode, "provenance": provenance})
+    invocations.append({"t_unix": int(time.time()), "mode": mode, "stage": stage, "provenance": provenance})
     _write_json(path, invocations)
     return invocations
 
@@ -588,6 +593,7 @@ def _split_from_manifest(manifest: dict[str, Any]) -> dict[str, list[dict[str, A
 # every artifact a run writes besides its run record: any of them without a run record is prior work that a
 # fresh run must not overwrite or silently adopt (a stale invocation record or progress log included)
 _RUN_ARTIFACTS = ("split-manifest.json", "calibration.ckpt", "calibration-status.json", "invocations.json",
+                  "dev-progress.jsonl", "dev-diagnostic.json",
                   "eval-progress.jsonl", "eval-operating-point.json", "followups-result.json", "screen-result.json")
 
 
@@ -801,8 +807,9 @@ def _progress_record_problem(rec: Any) -> str | None:
     return None
 
 
-def _load_eval_progress(path: str, identity: str, *, log=print,
-                        provenance: dict[str, Any] | None = None) -> dict[str, list[dict[str, Any]]] | None:
+def _load_eval_progress(path: str, identity: str, *, log=print, provenance: dict[str, Any] | None = None,
+                        regimes: tuple[str, ...] = ("fresh", "carried"),
+                        record_problem=None) -> dict[str, list[dict[str, Any]]] | None:
     """Restore per-regime COMPLETE sessions from the append-only eval progress log, or None if absent.
     The header pins the identity; a mismatch (different content/config/calibration/policy) raises
     RunConflict rather than silently reusing stale progress. Only an UNTERMINATED final line can be a
@@ -811,7 +818,10 @@ def _load_eval_progress(path: str, identity: str, *, log=print,
     else malformed is corruption and is refused, never silently dropped: a malformed interior line, a
     newline-terminated malformed final line, and a parseable line that is not a valid session record
     (ASTRA-106, FABLE-085 #2). With ``provenance``, restoring sessions recorded under a different
-    invocation provenance is WARNED about (not refused; see ``_invocation_provenance``)."""
+    invocation provenance is WARNED about (not refused; see ``_invocation_provenance``). The same log
+    format serves the dev diagnostic: ``regimes`` keys the restore and ``record_problem`` is the
+    writer-shaped validator (default: the eval session schema)."""
+    record_problem = record_problem or _progress_record_problem
     if not os.path.exists(path):
         return None
     with open(path, encoding="utf-8") as f:
@@ -831,7 +841,7 @@ def _load_eval_progress(path: str, identity: str, *, log=print,
             f"eval progress at {path} is for a different content/config/calibration; refusing to reuse (it is "
             f"preserved). Use a fresh --out, or move it aside deliberately.")
     body = lines[1:]
-    restore: dict[str, list[dict[str, Any]]] = {"fresh": [], "carried": []}
+    restore: dict[str, list[dict[str, Any]]] = {r: [] for r in regimes}
     for i, line in enumerate(body):
         if not line.strip():
             continue  # a blank line carries no record
@@ -846,7 +856,9 @@ def _load_eval_progress(path: str, identity: str, *, log=print,
             raise RunConflict(
                 f"eval progress at {path} has a malformed {where} record at session {i} (not a crash fragment); "
                 f"refusing to reuse. Use a fresh --out.")
-        problem = _progress_record_problem(rec)
+        problem = record_problem(rec)
+        if problem is None and rec["regime"] not in restore:
+            problem = f"regime {rec['regime']!r} does not belong in this log"
         if problem is not None:
             raise RunConflict(
                 f"eval progress at {path} has an invalid record at session {i} ({problem}); refusing to reuse. "
@@ -935,6 +947,268 @@ def _run_followups(backend, cfg, calibration, gen, seed0, fixture_path, hcfg, de
     return out
 
 
+DEV_ARMS = ("guarded", "log_only")
+_OUTCOMES = ("eos", "cap", "empty", "exception")
+
+
+class _ObservedTransactions(list):
+    """A per-turn transaction list that snapshots the runner's CUSUM state as each record is appended.
+    TransactionRunner appends a chunk's record right after that chunk's CUSUM update, and nothing in
+    between touches the CUSUM, so each snapshot is the exact post-update statistic -- observed, not
+    re-derived, and with no change to runner code."""
+
+    def __init__(self, runner: Any) -> None:
+        super().__init__()
+        self._runner = runner
+        self.cusum_states: list[dict[str, Any]] = []
+
+    def append(self, record: Any) -> None:
+        super().append(record)
+        self.cusum_states.append(dict(self._runner.cusum.state()))
+
+
+def _cusum_input_z(tx: dict[str, Any], cusum_reference: list[float]) -> float | None:
+    """The z the runner fed its CUSUM for this chunk, recomputed with the runner's own rule
+    (transaction.py): None when the chunk carried no evidence (read-only or ineligible, all z None);
+    else log_delta_norm standardized against the continuous CUSUM reference when it has >= 8 values,
+    else the per-chunk z. Checked against the OBSERVED statistic by replay (``cusum_replay_mismatch``)."""
+    from plastic.harness.stats import robust_z
+
+    sig = tx.get("signals") or {}
+    z = sig.get("z") or {}
+    if all(v is None for v in z.values()):
+        return None
+    if cusum_reference and len(cusum_reference) >= 8:
+        return robust_z(float(sig["log_delta_norm"]), cusum_reference)
+    return z.get("log_delta_norm")
+
+
+def _dev_chunks(txns: list[dict[str, Any]], states: list[dict[str, Any]], initial: dict[str, Any],
+                cusum_reference: list[float]) -> tuple[list[dict[str, Any]], int]:
+    """Per-chunk diagnostic rows for one turn, and the number of chunks whose observed CUSUM state does
+    not match a replay of the recomputed input from the previous observed state (expected 0)."""
+    from plastic.harness.stats import Cusum
+
+    boundary = next((i for i, t in enumerate(txns) if t["sources"]["model"] > 0), len(txns))
+    rows, mismatches, prev = [], 0, dict(initial)
+    for i, (t, st) in enumerate(zip(txns, states)):
+        z = _cusum_input_z(t, cusum_reference)
+        replay = Cusum.from_state(prev)
+        alarm = replay.update(z) if z is not None else False
+        if (abs(replay.s_hi - float(st["s_hi"])) > 1e-9 or abs(replay.s_lo - float(st["s_lo"])) > 1e-9
+                or bool(alarm) != bool((t.get("signals") or {}).get("cusum_alarm"))):
+            mismatches += 1
+        u, m = t["sources"]["user"], t["sources"]["model"]
+        rows.append({
+            "i": i, "phase": "mixed" if (u and m) else ("generation" if m else "prompt"), "rel_to_boundary": i - boundary,
+            "pos_start": (t.get("signals") or {}).get("pos_start"), "pos_end": (t.get("signals") or {}).get("pos_end"),
+            "sources": dict(t["sources"]), "decision": t["decision"]["kind"], "eligible": bool(t["eligible"]),
+            "accepted_delta_norm": float(t["accepted"]["delta_norm"]),
+            "cusum_alarm": bool((t.get("signals") or {}).get("cusum_alarm")), "cusum_z": z,
+            "cusum_s_hi": float(st["s_hi"]), "cusum_s_lo": float(st["s_lo"]), "cusum_h": float(st["h"]),
+            "read_only_after": bool(t.get("read_only")), "read_only_reason": t.get("read_only_reason"),
+        })
+        prev = st
+    return rows, mismatches
+
+
+def _dev_turn(runner: Any, tok: Any, prompt: str, seed: int, gen: dict[str, Any], drive, cusum_reference: list[float]) -> dict[str, Any]:
+    """One fresh-state turn in one arm: reset, drive, and record outputs, outcome and per-chunk rows. An
+    exception is an OUTCOME (recorded with its message), not a crash of the diagnostic."""
+    import torch
+
+    runner.reset()
+    initial = dict(runner.cusum.state())
+    runner.transactions = observed = _ObservedTransactions(runner)
+    t0 = time.time()
+    completion, out_ids, in_ids, error = "", [], [], None
+    try:
+        completion, out_ids, in_ids = drive(runner, tok, prompt, max_new_tokens=gen["max_new_tokens"],
+                                            temperature=gen["temperature"], top_k=gen["top_k"],
+                                            gen=torch.Generator().manual_seed(int(seed)))
+        outcome = "cap" if len(out_ids) >= gen["max_new_tokens"] else ("empty" if not out_ids else "eos")
+    except Exception as e:  # noqa: BLE001
+        outcome, error = "exception", f"{type(e).__name__}: {e}"
+    txns = list(observed)
+    chunks, mismatches = _dev_chunks(txns, observed.cusum_states, initial, cusum_reference)
+    return {"seed": int(seed), "outcome": outcome, "error": error, "completion": completion,
+            "out_ids": [int(x) for x in out_ids], "n_in": len(in_ids), "n_out": len(out_ids),
+            "seconds": time.time() - t0, "chunks": chunks, "cusum_replay_mismatch": mismatches,
+            "read_only_end": bool(runner.read_only), "read_only_reason_end": runner.read_only_reason, "txns": txns}
+
+
+def _first_divergence(a: list[int], b: list[int]) -> int | None:
+    for i, (x, y) in enumerate(zip(a, b)):
+        if x != y:
+            return i
+    return None if len(a) == len(b) else min(len(a), len(b))
+
+
+def _dev_sessions(backend, cfg, calibration, prompts, *, guarded_hcfg, gen, seed_base, deadline,
+                  restore=None, on_progress=None, provenance=None, _runners=None, _drive=None) -> dict[str, Any]:
+    """The ASTRA-088/109 paired development diagnostic on the pinned DEV prompts: each prompt runs from a
+    fresh initial state in a GUARDED arm (the frozen eval harness) and a LOG-ONLY arm (the identical
+    config with log_only=True -- the sole difference), with the same checkpoint, calibration, rendering,
+    seed (``seed_base`` + the prompt's position) and generation settings. A pair is COMPLETE only when
+    both arms ran; only complete pairs are passed to ``on_progress`` (durably appended), and a pair cut by
+    the deadline re-runs whole on resume. ``restore`` must be the exact completed prefix. Records
+    per-chunk source/phase/boundary position, CUSUM input/statistic/alarm, eligibility/accepted delta
+    and latch state, and per-turn output token ids and outcome. Development-only: it is not a policy
+    result, a false-positive rate, or safety evidence, and it never touches the locked eval split."""
+    from plastic.harness.calibrate import log_only
+
+    if _drive is None:
+        from plastic.session.runner import drive_chat_turn as _drive
+    tok = None
+    if _runners is None:
+        from plastic.harness.transaction import TransactionRunner
+        from plastic.session.runner import _QwenTextIO
+        tok = _QwenTextIO(backend)
+        _runners = {arm: TransactionRunner(None, cfg, hcfg, calibration=calibration, device=backend.device, backend=backend)
+                    for arm, hcfg in (("guarded", guarded_hcfg), ("log_only", log_only(guarded_hcfg)))}
+    cref = [float(x) for x in (getattr(calibration, "cusum_reference", []) or [])]
+    restored = list(restore or [])
+    for i, x in enumerate(restored):
+        if i >= len(prompts) or x["record"]["id"] != prompts[i]["id"]:
+            raise RunConflict(f"restored dev progress does not match the pinned dev prompts at pair {i}; "
+                              f"refusing to resume. Use a fresh --out.")
+    pairs = [x["record"] for x in restored]
+    for i in range(len(restored), len(prompts)):
+        r = prompts[i]
+        arms: dict[str, Any] = {}
+        for arm in DEV_ARMS:
+            if time.time() > deadline:
+                break
+            arms[arm] = _dev_turn(_runners[arm], tok, r["prompt"], seed_base + i, gen, _drive, cref)
+        if len(arms) != len(DEV_ARMS):
+            break  # cut mid-pair: nothing persisted; the whole pair re-runs on resume
+        pair = {"id": r["id"], "regime": "dev", "position": i, "seed": seed_base + i, "arms": arms,
+                "outputs_identical": arms["guarded"]["out_ids"] == arms["log_only"]["out_ids"],
+                "first_divergent_token": _first_divergence(arms["guarded"]["out_ids"], arms["log_only"]["out_ids"]),
+                "incomplete": False}
+        if provenance is not None:
+            pair["provenance"] = dict(provenance)
+        pairs.append(pair)
+        if on_progress is not None:
+            on_progress(pair)
+        if time.time() > deadline:
+            break
+    expected = [r["id"] for r in prompts]
+    processed = [p["id"] for p in pairs]
+    return {"pairs": pairs, "expected_ids": expected, "processed_ids": processed, "complete": processed == expected,
+            "summary": _dev_summary(pairs)}
+
+
+def _dev_summary(pairs: list[dict[str, Any]]) -> dict[str, Any]:
+    """Descriptive per-arm counts over COMPLETE pairs -- no thresholds, verdicts or pass/fail: a policy
+    change remains a later explicit development comparison (ASTRA-109)."""
+    from plastic.harness.calibrate import summarize_operating_point
+
+    out: dict[str, Any] = {"n_pairs": len(pairs), "outputs_identical": sum(1 for p in pairs if p["outputs_identical"]),
+                           "cusum_replay_mismatch": sum(p["arms"][a]["cusum_replay_mismatch"] for p in pairs for a in DEV_ARMS),
+                           "arms": {}}
+    for arm in DEV_ARMS:
+        turns = [p["arms"][arm] for p in pairs]
+        first_alarm = {"prompt": 0, "generation": 0, "mixed": 0, "none": 0}
+        latched_before_accepted_generation = 0
+        retained_both = 0
+        for t in turns:
+            alarm = next((c for c in t["chunks"] if c["cusum_alarm"]), None)
+            first_alarm[alarm["phase"] if alarm else "none"] += 1
+            first_gen = next((c for c in t["chunks"] if c["phase"] != "prompt" and c["accepted_delta_norm"] > 0), None)
+            latch = next((c for c in t["chunks"] if c["read_only_after"]), None)
+            if latch is not None and (first_gen is None or latch["i"] < first_gen["i"]):
+                latched_before_accepted_generation += 1
+            acc = summarize_operating_point(t["txns"])
+            if acc["prompt"]["accepted_change"] > 0 and acc["generation"]["accepted_change"] > 0:
+                retained_both += 1
+        out["arms"][arm] = {
+            "n": len(turns), "outcomes": {o: sum(1 for t in turns if t["outcome"] == o) for o in _OUTCOMES},
+            "sessions_with_alarm": sum(1 for t in turns if any(c["cusum_alarm"] for c in t["chunks"])),
+            "first_alarm_phase": first_alarm,
+            "first_alarm_rel_to_boundary": [next((c["rel_to_boundary"] for c in t["chunks"] if c["cusum_alarm"]), None) for t in turns],
+            "read_only_at_end": sum(1 for t in turns if t["read_only_end"]),
+            "latched_before_first_accepted_generation_chunk": latched_before_accepted_generation,
+            "retained_both_sources": retained_both,
+            "operating_point": summarize_operating_point([x for t in turns for x in t["txns"]]),
+        }
+    return out
+
+
+def _dev_record_problem(rec: Any) -> str | None:
+    """Writer-shaped validation for a dev progress line (a completed pair), mirroring
+    ``_progress_record_problem`` for eval sessions."""
+    if not isinstance(rec, dict) or rec.get("regime") != "dev":
+        return "not a dev pair line"
+    p = rec.get("record")
+    if not isinstance(p, dict) or p.get("regime") != "dev":
+        return "missing dev pair record"
+    if not (_is_int(p.get("id")) and _is_int(p.get("position")) and _is_int(p.get("seed"))):
+        return "dev pair has no integer id/position/seed"
+    if p.get("incomplete") is not False:
+        return "an incomplete dev pair was persisted"
+    if not isinstance(p.get("outputs_identical"), bool):
+        return "dev pair has no boolean outputs_identical"
+    if not (p.get("first_divergent_token") is None or _is_int(p.get("first_divergent_token"))):
+        return "dev pair has a non-integer first_divergent_token"
+    if "provenance" in p and not isinstance(p["provenance"], dict):
+        return "dev pair provenance is not an object"
+    arms = p.get("arms")
+    if not isinstance(arms, dict) or set(arms) != set(DEV_ARMS):
+        return "dev pair does not hold exactly the guarded and log_only arms"
+    for arm in DEV_ARMS:
+        t = arms[arm]
+        if not isinstance(t, dict) or t.get("seed") != p["seed"] or t.get("outcome") not in _OUTCOMES:
+            return f"{arm} turn has no matched seed or known outcome"
+        if not (isinstance(t.get("out_ids"), list) and all(_is_int(x) for x in t["out_ids"])):
+            return f"{arm} turn has no integer out_ids"
+        if not (isinstance(t.get("chunks"), list) and isinstance(t.get("txns"), list) and len(t["chunks"]) == len(t["txns"])):
+            return f"{arm} turn chunks do not match its transactions"
+        if not (_is_int(t.get("cusum_replay_mismatch")) and isinstance(t.get("read_only_end"), bool)):
+            return f"{arm} turn is missing a writer field"
+        for j, x in enumerate(t["txns"]):
+            problem = _txn_problem(x, j)
+            if problem:
+                return f"{arm} {problem}"
+    if not isinstance(rec.get("txns"), list) or rec["txns"]:
+        return "dev pair line carries transactions outside its arms"
+    return None
+
+
+def _run_dev_stage(args, dev_records, cfg, cal, guarded_hcfg, gen, deadline, settings_identity, provenance, invocations) -> None:
+    """Run (or resume) the paired development diagnostic and write ``dev-diagnostic.json``. Uses ONLY the
+    pinned dev split; the locked eval split is never opened by this stage."""
+    from plastic.backends.qwen import QwenBackend
+    from plastic.harness.calibrate import log_only
+
+    path = os.path.join(args.out, "dev-progress.jsonl")
+    identity = _eval_identity(dev_records, settings_identity, cal,
+                              {"stage": "dev", "guarded": guarded_hcfg.to_dict(), "log_only": log_only(guarded_hcfg).to_dict()})
+    try:
+        restore = _load_eval_progress(path, identity, provenance=provenance, regimes=("dev",), record_problem=_dev_record_problem)
+        if restore is None:
+            _init_eval_progress(path, identity, provenance)
+            restore = {"dev": []}
+        backend = QwenBackend.load(args.checkpoint, device=args.device)
+        dev = _dev_sessions(backend, cfg, cal, dev_records, guarded_hcfg=guarded_hcfg, gen=gen,
+                            seed_base=SEED + DEV_SEED_OFFSET, deadline=deadline, restore=restore["dev"],
+                            on_progress=lambda pair: _append_eval_progress(path, "dev", pair, []), provenance=provenance)
+    except RunConflict as err:
+        print(f"[oppoint] dev progress conflict: {err}")
+        return
+    run_provenance = _run_provenance_check(invocations)
+    _write_json(os.path.join(args.out, "dev-diagnostic.json"), {
+        "kind": "development-only paired diagnostic (ASTRA-088/109): guarded vs log-only on the pinned DEV prompts; "
+                "descriptive counts, not a policy result, false-positive rate, or safety evidence",
+        "complete": dev["complete"], "n_expected": len(dev["expected_ids"]), "n_complete_pairs": len(dev["pairs"]),
+        "summary": dev["summary"], "pairs": dev["pairs"],
+        "provenance": {"this_invocation": provenance, "run": run_provenance},
+    })
+    state = "complete" if dev["complete"] else "incomplete; progress checkpointed, re-run to resume"
+    print(f"[oppoint] dev diagnostic {state}: {len(dev['pairs'])}/{len(dev['expected_ids'])} pairs; "
+          f"cusum_replay_mismatch={dev['summary']['cusum_replay_mismatch']}; source ok={run_provenance['ok']}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--checkpoint", default=os.environ.get("QWEN_CHECKPOINT", "artifacts/astra/qwen-runtime-20260922/checkpoint"))
@@ -953,6 +1227,10 @@ def main() -> None:
                          "reserves those rows and their duplicate/context groups from the selection")
     ap.add_argument("--minutes", type=float, default=45.0, help="wall-clock budget; partial results are saved")
     ap.add_argument("--smoke", action="store_true", help="tiny counts to validate wiring (NOT the ASTRA-083 screen)")
+    ap.add_argument("--stage", required=True, choices=("dev", "screen"),
+                    help="dev: durable calibration, then the paired guarded/log-only development diagnostic on the "
+                         "pinned DEV prompts ONLY (never opens the locked eval split). screen: the frozen locked "
+                         "evaluation + follow-ups; run it only after the policy is frozen and reviewed.")
     args = ap.parse_args()
 
     if args.smoke:
@@ -1010,7 +1288,7 @@ def main() -> None:
         # on resume this restores the exact ordered split from the pinned manifest (not the rebuild),
         # so completed fit prompts can never enter a resumed evaluation
         mode, mid, manifest, split = _reconcile_run(args.out, manifest, split, settings_identity, lambda: store.new_model_id("qwen"))
-        invocations = _record_invocation(args.out, provenance, mode)
+        invocations = _record_invocation(args.out, provenance, mode, args.stage)
     except RunConflict as err:
         print(f"[oppoint] run conflict: {err}")
         return
@@ -1058,10 +1336,14 @@ def main() -> None:
         fit_meta = store.load_model_record(mid)
         print(f"[oppoint] fit: {cal.n_chunks} chunks; fit_prompts {fit_meta['calibration_fit_prompts_used']}/{fit_meta['calibration_fit_prompts_requested']}; thresholds={cal.thresholds}")
 
-    # frozen evaluation harness: stats + rollback on, generation learning on, alarm latch, no budget
     from plastic.config import ModelConfig
 
     eval_cfg = ModelConfig(domain="text", chunk=CHUNK)
+    if args.stage == "dev":
+        _run_dev_stage(args, split["dev"], eval_cfg, cal, eval_hcfg, gen, deadline, settings_identity, provenance, invocations)
+        return
+
+    # frozen evaluation harness: stats + rollback on, generation learning on, alarm latch, no budget
     eval_backend = QwenBackend.load(args.checkpoint, device=args.device)
     # durable eval progress bound to the exact split/settings/calibration-content/policy: complete
     # sessions are appended and restored on re-invocation, so a bounded run resumes rather than re-evals

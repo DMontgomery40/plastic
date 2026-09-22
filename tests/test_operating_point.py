@@ -1153,7 +1153,7 @@ def test_unrecorded_history_is_never_one_clean_source_on_any_continuation(tmp_pa
 
 
 @_pytest.mark.parametrize("artifact", ["split-manifest.json", "calibration.ckpt", "calibration-status.json", "invocations.json",
-                                       "eval-progress.jsonl", "eval-operating-point.json", "followups-result.json",
+                                       "dev-progress.jsonl", "dev-diagnostic.json", "eval-progress.jsonl", "eval-operating-point.json", "followups-result.json",
                                        "screen-result.json"])
 def test_reconcile_never_starts_fresh_over_any_prior_run_artifact(tmp_path, artifact):
     # a directory holding ANY run artifact but no run record is prior work: a fresh run must not
@@ -1166,3 +1166,231 @@ def test_reconcile_never_starts_fresh_over_any_prior_run_artifact(tmp_path, arti
         _reconcile_run(str(tmp_path), _manifest_of("new", split), split, "idA", lambda: "qwen_x")
     assert (tmp_path / artifact).read_text(encoding="utf-8") == "prior"
     assert not (tmp_path / "run-record.json").exists()
+
+
+# ---- dev stage: the ASTRA-088/109 paired guarded vs log-only development diagnostic ----
+
+
+class _CusumRunner:
+    """A runner stand-in with the REAL Cusum and TransactionRunner's per-chunk order (transaction.py):
+    a chunk that can carry evidence updates the CUSUM (z from the continuous reference when it has >= 8
+    values, else the per-chunk z), a guarded runner latches read-only on alarm, then the record is
+    APPENDED; a latched chunk is ineligible read-only with all z None. ``skew`` feeds the CUSUM a value
+    other than the recorded one, to prove the replay check catches an unobserved change."""
+
+    def __init__(self, *, log_only, k=0.5, h=2.0, cref=None, skew=0.0):
+        from plastic.harness.stats import Cusum
+        self.log_only, self.k, self.h, self.cref, self.skew = log_only, k, h, cref or [], skew
+        self.cusum = Cusum(k, h)
+        self.transactions = []
+        self.read_only, self.read_only_reason, self.resets = False, None, 0
+
+    def reset(self):
+        from plastic.harness.stats import Cusum
+        self.cusum = Cusum(self.k, self.h)
+        self.read_only, self.read_only_reason = False, None
+        self.resets += 1
+
+    def chunk(self, *, user, model, value):
+        from plastic.harness.stats import robust_z
+        eligible = not self.read_only
+        alarm, z = False, {"log_delta_norm": None, "chunk_loss": None}
+        if eligible:
+            z = {"log_delta_norm": value, "chunk_loss": 0.0}
+            z_ld = robust_z(value, self.cref) if len(self.cref) >= 8 else value
+            alarm = self.cusum.update(z_ld + self.skew)
+            if alarm and not self.log_only:
+                self.read_only, self.read_only_reason = True, "cusum_alarm"
+        self.transactions.append({
+            "decision": {"kind": "commit" if eligible else "readonly"}, "sources": {"user": user, "model": model},
+            "eligible": eligible, "accepted": {"delta_norm": 1.0 if eligible else 0.0},
+            "signals": {"z": z, "cusum_alarm": alarm, "log_delta_norm": value, "pos_start": 0, "pos_end": 8},
+            "read_only": self.read_only, "read_only_reason": self.read_only_reason})
+
+
+def _zdrive(prompt_values, gen_values, *, raise_on=None):
+    """Emit the prompt chunks, then one generation chunk per sampled token; a latched runner produces
+    no tokens (the measured ASTRA-088/090 empty-output shape, NOT assumed universal by the driver)."""
+    def drive(runner, tok, prompt, *, max_new_tokens, temperature, top_k, gen):
+        if raise_on is not None and prompt == raise_on and not runner.log_only:
+            raise RuntimeError("boom")
+        for v in prompt_values:
+            runner.chunk(user=8, model=0, value=v)
+        out = []
+        for j, v in enumerate(gen_values[:max_new_tokens]):
+            if runner.read_only:
+                break
+            out.append(int(gen.initial_seed()) % 1000 + j)
+            runner.chunk(user=0, model=1, value=v)
+        return (f"o{len(out)}", out, [1] * (8 * len(prompt_values)))
+    return drive
+
+
+def _dev(prompts, drive, *, restore=None, on_progress=None, deadline=1e18, cref=None, skew=0.0):
+    from types import SimpleNamespace
+    from scripts.experiments.qwen_operating_point import _dev_sessions
+    runners = {"guarded": _CusumRunner(log_only=False, cref=cref, skew=skew), "log_only": _CusumRunner(log_only=True, cref=cref, skew=skew)}
+    cal = SimpleNamespace(cusum_reference=cref or [])
+    rep = _dev_sessions(None, None, cal, prompts, guarded_hcfg=None, gen=_gen_settings(), seed_base=2000, deadline=deadline,
+                        restore=restore, on_progress=on_progress, provenance=_prov("a"), _runners=runners, _drive=drive)
+    return rep, runners
+
+
+def _dev_prompts(n):
+    return [{"id": 10 + i, "prompt": f"p{i}"} for i in range(n)]
+
+
+def test_dev_pair_records_cusum_boundary_latch_outputs_and_matched_seeds():
+    # prompt chunks z=2,2 alarm on the SECOND prompt chunk (h=2, k=0.5: 1.5 then 3.0>2 -> alarm, reset)
+    rep, runners = _dev(_dev_prompts(3), _zdrive([2.0, 2.0, 0.0], [0.0, 0.0, 0.0]))
+    assert rep["complete"] is True and [p["seed"] for p in rep["pairs"]] == [2000, 2001, 2002]
+    assert runners["guarded"].resets == 3 and runners["log_only"].resets == 3  # fresh state per arm per prompt
+    for p in rep["pairs"]:
+        g, lo = p["arms"]["guarded"], p["arms"]["log_only"]
+        assert g["seed"] == lo["seed"] == p["seed"]                             # matched seed, only log_only differs
+        assert g["cusum_replay_mismatch"] == lo["cusum_replay_mismatch"] == 0  # observed statistic == replay
+        assert [c["cusum_s_hi"] for c in lo["chunks"]] == [1.5, 0.0, 0.0, 0.0, 0.0, 0.0]  # reset after alarm
+        assert [c["phase"] for c in lo["chunks"]] == ["prompt"] * 3 + ["generation"] * 3
+        assert [c["rel_to_boundary"] for c in lo["chunks"]] == [-3, -2, -1, 0, 1, 2]
+        # guarded: the alarm latches during the PROMPT, the rest is read-only with no CUSUM evidence
+        assert [c["cusum_alarm"] for c in g["chunks"]] == [False, True, False]
+        assert [c["read_only_after"] for c in g["chunks"]] == [False, True, True] and g["chunks"][2]["cusum_z"] is None
+        assert (g["outcome"], g["out_ids"], g["read_only_end"]) == ("empty", [], True)
+        assert (lo["outcome"], lo["read_only_end"]) == ("eos", False) and len(lo["out_ids"]) == 3
+        assert p["outputs_identical"] is False and p["first_divergent_token"] == 0
+    s = rep["summary"]
+    assert s["n_pairs"] == 3 and s["cusum_replay_mismatch"] == 0 and s["outputs_identical"] == 0
+    assert s["arms"]["guarded"]["first_alarm_phase"] == {"prompt": 3, "generation": 0, "mixed": 0, "none": 0}
+    assert s["arms"]["guarded"]["latched_before_first_accepted_generation_chunk"] == 3
+    assert s["arms"]["guarded"]["outcomes"]["empty"] == 3 and s["arms"]["guarded"]["retained_both_sources"] == 0
+    assert s["arms"]["log_only"]["read_only_at_end"] == 0 and s["arms"]["log_only"]["retained_both_sources"] == 3
+    assert s["arms"]["guarded"]["first_alarm_rel_to_boundary"] == [-2, -2, -2]  # boundary = no generation chunk
+
+
+def test_dev_cusum_input_follows_the_continuous_reference_and_replay_catches_skew():
+    from plastic.harness.stats import robust_z
+    cref = [0.0, 0.1, -0.1, 0.2, -0.2, 0.05, -0.05, 0.15]
+    rep, _ = _dev(_dev_prompts(1), _zdrive([0.3, 0.1], [0.0]), cref=cref)
+    lo = rep["pairs"][0]["arms"]["log_only"]
+    assert lo["cusum_replay_mismatch"] == 0
+    assert lo["chunks"][0]["cusum_z"] == _pytest.approx(robust_z(0.3, cref))  # the continuous-reference z, not the per-chunk z
+    skewed, _ = _dev(_dev_prompts(1), _zdrive([0.3, 0.1], [0.0]), cref=cref, skew=0.7)
+    assert skewed["summary"]["cusum_replay_mismatch"] > 0  # an unobserved change in the CUSUM input is flagged
+
+
+def test_dev_exception_is_recorded_as_an_outcome_and_the_pair_completes():
+    rep, _ = _dev(_dev_prompts(2), _zdrive([0.0], [0.0, 0.0], raise_on="p1"))
+    g = rep["pairs"][1]["arms"]["guarded"]
+    assert (g["outcome"], g["error"]) == ("exception", "RuntimeError: boom")
+    assert rep["pairs"][1]["arms"]["log_only"]["outcome"] == "eos" and rep["complete"] is True
+    assert rep["summary"]["arms"]["guarded"]["outcomes"]["exception"] == 1
+
+
+def test_dev_resume_through_disk_equals_uninterrupted_and_never_persists_half_a_pair(tmp_path, monkeypatch):
+    import scripts.experiments.qwen_operating_point as qop
+    from scripts.experiments.qwen_operating_point import (
+        _append_eval_progress, _dev_record_problem, _init_eval_progress, _load_eval_progress,
+    )
+    prompts = _dev_prompts(4)
+    base = _zdrive([2.0, 2.0, 0.0], [0.0, 0.5])
+    full, _ = _dev(prompts, base)
+
+    def sig(rep):
+        return [(p["id"], p["seed"], {a: (t["out_ids"], [c["cusum_s_hi"] for c in t["chunks"]]) for a, t in p["arms"].items()})
+                for p in rep["pairs"]]
+
+    clock = {"t": 0.0}
+    monkeypatch.setattr(qop.time, "time", lambda: clock["t"])
+
+    def clock_drive(runner, tok, prompt, **kw):
+        out = base(runner, tok, prompt, **kw)
+        clock["t"] += 1.0
+        return out
+
+    path = str(tmp_path / "dev-progress.jsonl")
+    _init_eval_progress(path, "dev-id")
+    appended = []
+
+    def append(pair):
+        appended.append(pair["id"])
+        _append_eval_progress(path, "dev", pair, [])
+
+    def load():
+        return _load_eval_progress(path, "dev-id", regimes=("dev",), record_problem=_dev_record_problem)["dev"]
+
+    cut, _ = _dev(prompts, clock_drive, restore=[], on_progress=append, deadline=2.5)  # cut inside pair 1
+    assert cut["complete"] is False and [x["record"]["id"] for x in load()] == [10]      # only the COMPLETE pair persisted
+    resumed, _ = _dev(prompts, clock_drive, restore=load(), on_progress=append)
+    assert sig(resumed) == sig(full) and resumed["complete"] is True           # position-based seeds: no shift
+    assert appended == [10, 11, 12, 13]                                         # each pair appended exactly once
+    assert [x["record"]["id"] for x in load()] == [10, 11, 12, 13]
+
+
+def test_dev_restore_must_be_the_exact_pinned_prefix():
+    from scripts.experiments.qwen_operating_point import RunConflict
+    full, _ = _dev(_dev_prompts(2), _zdrive([0.0], [0.0]))
+    with _pytest.raises(RunConflict):
+        _dev(_dev_prompts(2), _zdrive([0.0], [0.0]), restore=[{"record": full["pairs"][1]}])  # pair 1 at position 0
+
+
+def _dev_line(mutate=None):
+    full, _ = _dev(_dev_prompts(1), _zdrive([2.0, 2.0], [0.0]))
+    line = _json.loads(_json.dumps({"regime": "dev", "record": full["pairs"][0], "txns": []}))
+    if mutate:
+        mutate(line)
+    return line
+
+
+@_pytest.mark.parametrize("mutate, why", [
+    (lambda L: L.update(regime="fresh"), "not a dev pair line"),
+    (lambda L: L["record"].pop("seed"), "integer id/position/seed"),
+    (lambda L: L["record"].update(id=True), "integer id/position/seed"),
+    (lambda L: L["record"].update(incomplete=True), "incomplete dev pair"),
+    (lambda L: L["record"]["arms"].pop("log_only"), "exactly the guarded and log_only arms"),
+    (lambda L: L["record"]["arms"]["log_only"].update(seed=1), "matched seed"),
+    (lambda L: L["record"]["arms"]["guarded"].update(outcome="weird"), "known outcome"),
+    (lambda L: L["record"]["arms"]["log_only"].update(out_ids=[True]), "integer out_ids"),
+    (lambda L: L["record"]["arms"]["log_only"]["chunks"].pop(), "chunks do not match"),
+    (lambda L: L["record"]["arms"]["log_only"]["txns"][0].pop("eligible"), "boolean eligibility"),
+    (lambda L: L.update(txns=[{"x": 1}]), "transactions outside its arms"),
+])
+def test_dev_progress_schema_refuses_non_writer_pairs(mutate, why):
+    from scripts.experiments.qwen_operating_point import _dev_record_problem
+    assert _dev_record_problem(_dev_line()) is None  # the real writer's pair passes
+    assert why in (_dev_record_problem(_dev_line(mutate)) or "")
+
+
+def test_dev_and_eval_logs_never_cross_load(tmp_path):
+    from scripts.experiments.qwen_operating_point import (
+        RunConflict, _append_eval_progress, _dev_record_problem, _init_eval_progress, _load_eval_progress,
+    )
+    dev_path, eval_path = str(tmp_path / "d.jsonl"), str(tmp_path / "e.jsonl")
+    _init_eval_progress(dev_path, "i")
+    _append_eval_progress(dev_path, "dev", _dev_line()["record"], [])
+    with _pytest.raises(RunConflict):
+        _load_eval_progress(dev_path, "i")  # a dev pair is not an eval session
+    _init_eval_progress(eval_path, "i")
+    _append_eval_progress(eval_path, "fresh", _wrec([0]), [_wtx()])
+    with _pytest.raises(RunConflict):
+        _load_eval_progress(eval_path, "i", regimes=("dev",), record_problem=_dev_record_problem)
+
+
+def test_dev_identity_is_distinct_from_eval_and_binds_both_arms():
+    from types import SimpleNamespace
+    from scripts.experiments.qwen_operating_point import _eval_identity
+    cal = SimpleNamespace(thresholds={}, reference={}, cusum_reference=[], model_signature="s")
+    recs = [{"id": 1, "text_sha256": "h", "prompt": "p"}]
+    guarded, logonly = {"log_only": False, "freeze_on_alarm": True}, {"log_only": True, "freeze_on_alarm": True}
+    dev = _eval_identity(recs, "S", cal, {"stage": "dev", "guarded": guarded, "log_only": logonly})
+    assert dev != _eval_identity(recs, "S", cal, guarded)  # the same content can never share an eval identity
+    assert dev != _eval_identity(recs, "S", cal, {"stage": "dev", "guarded": guarded, "log_only": {**logonly, "freeze_on_alarm": False}})
+
+
+def test_cli_requires_an_explicit_stage(monkeypatch):
+    # the locked evaluation is never opened by default: running without --stage is a usage error
+    import sys
+    from scripts.experiments.qwen_operating_point import main
+    monkeypatch.setattr(sys, "argv", ["qwen_operating_point.py", "--out", "unused"])
+    with _pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2

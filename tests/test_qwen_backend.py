@@ -785,3 +785,34 @@ def test_qwen_continuous_chat_state_roundtrips_for_resume(backend):
         part += _run_turn(r3, prompts[i], i)
 
     assert part == full  # exact continuous-state round-trip: resume reproduces the CUSUM reference
+
+
+def test_dev_diagnostic_observes_the_real_runner_cusum_exactly(backend):
+    # The operating-point dev stage observes each chunk's post-update CUSUM statistic by snapshotting it
+    # as the REAL TransactionRunner appends the record, and recomputes the CUSUM input with the runner's
+    # rule. On the actual checkpoint, both input paths (per-chunk z; continuous reference >= 8) must replay
+    # to exactly the observed statistic in both arms, and the pair must pass the dev progress schema.
+    import json
+
+    from plastic.config import ModelConfig
+    from plastic.harness.calibrate import Calibration
+    from plastic.harness.config import HarnessConfig
+    from scripts.experiments.qwen_operating_point import _dev_record_problem, _dev_sessions
+
+    ref = [0.1 * i for i in range(16)]
+    hcfg = HarnessConfig(enable_stats=True, enable_rollback=True, log_only=False, learn_from_generation=True,
+                         freeze_on_alarm=True, alarm_cooldown=0)
+    for cref in ([], [5.0 + 0.01 * i for i in range(16)]):
+        cal = Calibration(model_signature=f"qwen:{backend.checkpoint_digest}", reference={"chunk_loss": ref, "log_delta_norm": ref},
+                          cusum_reference=cref, thresholds={"cusum_h": 0.5})
+        rep = _dev_sessions(backend, ModelConfig(domain="text", chunk=8), cal, [{"id": 1, "prompt": "Name a primary color."}],
+                            guarded_hcfg=hcfg, gen={"max_new_tokens": 4, "temperature": 0.9, "top_k": 50},
+                            seed_base=7, deadline=1e18)
+        assert rep["complete"] is True and rep["summary"]["cusum_replay_mismatch"] == 0
+        pair = rep["pairs"][0]
+        for arm in ("guarded", "log_only"):
+            assert len(pair["arms"][arm]["chunks"]) == len(pair["arms"][arm]["txns"]) > 0
+        if cref:  # a reference far from the observed log_delta_norm forces the CUSUM to alarm
+            assert any(c["cusum_alarm"] for c in pair["arms"]["log_only"]["chunks"])
+            assert pair["arms"]["guarded"]["read_only_end"] is True and pair["arms"]["log_only"]["read_only_end"] is False
+        assert _dev_record_problem(json.loads(json.dumps({"regime": "dev", "record": pair, "txns": []}))) is None
