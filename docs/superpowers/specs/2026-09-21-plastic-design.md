@@ -41,7 +41,7 @@ Goals:
 
 Non-goals:
 
-- Competing with production models. Target scale is 5 to 8M parameters, TinyStories, minutes to an hour of GPU time.
+- Competing with production models. Target scale is 5 to 8M parameters, wikitext-103, minutes to an hour of GPU time.
 - Fused Triton kernels. Everything is plain PyTorch that runs on MPS and CUDA.
 - Preserving on-disk artifacts, API paths, or dashboard code from the old halves. Nothing has shipped; nothing is kept for compatibility. Old artifacts are regenerated.
 
@@ -94,9 +94,9 @@ This is TTT-Linear (Sun et al.) with mini-batch 1 plus Gated DeltaNet's decay; `
 
 Two control modes are distinct by contract: `beta_scale` scales the write rate only (β ← s·β, decay continues), while `freeze=True` leaves `S` bit-identical (β ≡ 0 and α ≡ 1): the memory is read but neither written nor decayed. Read-only sessions and rolled-back chunks use `freeze`.
 
-Training uses the chunk-parallel WY form (nilpotent Neumann inverse, no `solve_triangular`, all matmuls); inference uses the per-token recurrence. The two agree to 4e-7 on CPU and MPS and the equivalence is a permanent test.
+Training uses the chunk-parallel WY form with an exact unit-lower-triangular solve (`torch.linalg.solve_triangular`, available on CPU, CUDA, and MPS; a Neumann-product inverse loses all precision when repeated tokens make keys identical); inference uses the per-token recurrence. The two agree to 4e-7 on CPU and MPS and the equivalence is a permanent test.
 
-Inner rule `chunk` (experiment switch, same interface): mini-batch TTT once per chunk at chunk-start weights, mean-scaled gradient, Titans-style momentum `M`, per-chunk forget, optional Newton-Schulz orthogonalization of the update (LaCT/Atlas). With orthogonalization the per-chunk write has a fixed Frobenius norm, which turns the write budget into an architectural invariant. `memory ∈ {linear, mlp}`; the 2-layer MLP memory uses `torch.func` for the inner gradient and a second-order outer loop (verified feasible on MPS). Sum-scaled mini-batch gradients are unstable (eigenvalues to −56 with correlated keys) and are never used.
+Inner rule `chunk` (experiment switch, same interface): mini-batch TTT once per chunk at chunk-start weights, mean-scaled gradient computed from sufficient statistics `A = Σ β k kᵀ`, `Bv = Σ β k vᵀ` carried in the session state (so token-by-token processing equals whole-chunk processing), Titans-style momentum `M`, per-chunk forget, optional Newton-Schulz orthogonalization of the update (LaCT/Atlas). `beta_scale` scales the complete update after orthogonalization and the gradient's contribution to momentum. Orthogonalization makes the update direction approximately invariant to a uniform rescaling of the gradient, which blunts magnitude-based attacks, but its Frobenius norm still depends on the rank and spectrum of the momentum, so it is not a budget; the harness caps the complete state delta explicitly. `memory ∈ {linear, mlp}`; the 2-layer MLP memory uses `torch.func` for the inner gradient and a second-order outer loop (verified feasible on MPS). Sum-scaled mini-batch gradients are unstable (eigenvalues to −56 with correlated keys) and are never used.
 
 **Output and MLP.**
 
@@ -107,13 +107,13 @@ x_t += MLP(RMSNorm(x_t))                          GELU, 4× width
 
 Flag `memory_input ∈ {ssm_out, block_in}` (default `ssm_out`); the stacked alternative is a cheap ablation.
 
-**Sizes.** Per block 1.18M parameters; text model with tied embeddings (V = 4096) and 4 blocks about 5.8M; physics model with 3 blocks about 3.6M. State per block: `S` 4×64×64 and `h` 256 floats.
+**Sizes.** Per block 1.18M parameters; text model with tied embeddings (V = 8192) and 4 blocks about 6.8M; physics model with 3 blocks about 3.6M. State per block: `S` 4×64×64 and `h` 256 floats.
 
 **Gate initialization.** `σ(b_β) ≈ 0.5`, `α ≈ 0.98` at init, `σ(λ) ≈ 0.9`. Every checkpoint ships three numbers: held-out loss with β forced to 0 (the value of the memory), MQAR accuracy versus pairs, and the histogram of learned β.
 
 ### 4.2 Domains
 
-Text: byte-level BPE (V = 4096, whitespace-preserving pretokenizer, fixed), tied embedding and head, next-token cross-entropy.
+Text: byte-level BPE (V = 8192, whitespace-preserving pretokenizer, fixed), tied embedding and head, next-token cross-entropy.
 
 Physics: per step `x_t = [obs_t (4), action_t (2), reset_flag (1)] → Linear(7 → D)`; head `Linear(D → 4)` predicting `obs_{t+1} − obs_t`; MSE. Environment is the existing 2D point mass with hidden friction mu (linear and nonlinear modes), mu resampled per episode, `reset_flag = 1` on the first step of each episode, several episodes per training sequence so the forget gate learns to open at resets and the memory absorbs mu within an episode.
 
@@ -124,7 +124,7 @@ Physics: per step `x_t = [obs_t (4), action_t (2), reset_flag (1)] → Linear(7 
 ## 5. Training (outer loop)
 
 - Fast state `{h, S, M}` starts at zero per training sequence and is produced by the forward pass; it is not a parameter. The outer loss is ordinary next-token CE (text) or MSE (physics), backpropagated through every inner step. With rule `delta` this is first-order autograd through the WY form; no truncation within a sequence.
-- Text data: TinyStories train split (50 to 100M tokens, mounted inside the HF job from `hf://datasets/roneneldan/TinyStories`), stories concatenated with `<eos>` into T = 1024 sequences so entities recur across chunk boundaries; the local 22MB valid file is held out. MQAR synthetic recall sequences (reserved key/value token ranges, n pairs then queries) mixed at 20% of batches.
+- Text data: `wikitext-103-raw-v1` (about 103M tokens of Wikipedia articles; document-structured so entities recur within a sequence) as the primary corpus, mounted inside the HF job from `hf://datasets/Salesforce/wikitext`, articles concatenated with `<eos>` into T = 1024 sequences; held-out evaluation on its validation and test splits. `HuggingFaceFW/fineweb-edu` `sample-10BT`, streamed to about 100M tokens, is an optional second corpus config. BPE vocabulary 8192 (Wikipedia vocabulary is far broader than children's stories; about 1M extra tied-embedding parameters at D = 256, inside budget). MQAR synthetic recall sequences (reserved key/value token ranges, n pairs then queries) mixed at 20% of batches. The local TinyStories file is no longer used.
 - Physics data: generated on the fly; T = 512, 4 to 8 episodes per sequence.
 - Optimizer: `torch.optim.Muon` for 2-D matrices (`adjust_lr_fn="match_rms_adamw"`, lr 2e-2, weight decay 0.1 set explicitly) and AdamW (lr 1e-3) for embeddings, norms, λ, biases, and gate vectors; 500-step warmup, cosine to 10%, grad-clip 1.0. AdamW-only is the documented fallback.
 - Compute: measured 8.5K tok/s on MPS (B = 8, T = 1024, 4 blocks, fp32, no compile); expected 40 to 80K tok/s on an L4/A10G, so one pass over 100M tokens in 20 to 40 minutes. Target 1.6 to 1.9 nats held out.
@@ -164,7 +164,7 @@ Per chunk, per layer and total:
 - Surprise statistics: mean and max `‖e_t‖`; mean β_t (the model's own gate); mean α_t.
 - Update norm `‖Δ‖_F`, `Δ[ℓ] = S_working[ℓ] − S_committed[ℓ]`; log-transformed for statistics.
 - Fisher-weighted update size `Σ_i F_i Δ_i²` and cumulative drift from the session anchor `Σ_i F_i (S_i − S_anchor,i)²`, with diagonal Fisher over state entries estimated on the benign calibration stream (Elastic TTT / EWC style; the alignment-collapse result says first-order projection alone leaks through curvature).
-- Canary suite score before and after the chunk: a fixed per-domain probe set run read-only (β ≡ 0) from a scratch copy of the state. Two sets: a coherence set whose loss must not rise, and a private poison set (garbage and recorded attack payloads) whose loss must not fall. `ΔL_C > τ_C` or `ΔL_P < −τ_P` is the rollback trigger, matching the TTT-guardrails perplexity-shift detector.
+- Canary suite score before and after the chunk: a fixed per-domain probe set run read-only (`freeze=True`: no write, no decay, momentum and pending statistics untouched) from a scratch copy of the state. Two sets: a coherence set whose loss must not rise, and a private poison set (garbage and recorded attack payloads) whose loss must not fall. `ΔL_C > τ_C` or `ΔL_P < −τ_P` is the rollback trigger, matching the TTT-guardrails perplexity-shift detector.
 - Canary gradient alignment `cos(Δ, g_C)` where `g_C[ℓ] = ∂score_C/∂S[ℓ]` from a read-only canary forward with `S` marked differentiable.
 - Robust z-scores (median, 1.4826·MAD) of each stream against a fixed benign reference window from calibration and against session history; two-sided CUSUM (k = 0.5, h = 4 to 5 in z units) on log‖Δ‖ for slow drift.
 - Budget remaining: per-chunk cap on `‖Δ‖_F` and per-session cumulative cap.
@@ -174,8 +174,8 @@ Per chunk, per layer and total:
 
 Ordered checks, each producing a reason string with the numbers:
 
-1. Budget: if `‖Δ‖_F > B_chunk` scale to the cap; if cumulative exceeds `B_session`, the session becomes read-only (β ≡ 0) until reset.
-2. Projection: if `⟨g_C, Δ⟩ > ε_dot + ε_cos ‖g_C‖ ‖Δ‖` project `Δ ← Δ − ((⟨g_C, Δ⟩ − ε)/‖g_C‖²) g_C` over the flattened multi-layer state delta, then `S_working := S_committed + Δ`. The existing half-space code moves over unchanged and now acts on state deltas. `h` is never projected.
+1. Budget: if `‖Δ‖_F > B_chunk` scale to the cap; if cumulative exceeds `B_session`, the session becomes read-only (`freeze=True` for every later chunk) until reset.
+2. Projection: if `⟨g_C, Δ⟩ > ε_dot + ε_cos ‖g_C‖ ‖Δ‖` project `Δ ← Δ − ((⟨g_C, Δ⟩ − ε)/‖g_C‖²) g_C` over the flattened multi-layer state delta, then `S_working := S_committed + Δ`. The half-space code acts on state deltas. `h`, the convolution buffers, and momentum keep their provisional values, so a projected state is not the state any sequence of inputs would have produced; the removed fraction `‖Δ − Δ_proj‖/‖Δ‖` is logged, and when it exceeds `project_max_removed` (default 0.5) the decision falls back to rollback, which recomputes a fully consistent state.
 3. Rollback: canary trigger, or robust z of chunk loss, surprise, or `‖Δ‖` beyond the calibrated quantile, or CUSUM alarm (alarm also freezes learning until a full canary pass succeeds).
 4. Scale: intermediate z-scores scale β by a calibrated factor instead of blocking (learn scaling from the paper).
 5. Otherwise commit.
@@ -192,7 +192,7 @@ Nothing pattern-matches text. The pre-commit decision uses chunk loss, surprise,
 
 Attacker (`plastic redteam`): projected gradient ascent on the continuous embeddings of a 64-token suffix after a benign prefix, maximizing canary damage `score_C(after) − score_C(before)` subject to `‖δ‖ ≤ ρ` and a benign-looking constraint `NLL(x_adv) ≤ τ` (the model's own perplexity). Snap to nearest tokens, then validate through the token path so the reported payload is the tested payload. Plus sampled families: random-token blobs, single-token repeats, shuffled benign text, topic switches, recorded high-surprise segments. Results are stored under `artifacts/redteam/<run_id>/` and feed the poison canary set and calibration replay.
 
-Experiment (`plastic train --adversarial`): add `λ_adv · Damage(Φ, x_adv(Φ))` and `λ_rec · CE_MQAR` to the outer loss; `Damage` is differentiable in the slow weights through the chunk-parallel form; alternate 9 benign steps and 1 adversarial step with the attack treated as constant. Report against a fresh adaptive attacker: max canary damage, fraction of attacks over the rollback threshold, harness residual after rollback and projection, AUROC of β as an attack-token detector, LM loss and MQAR accuracy (must not regress), and transfer of baseline-optimized attacks. Claimed novelty is limited to: training the write gate for update safety against an adaptive attacker and measuring it as a detector; using the delta rule's exact per-token `β‖e‖` as write pressure; canary-gradient projection on a TTT layer's state delta; fixed-norm orthogonalized writes as an architectural budget. Partial robustness is expected and reported.
+Experiment (`plastic train --adversarial`): add `λ_adv · Damage(Φ, x_adv(Φ))` and `λ_rec · CE_MQAR` to the outer loss; `Damage` is differentiable in the slow weights through the chunk-parallel form; alternate 9 benign steps and 1 adversarial step with the attack treated as constant. Report against a fresh adaptive attacker: max canary damage, fraction of attacks over the rollback threshold, harness residual after rollback and projection, AUROC of β as an attack-token detector, LM loss and MQAR accuracy (must not regress), and transfer of baseline-optimized attacks. Claimed novelty is limited to: training the write gate for update safety against an adaptive attacker and measuring it as a detector; using the delta rule's exact per-token `β‖e‖` as write pressure; canary-gradient projection on a TTT layer's state delta; orthogonalized writes as a magnitude-blunting mechanism (not a budget). Partial robustness is expected and reported.
 
 ## 8. Sleep
 
@@ -278,7 +278,7 @@ Design floor (from the user's legibility rules): no emoji, no text under 11px, b
 - `test_block_model.py`: shapes, parameter count, β-off ablation changes outputs, physics and text models share block code.
 - `test_tokenizer.py`: whitespace segmentation, round-trip, special tokens.
 - `test_data.py`: sequence packing, MQAR generator correctness, physics episode reset flags.
-- `test_harness.py`: state-transition matrix over policy outcomes (commit, rollback, scale, project, read-only); projection invariant `⟨g, Δ⟩ ≥ −ε` after projection; budget invariants; CUSUM alarm on injected drift and silence on benign; calibration quantiles reproduce target FPR on the calibration stream.
+- `test_harness.py`: state-transition matrix over policy outcomes (commit, rollback, scale, project, read-only); projection invariant `⟨g, Δ⟩ ≤ ε` after projection (g is the canary-loss gradient with respect to S and Δ the state change, so the first-order change in canary loss is ⟨g, Δ⟩); budget invariants; CUSUM alarm on injected drift and silence on benign; calibration quantiles reproduce target FPR on the calibration stream.
 - `test_store.py`: create, fork, signature mismatch refused, transaction log append, round-trip of state.
 - `test_redteam.py`: validated payload ids equal optimized ids; NLL constraint honored.
 - `test_api.py`: FastAPI TestClient contract for every route on a generated demo artifact set.
@@ -294,7 +294,7 @@ Verification gate before any milestone is called done: `uv run pytest`, `npm run
 2. Default inner rule is the per-token gated delta rule (linear memory) because it is stable by construction, exact in write pressure, first-order to meta-train, and verified on MPS; the chunk rule with Muon and the MLP memory are implemented behind the same interface as the "TTT-MLP/LaCT" path rather than as the default.
 3. Memory q/k/v are computed from the SSM output (composition), with the stacked variant behind a flag.
 4. The physics environment is kept as a first-class domain because it is the cleanest controlled test that fast weights infer latent context.
-5. The "harmful holdout" of the safety literature becomes a poison canary set (garbage plus recorded attacks) whose loss must not fall, since a TinyStories model has no notion of harmful content.
+5. The "harmful holdout" of the safety literature becomes a poison canary set (garbage plus recorded attacks) whose loss must not fall, since a small Wikipedia model has no notion of harmful content.
 6. Chat sessions do not retract text generated inside a rolled-back chunk.
 7. Sleep is kept minimal (blocks only, canary-gated acceptance); the auditor idea from the old README is dropped.
 8. The GitHub repo rename happens in the final milestone; nothing is pushed.
@@ -312,3 +312,4 @@ Verification gate before any milestone is called done: `uv run pytest`, `npm run
 - M5 API and CLI, `plastic demo`.
 - M6 Dashboard rebuild.
 - M7 README, CLAUDE.md, cleanup of the old packages, repo rename, final verification, screenshots.
+13. Corpus (David, 2026-09-22): wikitext-103-raw-v1 primary, fineweb-edu sample-10BT optional, vocabulary 8192, held-out on wikitext validation/test.

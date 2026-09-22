@@ -2,9 +2,11 @@
 
 Per layer: ``h`` (activation state of the selective recurrence, (B, D)), ``S``
 (fast-weight memory, (B, H, d_h, d_h)), ``M`` (inner-loop momentum, only for
-``rule="chunk"``), and the two short-convolution buffers ``conv_ssm`` and
+``rule="chunk"``), the two short-convolution buffers ``conv_ssm`` and
 ``conv_mem`` holding the last ``conv_kernel - 1`` inputs of each branch
-((B, K-1, D), absent when the kernel is 1). ``pos`` counts tokens or steps.
+((B, K-1, D), absent when the kernel is 1), and for ``rule="chunk"`` the
+sufficient statistics of the pending (unfinished) chunk so that token-by-token
+processing equals whole-chunk processing. ``pos`` counts tokens or steps.
 """
 
 from __future__ import annotations
@@ -22,39 +24,55 @@ def _opt(t: Tensor | None, fn) -> Tensor | None:
 
 
 @dataclass
+class ChunkStats:
+    """Pending-chunk statistics for the chunk rule: ``A = Σ β k kᵀ``, ``Bv = Σ β k vᵀ``,
+    ``alpha_sum = Σ α`` (per head), and ``count`` tokens accumulated so far."""
+
+    A: Tensor  # (B, H, d, d)
+    Bv: Tensor  # (B, H, d, d)
+    alpha_sum: Tensor  # (B, H)
+    count: int = 0
+
+    @classmethod
+    def zeros(cls, batch: int, heads: int, dh: int, device, dtype) -> "ChunkStats":
+        return cls(
+            torch.zeros(batch, heads, dh, dh, device=device, dtype=dtype),
+            torch.zeros(batch, heads, dh, dh, device=device, dtype=dtype),
+            torch.zeros(batch, heads, device=device, dtype=dtype),
+            0,
+        )
+
+    def map(self, fn) -> "ChunkStats":
+        return ChunkStats(fn(self.A), fn(self.Bv), fn(self.alpha_sum), self.count)
+
+
+@dataclass
 class LayerState:
     h: Tensor
     S: Tensor
     M: Tensor | None = None
     conv_ssm: Tensor | None = None
     conv_mem: Tensor | None = None
+    chunk: ChunkStats | None = None
+
+    def _map(self, fn) -> "LayerState":
+        return LayerState(
+            fn(self.h),
+            fn(self.S),
+            _opt(self.M, fn),
+            _opt(self.conv_ssm, fn),
+            _opt(self.conv_mem, fn),
+            None if self.chunk is None else self.chunk.map(fn),
+        )
 
     def clone(self) -> "LayerState":
-        return LayerState(
-            self.h.clone(),
-            self.S.clone(),
-            _opt(self.M, lambda t: t.clone()),
-            _opt(self.conv_ssm, lambda t: t.clone()),
-            _opt(self.conv_mem, lambda t: t.clone()),
-        )
+        return self._map(lambda t: t.clone())
 
     def detach(self) -> "LayerState":
-        return LayerState(
-            self.h.detach(),
-            self.S.detach(),
-            _opt(self.M, lambda t: t.detach()),
-            _opt(self.conv_ssm, lambda t: t.detach()),
-            _opt(self.conv_mem, lambda t: t.detach()),
-        )
+        return self._map(lambda t: t.detach())
 
     def to(self, device: torch.device | str) -> "LayerState":
-        return LayerState(
-            self.h.to(device),
-            self.S.to(device),
-            _opt(self.M, lambda t: t.to(device)),
-            _opt(self.conv_ssm, lambda t: t.to(device)),
-            _opt(self.conv_mem, lambda t: t.to(device)),
-        )
+        return self._map(lambda t: t.to(device))
 
 
 _OPTIONAL = ("M", "conv_ssm", "conv_mem")
@@ -82,7 +100,8 @@ class SessionState:
             M = torch.zeros_like(S) if cfg.rule == "chunk" else None
             conv_ssm = torch.zeros(batch, K - 1, cfg.d_model, device=device, dtype=dtype) if K > 1 else None
             conv_mem = torch.zeros(batch, K - 1, cfg.d_model, device=device, dtype=dtype) if K > 1 else None
-            layers.append(LayerState(h, S, M, conv_ssm, conv_mem))
+            chunk = ChunkStats.zeros(batch, cfg.n_heads, dh, device, dtype) if cfg.rule == "chunk" else None
+            layers.append(LayerState(h, S, M, conv_ssm, conv_mem, chunk))
         return cls(layers=layers, pos=0)
 
     @property
@@ -111,6 +130,11 @@ class SessionState:
                 t = getattr(layer, name)
                 if t is not None:
                     out[f"layer{i}.{name}"] = t.detach().cpu()
+            if layer.chunk is not None:
+                out[f"layer{i}.chunk.A"] = layer.chunk.A.detach().cpu()
+                out[f"layer{i}.chunk.Bv"] = layer.chunk.Bv.detach().cpu()
+                out[f"layer{i}.chunk.alpha_sum"] = layer.chunk.alpha_sum.detach().cpu()
+                out[f"layer{i}.chunk.count"] = int(layer.chunk.count)
         return out
 
     @classmethod
@@ -125,7 +149,15 @@ class SessionState:
             for name in _OPTIONAL:
                 t = d.get(f"layer{i}.{name}")
                 extras[name] = None if t is None else t.clone()  # type: ignore[union-attr]
-            layers.append(LayerState(h.clone(), S.clone(), **extras))
+            chunk = None
+            if f"layer{i}.chunk.A" in d:
+                chunk = ChunkStats(
+                    d[f"layer{i}.chunk.A"].clone(),  # type: ignore[union-attr]
+                    d[f"layer{i}.chunk.Bv"].clone(),  # type: ignore[union-attr]
+                    d[f"layer{i}.chunk.alpha_sum"].clone(),  # type: ignore[union-attr]
+                    int(d.get(f"layer{i}.chunk.count", 0)),  # type: ignore[arg-type]
+                )
+            layers.append(LayerState(h.clone(), S.clone(), chunk=chunk, **extras))
             i += 1
         pos = int(d.get("pos", 0))  # type: ignore[arg-type]
         return cls(layers=layers, pos=pos)

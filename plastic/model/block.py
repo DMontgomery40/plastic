@@ -117,11 +117,11 @@ class PlasticBlock(nn.Module):
 
         u2, conv_mem = self.conv_mem(self.norm2(x), state.conv_mem)
         mem_in = u2 if self.cfg.memory_input == "ssm_out" else u
-        m, S_new, M_new, signals = self.memory(
-            mem_in, state.S, state.M, mode=mode, beta_scale=beta_scale, freeze=freeze
+        m, S_new, M_new, chunk_new, signals = self.memory(
+            mem_in, state.S, state.M, mode=mode, beta_scale=beta_scale, freeze=freeze, chunk0=state.chunk
         )
         x = x + self.W_o2(m * F.silu(self.W_g2(u2)))
 
         x = x + self.mlp(self.norm3(x))
-        new_state = LayerState(h=h_last, S=S_new, M=M_new, conv_ssm=conv_ssm, conv_mem=conv_mem)
+        new_state = LayerState(h=h_last, S=S_new, M=M_new, conv_ssm=conv_ssm, conv_mem=conv_mem, chunk=chunk_new)
         return x, new_state, signals

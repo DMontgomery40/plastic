@@ -12,7 +12,7 @@ def test_freeze_leaves_memory_bit_identical(device):
     u = torch.randn(1, 20, 32, device=device)
     S0 = torch.randn(1, 2, 16, 16, device=device) * 0.1
     for mode in ("chunk", "recurrent"):
-        _, S1, _, sig = mem(u, S0, None, mode=mode, freeze=True)
+        _, S1, _, _, sig = mem(u, S0, None, mode=mode, freeze=True)
         assert torch.equal(S1, S0), mode
         assert sig.write_norm.abs().max() == 0
         assert (sig.alpha == 1).all() and (sig.beta == 0).all()
@@ -23,8 +23,8 @@ def test_beta_scale_zero_still_decays_but_freeze_does_not(device):
     mem = FastWeightMemory(cfg).to(device)
     u = torch.randn(1, 20, 32, device=device)
     S0 = torch.randn(1, 2, 16, 16, device=device) * 0.1
-    _, S_scaled, _, _ = mem(u, S0, None, mode="chunk", beta_scale=0.0)
-    _, S_frozen, _, _ = mem(u, S0, None, mode="chunk", freeze=True)
+    _, S_scaled, _, _, _ = mem(u, S0, None, mode="chunk", beta_scale=0.0)
+    _, S_frozen, _, _, _ = mem(u, S0, None, mode="chunk", freeze=True)
     assert not torch.equal(S_scaled, S0)
     assert torch.equal(S_frozen, S0)
 
@@ -46,8 +46,10 @@ def test_chunk_rule_freeze(device):
     cfg = ModelConfig(d_model=32, n_heads=2, chunk=8, rule="chunk")
     mem = FastWeightMemory(cfg).to(device)
     u = torch.randn(1, 20, 32, device=device)
-    S0 = torch.randn(1, 2, 16, 16, device=device) * 0.1
-    M0 = torch.zeros_like(S0)
-    _, S1, M1, sig = mem(u, S0, M0, mode="chunk", freeze=True)
-    assert torch.equal(S1, S0) and torch.equal(M1, M0)
+    st = SessionState.zeros(cfg, batch=1, device=device).layers[0]
+    st.S += torch.randn_like(st.S) * 0.1
+    st.chunk.A += 0.5
+    _, S1, M1, c1, sig = mem(u, st.S, st.M, mode="chunk", freeze=True, chunk0=st.chunk)
+    assert torch.equal(S1, st.S) and torch.equal(M1, st.M)
+    assert torch.equal(c1.A, torch.zeros_like(c1.A)) and c1.count == 20 % 8  # boundaries still advance
     assert sig.write_norm.abs().max() == 0 and sig.err.shape == (1, 2, 20)

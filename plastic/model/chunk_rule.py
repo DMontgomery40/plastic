@@ -1,16 +1,19 @@
 """Mini-batch (chunk-level) test-time-training rule for a linear fast-weight memory.
 
-Once per chunk of L tokens, at the chunk-start weights S:
+Once per chunk of L tokens, at the chunk-start weights S, with sufficient
+statistics accumulated token by token (so streaming equals whole-chunk processing):
 
-    E   = K S − V                              errors (rows), shape (L, d)
-    G   = (1/L) Kᵀ (β ⊙ E)                     mean-scaled gradient of ½ Σ β_t ‖k_t S − v_t‖²
-    M'  = momentum · M + G                     Titans-style momentum
-    U   = NewtonSchulz(M')  or  M'             optional orthogonalization (LaCT / Atlas / Muon)
-    S'  = ᾱ · S − lr · U                       per-chunk forget ᾱ
+    A   = Σ_t β_t k_tᵀ k_t,   Bv = Σ_t β_t k_tᵀ v_t          (d × d each)
+    G   = (A S − Bv) / L      = (1/L) Kᵀ diag(β) (K S − V)     mean-scaled gradient of ½ Σ β_t ‖k_t S − v_t‖²
+    M'  = momentum · M + s · G                                 Titans-style momentum, s = write scale
+    U   = NewtonSchulz(M')  or  M'                             optional orthogonalization (LaCT / Atlas / Muon)
+    S'  = ᾱ · S − lr · s · U                                   per-chunk forget ᾱ = mean α
 
-With orthogonalization the Frobenius norm of the write is independent of the
-input scale: an adversary chooses the direction of a chunk's write, not its
-size. Sum-scaled gradients are never used (they are unstable for correlated keys).
+The Newton-Schulz step makes the update direction approximately invariant to
+a uniform rescaling of the gradient, but its Frobenius norm still depends on
+the rank and spectrum of M', so it is not a write budget; budgets are enforced
+by the harness on the complete state delta. Sum-scaled gradients are never
+used (they are unstable for correlated keys).
 """
 
 from __future__ import annotations
@@ -40,6 +43,33 @@ def newton_schulz(G: Tensor, steps: int = 5, eps: float = 1e-7) -> Tensor:
     return X.to(G.dtype)
 
 
+def chunk_stats(k: Tensor, v: Tensor, beta: Tensor) -> tuple[Tensor, Tensor]:
+    """Sufficient statistics of a token segment: ``(Σ β k kᵀ, Σ β k vᵀ)``, shapes (B, H, d, d)."""
+    kb = k * beta.unsqueeze(-1)
+    return torch.einsum("bhtk,bhtj->bhkj", kb, k), torch.einsum("bhtk,bhtv->bhkv", kb, v)
+
+
+def chunk_rule_apply(
+    S: Tensor,
+    M: Tensor,
+    A: Tensor,
+    Bv: Tensor,
+    alpha_chunk: Tensor,
+    *,
+    n_tokens: int,
+    lr: float,
+    momentum: float,
+    orthogonalize: bool,
+    scale: float = 1.0,
+) -> tuple[Tensor, Tensor]:
+    """Apply one chunk update from sufficient statistics. Returns (S_new, M_new)."""
+    G = (A @ S - Bv) / float(max(1, n_tokens))
+    M_new = float(momentum) * M + float(scale) * G
+    U = newton_schulz(M_new) if orthogonalize else M_new
+    S_new = alpha_chunk[..., None, None] * S - float(lr) * float(scale) * U
+    return S_new, M_new
+
+
 def chunk_rule_step(
     S: Tensor,
     M: Tensor,
@@ -51,8 +81,9 @@ def chunk_rule_step(
     lr: float,
     momentum: float,
     orthogonalize: bool,
+    scale: float = 1.0,
 ) -> tuple[Tensor, Tensor, Tensor]:
-    """One chunk update.
+    """One whole-chunk update from raw tokens (convenience wrapper).
 
     Args:
         S, M: (B, H, d, d) fast weights and momentum at chunk start.
@@ -64,10 +95,9 @@ def chunk_rule_step(
         (S_new, M_new, err) with ``err`` (B, H, L) = ‖k_t S − v_t‖ at chunk-start weights.
     """
     L = k.shape[2]
-    E = k @ S - v  # (B, H, L, d)
-    err = E.norm(dim=-1)
-    G = torch.einsum("bhtk,bhtv->bhkv", k * beta.unsqueeze(-1), E) / float(L)
-    M_new = float(momentum) * M + G
-    U = newton_schulz(M_new) if orthogonalize else M_new
-    S_new = alpha_chunk[..., None, None] * S - float(lr) * U
+    err = (k @ S - v).norm(dim=-1)
+    A, Bv = chunk_stats(k, v, beta)
+    S_new, M_new = chunk_rule_apply(
+        S, M, A, Bv, alpha_chunk, n_tokens=L, lr=lr, momentum=momentum, orthogonalize=orthogonalize, scale=scale
+    )
     return S_new, M_new, err

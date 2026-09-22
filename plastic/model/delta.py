@@ -7,14 +7,12 @@ prediction error, which is also the inner-loop gradient direction.
 Two implementations with the same contract:
 
 - ``delta_recurrent``: per-token loop, used at inference.
-- ``delta_chunk``: chunk-parallel WY form (nilpotent Neumann inverse, all
-  matmuls, no triangular solves), used for training. Both return the
-  per-token error norm so write pressure ``β‖e‖`` is available either way.
+- ``delta_chunk``: chunk-parallel WY form with an exact unit-lower-triangular
+  solve, used for training. Both return the per-token error norm so write
+  pressure ``β‖e‖`` is available either way.
 """
 
 from __future__ import annotations
-
-import math
 
 import torch
 from torch import Tensor
@@ -51,6 +49,29 @@ def delta_recurrent(
         S = S + bt * torch.einsum("bhk,bhv->bhkv", kt, e)
         outs.append(torch.einsum("bhk,bhkv->bhv", qt, S))
     return torch.stack(outs, dim=2), S, torch.stack(errs, dim=2)
+
+
+def solve_unit_lower(A: Tensor, Y: Tensor) -> Tensor:
+    """Solve ``(I + A) X = Y`` for strictly-lower-triangular ``A`` (batched over leading dims).
+
+    A Neumann/nilpotent product for the inverse is exact only in exact arithmetic:
+    with correlated keys (repeated tokens give identical keys) the intermediate
+    powers reach 1e17 in fp32 and the result is garbage. Forward substitution is
+    exact and stable; ``solve_triangular`` runs on CPU, CUDA, and MPS.
+    """
+    L = A.shape[-1]
+    eye = torch.eye(L, dtype=A.dtype, device=A.device)
+    try:
+        return torch.linalg.solve_triangular(A + eye, Y, upper=False, unitriangular=True)
+    except (RuntimeError, NotImplementedError):
+        xs: list[Tensor] = []
+        for i in range(L):
+            xi = Y[..., i, :]
+            if i > 0:
+                prev = torch.stack(xs, dim=-2)
+                xi = xi - torch.einsum("...j,...jd->...d", A[..., i, :i], prev)
+            xs.append(xi)
+        return torch.stack(xs, dim=-2)
 
 
 def delta_chunk(
@@ -91,18 +112,12 @@ def delta_chunk(
     Ds = torch.exp(diff.masked_fill(~stril, float("-inf")))  # strict
 
     kb = k * beta.unsqueeze(-1)
-    # A[t, s] = beta_t (k_t . k_s) alpha_{s+1..t} for s < t; (I + A)^{-1} via nilpotent product
+    # A[t, s] = beta_t (k_t . k_s) alpha_{s+1..t} for s < t; solve (I + A) x = y exactly
     A = torch.einsum("bhntd,bhnsd->bhnts", kb, k) * Ds
-    eye = torch.eye(L, dtype=q.dtype, device=q.device)
-    X = -A
-    Tinv = eye + X
-    for _ in range(max(0, int(math.ceil(math.log2(L))) - 1)):
-        X = X @ X
-        Tinv = Tinv @ (eye + X)
 
     gexp = torch.exp(g)  # alpha_{1..t} from chunk start
-    w = Tinv @ (kb * gexp.unsqueeze(-1))  # carries the chunk-start state into pseudo-values
-    u = Tinv @ (v * beta.unsqueeze(-1))
+    w = solve_unit_lower(A, kb * gexp.unsqueeze(-1))  # carries the chunk-start state into pseudo-values
+    u = solve_unit_lower(A, v * beta.unsqueeze(-1))
 
     S = torch.zeros(B, H, d, d, dtype=q.dtype, device=q.device) if S0 is None else S0
     outs, errs = [], []

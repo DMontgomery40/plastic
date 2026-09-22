@@ -91,3 +91,23 @@ def test_dynamics_smoke():
         opt.step()
         losses.append(float(loss.detach()))
     assert losses[-1] < 0.5 * losses[0], losses
+
+
+def test_training_on_repetitive_text_stays_finite():
+    """Repeated tokens make keys identical inside a chunk; the loss must stay finite
+    over several optimizer steps at the default chunk size."""
+    torch.manual_seed(0)
+    cfg = ModelConfig(d_model=64, n_heads=2, n_layers=2, chunk=64, vocab_size=64)
+    lm = PlasticLM(cfg)
+    opt = build_optimizer(lm, lr_matrix=2e-2, lr_other=1e-2, use_muon=True)
+    for step in range(8):
+        alphabet = torch.randint(0, 64, (4,))
+        toks = alphabet[torch.randint(0, 4, (2, 256))]
+        toks[0, :128] = alphabet[0]  # a long run of one token
+        loss = lm.loss(toks)
+        assert torch.isfinite(loss), (step, float(loss))
+        opt.zero_grad(set_to_none=True)
+        loss.backward()
+        grad_norm = torch.nn.utils.clip_grad_norm_(lm.parameters(), 1.0)
+        assert torch.isfinite(grad_norm), (step, float(grad_norm))
+        opt.step()

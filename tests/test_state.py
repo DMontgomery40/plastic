@@ -48,8 +48,15 @@ def test_state_chunk_rule_allocates_momentum():
     cfg = ModelConfig(d_model=32, n_heads=2, n_layers=1, rule="chunk")
     st = SessionState.zeros(cfg, batch=1)
     assert st.layers[0].M is not None and st.layers[0].M.shape == (1, 2, 16, 16)
+    assert st.layers[0].chunk is not None and st.layers[0].chunk.A.shape == (1, 2, 16, 16)
+    st.layers[0].chunk.count = 5
+    st.layers[0].chunk.Bv += 2.0
     back = SessionState.from_state_dict(st.state_dict())
-    assert back.layers[0].M is not None
+    assert back.layers[0].M is not None and back.layers[0].chunk is not None
+    assert back.layers[0].chunk.count == 5 and torch.equal(back.layers[0].chunk.Bv, st.layers[0].chunk.Bv)
+    c = st.clone()
+    c.layers[0].chunk.A += 1.0
+    assert float(st.layers[0].chunk.A.abs().sum()) == 0.0
 
 
 def test_state_without_conv_buffers():

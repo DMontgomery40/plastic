@@ -183,7 +183,11 @@ def evaluate_physics(model: PlasticDynamics, cfg: TrainConfig, device: torch.dev
     }
 
 
-def train(cfg: TrainConfig, *, log: Callable[[str], None] = print) -> str:
+def _print_flush(msg: str) -> None:
+    print(msg, flush=True)
+
+
+def train(cfg: TrainConfig, *, log: Callable[[str], None] = _print_flush) -> str:
     device = pick_device(cfg.device)
     torch.manual_seed(cfg.seed)
     g = torch.Generator().manual_seed(cfg.seed)

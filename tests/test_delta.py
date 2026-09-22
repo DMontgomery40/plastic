@@ -83,3 +83,37 @@ def test_gradients_reach_gates(device):
     o.pow(2).mean().backward()
     for g in (beta.grad, alpha.grad, q.grad):
         assert g is not None and torch.isfinite(g).all() and g.abs().sum() > 0
+
+
+@pytest.mark.parametrize("pattern", ["identical", "cycle3", "blocks"])
+def test_chunk_matches_recurrent_with_correlated_keys(device, pattern):
+    """Repeated tokens give identical keys; the chunk-parallel solve must stay exact."""
+    B, H, T, d = 1, 2, 128, 32
+    base = F.normalize(torch.randn(B, H, 3, d, device=device), dim=-1)
+    if pattern == "identical":
+        idx = torch.zeros(T, dtype=torch.long, device=device)
+    elif pattern == "cycle3":
+        idx = torch.arange(T, device=device) % 3
+    else:
+        idx = (torch.arange(T, device=device) // 20) % 3
+    k = base[:, :, idx]
+    q = k.clone()
+    v = torch.randn(B, H, T, d, device=device)
+    beta = torch.full((B, H, T), 0.9, device=device)
+    alpha = torch.full((B, H, T), 0.99, device=device)
+    o1, S1, e1 = delta_recurrent(q, k, v, beta, alpha)
+    o2, S2, e2 = delta_chunk(q, k, v, beta, alpha, chunk=64)
+    assert torch.isfinite(o2).all()
+    assert torch.allclose(o1, o2, atol=1e-3, rtol=1e-3), float((o1 - o2).abs().max())
+    assert torch.allclose(S1, S2, atol=1e-3, rtol=1e-3)
+
+
+def test_gradients_finite_with_identical_keys(device):
+    B, H, T, d = 1, 1, 64, 16
+    k = F.normalize(torch.randn(B, H, 1, d, device=device), dim=-1).expand(B, H, T, d).contiguous()
+    v = torch.randn(B, H, T, d, device=device)
+    beta = torch.full((B, H, T), 0.95, device=device, requires_grad=True)
+    alpha = torch.full((B, H, T), 0.99, device=device, requires_grad=True)
+    o, S, _ = delta_chunk(k, k, v, beta, alpha, chunk=64)
+    (o.pow(2).mean() + S.pow(2).mean()).backward()
+    assert torch.isfinite(beta.grad).all() and torch.isfinite(alpha.grad).all()

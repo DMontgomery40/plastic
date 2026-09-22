@@ -1,19 +1,17 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = ["huggingface_hub>=1.32"]
-# [tool.hf-jobs]
-# flavor = "l4x1"
-# timeout = "2h"
-# secrets = ["HF_TOKEN"]
 # ///
 """Train the plastic text model on Hugging Face Jobs.
 
-Runs inside the job container: clones the repo at REPO_REF, installs it with uv,
-prepares the corpus into the mounted bucket if missing, trains, and syncs the
-model directory back to the bucket. Launch with scripts/hf_jobs/launch_text.sh.
+Runs inside the job container (a pytorch/pytorch CUDA image): takes the package
+source from a mounted directory (SRC_DIR, synced from the local checkout) or clones
+REPO_URL at REPO_REF, installs it into the image's Python (keeping the image's torch),
+prepares the corpus into the mounted bucket if missing, and trains. Everything the
+run produces lands under OUT_DIR on the bucket. Launch with scripts/hf_jobs/launch_text.sh.
 
-Environment (set via -e / defaults): REPO_URL, REPO_REF, OUT_DIR (bucket mount),
-CORPUS, VOCAB, STEPS, BATCH, SEQ_LEN, EVAL_EVERY, MODEL_JSON, EXTRA_ARGS.
+Environment: SRC_DIR, REPO_URL, REPO_REF, OUT_DIR, CORPUS, VOCAB, STEPS, BATCH,
+SEQ_LEN, EVAL_EVERY, MODEL_ID, MODEL_JSON, EXTRA_ARGS.
 """
 
 from __future__ import annotations
@@ -25,13 +23,14 @@ import sys
 import time
 
 
-def sh(cmd: str, **kw) -> None:
+def sh(cmd: str) -> None:
     print(f"+ {cmd}", flush=True)
-    subprocess.run(cmd, shell=True, check=True, **kw)
+    subprocess.run(cmd, shell=True, check=True)
 
 
 def main() -> None:
     t0 = time.time()
+    src_dir = os.environ.get("SRC_DIR", "")
     repo_url = os.environ.get("REPO_URL", "https://github.com/DMontgomery40/ttt_ssm_eval.git")
     repo_ref = os.environ.get("REPO_REF", "fuse")
     out_dir = os.environ.get("OUT_DIR", "/out")
@@ -41,26 +40,35 @@ def main() -> None:
     batch = os.environ.get("BATCH", "32")
     seq_len = os.environ.get("SEQ_LEN", "1024")
     eval_every = os.environ.get("EVAL_EVERY", "250")
+    model_id = os.environ.get("MODEL_ID", "")
     model_json = os.environ.get("MODEL_JSON", "")
     extra = os.environ.get("EXTRA_ARGS", "")
 
     work = "/w"
-    sh(f"git clone --depth 1 --branch {shlex.quote(repo_ref)} {shlex.quote(repo_url)} {work}")
+    if src_dir:
+        sh(f"cp -r {shlex.quote(src_dir)} {work}")
+    else:
+        sh(f"git clone --depth 1 --branch {shlex.quote(repo_ref)} {shlex.quote(repo_url)} {work}")
     os.chdir(work)
-    sh("pip install -q uv && uv sync --no-dev")
-    print(f"[job] repo ready ({time.time() - t0:.0f}s)", flush=True)
+    sh("python -c 'import torch; print(\"torch\", torch.__version__, \"cuda\", torch.cuda.is_available())'")
+    sh("pip install -q uv && uv pip install --system -q --no-deps -e . && "
+       "uv pip install --system -q 'numpy>=2.0' 'tokenizers>=0.21' 'datasets>=3.0' 'huggingface_hub>=1.32' "
+       "'fastapi>=0.128' 'uvicorn>=0.30' 'pydantic>=2.7'")
+    print(f"[job] source ready ({time.time() - t0:.0f}s)", flush=True)
 
     data_dir = os.path.join(out_dir, "data", corpus)
     if not os.path.exists(os.path.join(data_dir, "train.bin")):
-        sh(f"uv run plastic data prepare --corpus {corpus} --out {shlex.quote(data_dir)} --vocab {vocab}")
+        sh(f"python -m plastic.cli data prepare --corpus {corpus} --out {shlex.quote(data_dir)} --vocab {vocab}")
     print(f"[job] data ready ({time.time() - t0:.0f}s)", flush=True)
 
     artifacts = os.path.join(out_dir, "artifacts")
     cmd = (
-        f"uv run plastic train text --data {shlex.quote(data_dir)} --artifacts-root {shlex.quote(artifacts)} "
+        f"python -m plastic.cli train text --data {shlex.quote(data_dir)} --artifacts-root {shlex.quote(artifacts)} "
         f"--steps {steps} --batch-size {batch} --seq-len {seq_len} --eval-every {eval_every} --device cuda "
         f"--save-every {eval_every} --log-every 10"
     )
+    if model_id:
+        cmd += f" --model-id {shlex.quote(model_id)}"
     if model_json:
         cmd += f" --model-json {shlex.quote(model_json)}"
     if extra:
