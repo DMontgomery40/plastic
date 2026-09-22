@@ -597,3 +597,63 @@ def test_eval_persistence_round_trip_no_regeneration_or_mixing(tmp_path, monkeyp
     assert len(ids) == len(set(ids))  # each completed session written exactly once (no re-append)
     assert sum(len(v) for v in final.values()) == 9  # fresh 6 singletons + carried 3 chains, all complete
     assert all(s["record"].get("incomplete") is False for v in final.values() for s in v)  # no partial persisted
+
+
+def test_eval_progress_valid_final_record_without_newline_survives_append(tmp_path):
+    # ASTRA-106: a crash before the final newline leaves a VALID record; the next append must restore
+    # the delimiter rather than concatenate, and neither record may be lost
+    from scripts.experiments.qwen_operating_point import _append_eval_progress, _init_eval_progress, _load_eval_progress
+    path = str(tmp_path / "p.jsonl")
+    _init_eval_progress(path, "idA")
+    _append_eval_progress(path, "fresh", {"ids": [0]}, [])
+    _append_eval_progress(path, "fresh", {"ids": [1]}, [])
+    with open(path, "rb+") as f:  # simulate a crash before the final newline
+        data = f.read()
+        assert data.endswith(b"\n")
+        f.seek(0); f.truncate(); f.write(data[:-1])
+    assert [s["record"]["ids"] for s in _load_eval_progress(path, "idA")["fresh"]] == [[0], [1]]  # both restored
+    _append_eval_progress(path, "fresh", {"ids": [2]}, [])  # repairs the delimiter, no concatenation
+    assert [s["record"]["ids"] for s in _load_eval_progress(path, "idA")["fresh"]] == [[0], [1], [2]]
+
+
+def test_eval_progress_truncated_final_fragment_dropped_on_append(tmp_path):
+    from scripts.experiments.qwen_operating_point import _append_eval_progress, _init_eval_progress, _load_eval_progress
+    path = str(tmp_path / "p.jsonl")
+    _init_eval_progress(path, "idA")
+    _append_eval_progress(path, "fresh", {"ids": [0]}, [])
+    with open(path, "a", encoding="utf-8") as f:
+        f.write('{"regime": "fresh", "record": {"ids": [1')  # truncated fragment, no newline
+    assert [s["record"]["ids"] for s in _load_eval_progress(path, "idA")["fresh"]] == [[0]]  # quarantined
+    _append_eval_progress(path, "fresh", {"ids": [1]}, [])  # rerun: repair drops the fragment
+    _append_eval_progress(path, "fresh", {"ids": [2]}, [])
+    assert [s["record"]["ids"] for s in _load_eval_progress(path, "idA")["fresh"]] == [[0], [1], [2]]
+
+
+def test_eval_progress_repeated_recover_append_reload(tmp_path):
+    from scripts.experiments.qwen_operating_point import _append_eval_progress, _init_eval_progress, _load_eval_progress
+    path = str(tmp_path / "p.jsonl")
+    _init_eval_progress(path, "idA")
+    for i in range(4):
+        _append_eval_progress(path, "fresh", {"ids": [i]}, [])
+        with open(path, "rb+") as f:  # crash before the newline each round
+            data = f.read()
+            if data.endswith(b"\n"):
+                f.seek(0); f.truncate(); f.write(data[:-1])
+        assert [s["record"]["ids"] for s in _load_eval_progress(path, "idA")["fresh"]] == [[j] for j in range(i + 1)]
+    _append_eval_progress(path, "fresh", {"ids": [9]}, [])
+    assert [s["record"]["ids"] for s in _load_eval_progress(path, "idA")["fresh"]] == [[0], [1], [2], [3], [9]]
+
+
+def test_eval_progress_interior_corruption_is_refused(tmp_path):
+    import pytest
+
+    from scripts.experiments.qwen_operating_point import RunConflict, _append_eval_progress, _init_eval_progress, _load_eval_progress
+    path = str(tmp_path / "p.jsonl")
+    _init_eval_progress(path, "idA")
+    _append_eval_progress(path, "fresh", {"ids": [0]}, [])
+    _append_eval_progress(path, "fresh", {"ids": [1]}, [])
+    lines = open(path, encoding="utf-8").read().splitlines()
+    lines[1] = "{bad interior json"  # corrupt the FIRST session record (interior: another follows)
+    open(path, "w", encoding="utf-8").write("\n".join(lines) + "\n")
+    with pytest.raises(RunConflict):
+        _load_eval_progress(path, "idA")  # interior corruption is refused, not silently dropped

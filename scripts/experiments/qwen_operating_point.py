@@ -453,9 +453,10 @@ def _reconcile_run(out_dir: str, manifest: dict[str, Any], split: dict[str, list
 def _eval_identity(eval_records: list[dict[str, Any]], settings_identity: str, calibration: Any, eval_hcfg: dict[str, Any]) -> str:
     """Bind eval progress to the exact content/config/calibration/policy: the ordered raw eval prompt
     CONTENT (id + full text hash + prompt, not IDs alone), the run settings, the calibration CONTENT
-    actually in effect (thresholds + CUSUM-reference length, not just the model-compatibility
-    signature -- reuse can hand a calibration from a prior invocation), and the frozen eval harness
-    config. A mismatch on any of these refuses to reuse stale eval progress (ASTRA-100/103/104)."""
+    actually in effect (thresholds, the per-signal reference windows AND the CUSUM reference VALUES the
+    runner consumes -- not just their lengths or the model-compatibility signature, since reuse can
+    hand a calibration from a prior invocation), and the frozen eval harness config. A mismatch on any
+    of these refuses to reuse stale eval progress (ASTRA-100/103/104/105)."""
     eval_content = [{"id": r["id"], "sha256": r.get("text_sha256", ""), "prompt": r.get("prompt", "")} for r in eval_records]
     # bind the DECISION-relevant calibration content the runner actually consumes -- thresholds, the
     # per-signal reference windows (compute_z standardizes against them) and the CUSUM reference VALUES
@@ -477,7 +478,35 @@ def _init_eval_progress(path: str, identity: str) -> None:
         f.write(json.dumps({"identity": identity}) + "\n")
 
 
+def _repair_append_boundary(path: str) -> None:
+    """Ensure the log ends on a clean record boundary before the next append, so a record is never
+    concatenated onto an UNTERMINATED final record left by a crash (ASTRA-106). The common case (the
+    file already ends in a newline) is O(1). Otherwise the final unterminated segment is either
+    completed with its delimiter (it is valid JSON that lost only its newline) or dropped (it is an
+    incomplete fragment whose session re-runs)."""
+    if not os.path.exists(path) or os.path.getsize(path) == 0:
+        return
+    with open(path, "rb") as f:
+        f.seek(-1, os.SEEK_END)
+        if f.read(1) == b"\n":
+            return
+    with open(path, "rb") as f:
+        data = f.read()
+    idx = data.rfind(b"\n")
+    tail = data[idx + 1:]
+    try:
+        json.loads(tail.decode("utf-8"))
+        repaired = data + b"\n"       # a valid final record missing only its newline: restore it
+    except Exception:
+        repaired = data[: idx + 1]    # an incomplete crash fragment: drop it (its session re-runs)
+    tmp = f"{path}.repair.{os.getpid()}"
+    with open(tmp, "wb") as f:
+        f.write(repaired)
+    os.replace(tmp, path)
+
+
 def _append_eval_progress(path: str, regime: str, record: dict[str, Any], txns: list[dict[str, Any]]) -> None:
+    _repair_append_boundary(path)  # never concatenate onto an unterminated final record
     with open(path, "a", encoding="utf-8") as f:  # append-only: each COMPLETE session written once
         f.write(json.dumps({"regime": regime, "record": record, "txns": txns}) + "\n")
 
@@ -485,30 +514,35 @@ def _append_eval_progress(path: str, regime: str, record: dict[str, Any], txns: 
 def _load_eval_progress(path: str, identity: str, *, log=print) -> dict[str, list[dict[str, Any]]] | None:
     """Restore per-regime COMPLETE sessions from the append-only eval progress log, or None if absent.
     The header pins the identity; a mismatch (different content/config/calibration/policy) raises
-    RunConflict rather than silently reusing stale progress. A malformed trailing line (a crash
-    mid-append) is skipped -- that one session re-runs deterministically."""
+    RunConflict rather than silently reusing stale progress. Only the LAST record may be an
+    unterminated crash fragment -- it is quarantined (skipped) and that session re-runs; a malformed
+    INTERIOR record is real corruption and is refused, never silently dropped (ASTRA-106)."""
     if not os.path.exists(path):
         return None
-    restore: dict[str, list[dict[str, Any]]] = {"fresh": [], "carried": []}
     with open(path, encoding="utf-8") as f:
+        raw = f.read().splitlines()  # tolerant of a missing final newline (a valid record still parses)
+    if not raw:
+        raise RunConflict(f"eval progress at {path} is empty; refusing to reuse. Use a fresh --out.")
+    try:
+        head = json.loads(raw[0])
+    except Exception as e:
+        raise RunConflict(f"eval progress at {path} is unreadable ({e}); refusing to reuse. Use a fresh --out.")
+    if head.get("identity") != identity:
+        raise RunConflict(
+            f"eval progress at {path} is for a different content/config/calibration; refusing to reuse. Use a fresh --out.")
+    body = [ln for ln in raw[1:] if ln.strip()]
+    restore: dict[str, list[dict[str, Any]]] = {"fresh": [], "carried": []}
+    for i, line in enumerate(body):
         try:
-            head = json.loads(f.readline())
-        except Exception as e:
-            raise RunConflict(f"eval progress at {path} is unreadable ({e}); refusing to reuse. Use a fresh --out.")
-        if head.get("identity") != identity:
+            rec = json.loads(line)
+        except Exception:
+            if i == len(body) - 1:  # only the final record may be an unterminated crash fragment
+                log("[oppoint] quarantining a malformed trailing eval-progress fragment (that session re-runs)")
+                continue
             raise RunConflict(
-                f"eval progress at {path} is for a different content/config/calibration; refusing to reuse. Use a fresh --out.")
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rec = json.loads(line)
-            except Exception:
-                log("[oppoint] skipping a malformed trailing eval-progress line (that session re-runs)")
-                continue
-            if rec.get("regime") in restore:
-                restore[rec["regime"]].append({"record": rec["record"], "txns": rec["txns"]})
+                f"eval progress at {path} has a malformed INTERIOR record at session {i}; refusing to reuse. Use a fresh --out.")
+        if rec.get("regime") in restore:
+            restore[rec["regime"]].append({"record": rec["record"], "txns": rec["txns"]})
     return restore
 
 
