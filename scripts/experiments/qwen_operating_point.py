@@ -159,7 +159,7 @@ def _cat_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
 
 
 def _eval_sessions(backend, cfg, calibration, prompts, *, hcfg, gen, seed_base, chains, deadline,
-                   restore=None, on_progress=None, _runner=None, _drive=None):
+                   restore=None, on_progress=None, provenance=None, _runner=None, _drive=None):
     """Evaluate the locked set through the frozen harness in two regimes on ONE reused backend/runner
     (fresh sessions reset between; carried chains retain state within a chain), via the shared
     drive_chat_turn. Records per-session eligible/accepted-by-source, read-only, completions and
@@ -173,6 +173,8 @@ def _eval_sessions(backend, cfg, calibration, prompts, *, hcfg, gen, seed_base, 
     never shifts a seed and fresh row i / carried row i still share it. A group cut mid-way is reported
     as durable evidence (incomplete) but NOT persisted; it re-runs from its start on resume (reset() is
     a clean slate). The operating point aggregates COMPLETE sessions only, never a partial group.
+    ``provenance`` (see ``_invocation_provenance``) is stamped on each session THIS call produces;
+    restored sessions keep the provenance they were recorded with.
     ``_runner``/``_drive`` allow a fake runner/drive for tests."""
     import torch
 
@@ -210,6 +212,8 @@ def _eval_sessions(backend, cfg, calibration, prompts, *, hcfg, gen, seed_base, 
                "retained_both": acc["prompt"] > 0 and acc["generation"] > 0,
                "anomalies": op["anomalies"],
                "turns": [{"id": ids[j], **{k: turn[k] for k in ("seed", "completion", "n_in", "n_out", "outcome", "seconds")}} for j, turn in enumerate(turns)]}
+        if provenance is not None:
+            rec["provenance"] = dict(provenance)
         return rec, txns
 
     def _run(regime: str, groups: list[list[dict]], seed0: int) -> dict[str, Any]:
@@ -363,12 +367,14 @@ class RunConflict(Exception):
 
 def _settings_identity(args: Any, checkpoint_digest: str, revision: str, exclusions_digest: str | None = None) -> str:
     """A stable digest of the settings that determine the corpus and the calibration, so a
-    re-invocation with different settings is refused rather than silently overwriting a run."""
+    re-invocation with different settings is refused rather than silently overwriting a run. The
+    compute device is bound too: a CPU invocation and an MPS invocation must never pool calibration or
+    eval sessions under one identity (ASTRA-083 fixes the CPU float32 protocol; FABLE-085 #1)."""
     payload = {
         "counts": {"fit": args.n_fit, "cusum": args.n_cusum, "dev": args.n_dev, "eval": args.n_eval},
         "max_prompt_tokens": args.max_prompt_tokens, "max_new_tokens": args.max_new_tokens,
         "eval_chains": args.eval_chains, "smoke": args.smoke, "exclusions": exclusions_digest,
-        "checkpoint_digest": checkpoint_digest, "revision": revision,
+        "checkpoint_digest": checkpoint_digest, "revision": revision, "device": str(args.device),
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
@@ -378,6 +384,57 @@ def _write_json(path: str, obj: dict[str, Any]) -> None:
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(obj, f, indent=2)
     os.replace(tmp, path)  # atomic, so a kill mid-write never leaves a truncated manifest/run record
+
+
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# the source that can change what an eval session computes; a dirty tree outside these is not recorded
+_CODE_PATHS = ("plastic", "scripts", "pyproject.toml", "uv.lock")
+
+
+def _invocation_provenance(device: str) -> dict[str, Any]:
+    """What produced the sessions THIS invocation appends: the code commit, whether the tracked source
+    under ``_CODE_PATHS`` differs from it, the torch/transformers versions and the device. It is
+    RECORDED per session and warned about on resume, not bound into the eval identity: the identity
+    already binds the content/config/calibration/policy (and the settings identity binds the device),
+    while a multi-invocation eval may legitimately span a commit that only touched unrelated files --
+    so the contributing provenances are listed in the screen result for review (FABLE-085 #3)."""
+    import importlib
+    import subprocess
+
+    def _git(*argv: str) -> str | None:
+        try:
+            return subprocess.check_output(["git", *argv], text=True, cwd=_REPO_ROOT, stderr=subprocess.DEVNULL).strip()
+        except Exception:
+            return None
+
+    status = _git("status", "--porcelain", "--untracked-files=no", "--", *_CODE_PATHS)
+    versions: dict[str, str | None] = {}
+    for mod in ("torch", "transformers"):
+        try:
+            versions[mod] = str(importlib.import_module(mod).__version__)
+        except Exception:
+            versions[mod] = None
+    return {"code_commit": _git("rev-parse", "HEAD") or "unknown", "code_dirty": None if status is None else bool(status),
+            **versions, "device": str(device)}
+
+
+def _eval_provenances(report: dict[str, Any]) -> list[dict[str, Any]]:
+    """The distinct invocation provenances behind the COMPLETE eval sessions, in first-seen order, with
+    per-regime session counts. More than one entry means the screen spans invocations whose code,
+    dependencies or tree state differed; a ``None`` provenance is a session with none recorded."""
+    out: list[dict[str, Any]] = []
+    index: dict[str, int] = {}
+    for regime in ("fresh", "carried"):
+        for s in report[regime]["sessions"]:
+            if s.get("incomplete"):
+                continue
+            p = s.get("provenance")
+            key = json.dumps(p, sort_keys=True)
+            if key not in index:
+                index[key] = len(out)
+                out.append({"provenance": p, "sessions": {"fresh": 0, "carried": 0}})
+            out[index[key]]["sessions"][regime] += 1
+    return out
 
 
 def _split_identity(split: dict[str, list[dict[str, Any]]]) -> str:
@@ -473,9 +530,22 @@ def _eval_identity(eval_records: list[dict[str, Any]], settings_identity: str, c
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
 
-def _init_eval_progress(path: str, identity: str) -> None:
-    with open(path, "w", encoding="utf-8") as f:  # a single identity header line; sessions are appended
-        f.write(json.dumps({"identity": identity}) + "\n")
+def _no_header_message(path: str, why: str) -> str:
+    return (f"eval progress at {path} {why}, so none of its sessions can be certified; refusing to reuse it. "
+            f"If it holds no session records, remove ONLY this eval-progress.jsonl and re-run -- the durable "
+            f"calibration, split manifest and run record in this --out are unaffected; otherwise inspect it first.")
+
+
+def _init_eval_progress(path: str, identity: str, provenance: dict[str, Any] | None = None) -> None:
+    """Create the progress log holding ONLY its identity header (plus the initializing invocation's
+    provenance), atomically: a kill mid-init leaves either no log or a complete header, never a
+    truncated one. An existing log is never overwritten."""
+    if os.path.exists(path):
+        raise RunConflict(f"eval progress at {path} already exists; refusing to overwrite it.")
+    tmp = f"{path}.tmp.{os.getpid()}"
+    with open(tmp, "w", encoding="utf-8") as f:  # a single identity header line; sessions are appended
+        f.write(json.dumps({"identity": identity, "provenance": provenance}) + "\n")
+    os.replace(tmp, path)
 
 
 def _repair_append_boundary(path: str) -> None:
@@ -483,9 +553,11 @@ def _repair_append_boundary(path: str) -> None:
     concatenated onto an UNTERMINATED final record left by a crash (ASTRA-106). The common case (the
     file already ends in a newline) is O(1). Otherwise the final unterminated segment is either
     completed with its delimiter (it is valid JSON that lost only its newline) or dropped (it is an
-    incomplete fragment whose session re-runs)."""
+    incomplete fragment whose session re-runs). It never creates, empties or de-headers a log: a
+    missing/empty log, or one whose only content is an unterminated non-JSON line (the header itself
+    is damaged), raises RunConflict instead of appending a session no identity could certify."""
     if not os.path.exists(path) or os.path.getsize(path) == 0:
-        return
+        raise RunConflict(_no_header_message(path, "is missing or empty (no identity header)"))
     with open(path, "rb") as f:
         f.seek(-1, os.SEEK_END)
         if f.read(1) == b"\n":
@@ -498,6 +570,8 @@ def _repair_append_boundary(path: str) -> None:
         json.loads(tail.decode("utf-8"))
         repaired = data + b"\n"       # a valid final record missing only its newline: restore it
     except Exception:
+        if idx < 0:  # no complete line at all: the damaged segment IS the header -- never truncate it away
+            raise RunConflict(_no_header_message(path, "has no complete identity header"))
         repaired = data[: idx + 1]    # an incomplete crash fragment: drop it (its session re-runs)
     tmp = f"{path}.repair.{os.getpid()}"
     with open(tmp, "wb") as f:
@@ -511,58 +585,114 @@ def _append_eval_progress(path: str, regime: str, record: dict[str, Any], txns: 
         f.write(json.dumps({"regime": regime, "record": record, "txns": txns}) + "\n")
 
 
-def _load_eval_progress(path: str, identity: str, *, log=print) -> dict[str, list[dict[str, Any]]] | None:
+def _progress_record_problem(rec: Any) -> str | None:
+    """Why a parsed progress line is not a completed-session record the writer could have produced, or
+    None. A parseable but schema-invalid line is corruption, not a crash fragment (a truncated JSON
+    object never parses), so the loader refuses it rather than ignoring it or raising a bare KeyError."""
+    if not isinstance(rec, dict):
+        return "not a JSON object"
+    regime = rec.get("regime")
+    if regime not in ("fresh", "carried"):
+        return f"unknown regime {regime!r}"
+    r = rec.get("record")
+    if not isinstance(r, dict):
+        return "missing session record"
+    if not isinstance(r.get("ids"), list):
+        return "session record has no ids list"
+    if "regime" in r and r["regime"] != regime:
+        return f"session record regime {r['regime']!r} differs from the line regime {regime!r}"
+    if r.get("incomplete") is True:
+        return "an incomplete session was persisted"
+    if not isinstance(rec.get("txns"), list):
+        return "missing transactions list"
+    return None
+
+
+def _load_eval_progress(path: str, identity: str, *, log=print,
+                        provenance: dict[str, Any] | None = None) -> dict[str, list[dict[str, Any]]] | None:
     """Restore per-regime COMPLETE sessions from the append-only eval progress log, or None if absent.
     The header pins the identity; a mismatch (different content/config/calibration/policy) raises
-    RunConflict rather than silently reusing stale progress. Only the LAST record may be an
-    unterminated crash fragment -- it is quarantined (skipped) and that session re-runs; a malformed
-    INTERIOR record is real corruption and is refused, never silently dropped (ASTRA-106)."""
+    RunConflict rather than silently reusing stale progress. Only an UNTERMINATED final line can be a
+    crash fragment (each record and its newline are written by one append, and the append-boundary
+    repair removes exactly such a fragment) -- it is quarantined and that session re-runs. Anything
+    else malformed is corruption and is refused, never silently dropped: a malformed interior line, a
+    newline-terminated malformed final line, and a parseable line that is not a valid session record
+    (ASTRA-106, FABLE-085 #2). With ``provenance``, restoring sessions recorded under a different
+    invocation provenance is WARNED about (not refused; see ``_invocation_provenance``)."""
     if not os.path.exists(path):
         return None
     with open(path, encoding="utf-8") as f:
-        raw = f.read().splitlines()  # tolerant of a missing final newline (a valid record still parses)
-    if not raw:
-        raise RunConflict(f"eval progress at {path} is empty; refusing to reuse. Use a fresh --out.")
+        data = f.read()
+    terminated = data.endswith("\n")
+    lines = data.split("\n")
+    if terminated:
+        lines = lines[:-1]  # the empty remainder after the final delimiter
+    if not lines or not lines[0].strip():
+        raise RunConflict(_no_header_message(path, "is empty (no identity header)"))
     try:
-        head = json.loads(raw[0])
+        head = json.loads(lines[0])
     except Exception as e:
-        raise RunConflict(f"eval progress at {path} is unreadable ({e}); refusing to reuse. Use a fresh --out.")
-    if head.get("identity") != identity:
+        raise RunConflict(_no_header_message(path, f"has an unreadable identity header ({e})"))
+    if not isinstance(head, dict) or head.get("identity") != identity:
         raise RunConflict(
-            f"eval progress at {path} is for a different content/config/calibration; refusing to reuse. Use a fresh --out.")
-    body = [ln for ln in raw[1:] if ln.strip()]
+            f"eval progress at {path} is for a different content/config/calibration; refusing to reuse (it is "
+            f"preserved). Use a fresh --out, or move it aside deliberately.")
+    body = lines[1:]
     restore: dict[str, list[dict[str, Any]]] = {"fresh": [], "carried": []}
     for i, line in enumerate(body):
+        if not line.strip():
+            continue  # a blank line carries no record
+        last = i == len(body) - 1
         try:
             rec = json.loads(line)
         except Exception:
-            if i == len(body) - 1:  # only the final record may be an unterminated crash fragment
-                log("[oppoint] quarantining a malformed trailing eval-progress fragment (that session re-runs)")
+            if last and not terminated:  # the only shape a crash can leave: an unterminated final fragment
+                log("[oppoint] quarantining an unterminated trailing eval-progress fragment (that session re-runs)")
                 continue
+            where = "newline-terminated final" if last else "INTERIOR"
             raise RunConflict(
-                f"eval progress at {path} has a malformed INTERIOR record at session {i}; refusing to reuse. Use a fresh --out.")
-        if rec.get("regime") in restore:
-            restore[rec["regime"]].append({"record": rec["record"], "txns": rec["txns"]})
+                f"eval progress at {path} has a malformed {where} record at session {i} (not a crash fragment); "
+                f"refusing to reuse. Use a fresh --out.")
+        problem = _progress_record_problem(rec)
+        if problem is not None:
+            raise RunConflict(
+                f"eval progress at {path} has an invalid record at session {i} ({problem}); refusing to reuse. "
+                f"Use a fresh --out.")
+        restore[rec["regime"]].append({"record": rec["record"], "txns": rec["txns"]})
+    if provenance is not None:
+        seen = [head.get("provenance")] + [x["record"].get("provenance") for v in restore.values() for x in v]
+        other = {json.dumps(p, sort_keys=True) for p in seen} - {json.dumps(provenance, sort_keys=True)}
+        if other:
+            log(f"[oppoint] WARNING: resuming eval progress written under {len(other)} other invocation "
+                f"provenance(s) (code commit, tree state or dependency versions differ from this invocation; the "
+                f"device cannot, it is bound); each session records its own and screen-result.json lists them all")
     return restore
 
 
 def _run_followups(backend, cfg, calibration, gen, seed0, fixture_path, hcfg, deadline, *, _runner=None, _drive=None, _fixture=None):
     """Run the predeclared multi-turn follow-up sessions (never fit/tuned on). Each turn must complete
     without exception or nonfinite state and must not be entirely read-only; saved answers are for
-    textual review, reported separately from any rate. Returns per-session outcomes + an all_ok flag.
-    ``_runner``/``_drive``/``_fixture`` allow a fake runner/drive/fixture for tests."""
+    textual review, reported separately from any rate. Returns per-session outcomes + an all_ok flag,
+    and the fixture path, the SHA-256 of the fixture bytes actually read (of its canonical JSON when
+    injected) and the seed base, so the rerun-wholesale follow-up result names exactly what it ran
+    (ASTRA-106 condition 1). ``_runner``/``_drive``/``_fixture`` allow a fake runner/drive/fixture for tests."""
     import torch
 
     from plastic.harness.calibrate import summarize_operating_point
 
     if _drive is None:
         from plastic.session.runner import drive_chat_turn as _drive
+    ident = {"fixture_path": fixture_path, "seed0": int(seed0)}
     if _fixture is not None:
         fixture = _fixture
+        ident["fixture_sha256"] = hashlib.sha256(json.dumps(_fixture, sort_keys=True).encode("utf-8")).hexdigest()
     elif not os.path.exists(fixture_path):
-        return {"skipped": "fixture missing", "path": fixture_path}
+        return {"skipped": "fixture missing", "path": fixture_path, **ident, "fixture_sha256": None}
     else:
-        fixture = json.load(open(fixture_path))
+        with open(fixture_path, "rb") as f:
+            raw = f.read()
+        fixture = json.loads(raw.decode("utf-8"))
+        ident["fixture_sha256"] = hashlib.sha256(raw).hexdigest()
     if _runner is None:
         from plastic.harness.transaction import TransactionRunner
         from plastic.session.runner import _QwenTextIO
@@ -572,7 +702,7 @@ def _run_followups(backend, cfg, calibration, gen, seed0, fixture_path, hcfg, de
         tok = None
     runner, drive_chat_turn = _runner, _drive
 
-    out = {"purpose": fixture.get("purpose", ""), "sessions": []}
+    out = {"purpose": fixture.get("purpose", ""), **ident, "sessions": []}
     salt = 0
     for sess in fixture.get("sessions", []):
         if time.time() > deadline:
@@ -654,15 +784,11 @@ def main() -> None:
     be_for_tok = QwenBackend.load(args.checkpoint, device="cpu")
     counts = {"fit": args.n_fit, "cusum": args.n_cusum, "dev": args.n_dev, "eval": args.n_eval}
     split, manifest = build_split(rows, be_for_tok.encode_chat, counts=counts, seed=seed, max_prompt_tokens=args.max_prompt_tokens)
-    import subprocess
-
-    try:
-        code_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-    except Exception:
-        code_commit = "unknown"
+    # THIS invocation's code/dependency/device provenance; stamped on every eval session it appends
+    provenance = _invocation_provenance(args.device)
     manifest.update({"dataset": "databricks/databricks-dolly-15k", "revision": revision,
                      "checkpoint_digest": _checkpoint_digest(args.checkpoint), "smoke": args.smoke,
-                     "code_commit": code_commit, "settings": vars(args), "exclusions": exclusion_report})
+                     "code_commit": provenance["code_commit"], "settings": vars(args), "exclusions": exclusion_report})
     del be_for_tok
     # reuse an existing run's model id + immutable manifest when the configuration matches, and refuse
     # (never overwrite) when it differs, BEFORE any run-artifact write (ASTRA-092 manifest preservation)
@@ -705,7 +831,7 @@ def main() -> None:
             status = {"calibration_incomplete": True, "phase": inc.phase,
                       "fit": [inc.fit_used, inc.fit_requested], "cusum": [inc.cusum_used, inc.cusum_requested],
                       "checkpoint": ckpt_path, "corpus_hash": manifest["corpus_hash"]}
-            json.dump(status, open(os.path.join(args.out, "calibration-status.json"), "w"), indent=2)
+            _write_json(os.path.join(args.out, "calibration-status.json"), status)
             print(f"[oppoint] calibration incomplete in {inc.phase}: fit {inc.fit_used}/{inc.fit_requested}, "
                   f"cusum {inc.cusum_used}/{inc.cusum_requested}; progress checkpointed. Re-run to resume.")
             return
@@ -724,22 +850,22 @@ def main() -> None:
     eval_progress_path = os.path.join(args.out, "eval-progress.jsonl")
     eval_identity = _eval_identity(split["eval"], settings_identity, cal, eval_hcfg.to_dict())
     try:
-        restore = _load_eval_progress(eval_progress_path, eval_identity)
+        restore = _load_eval_progress(eval_progress_path, eval_identity, provenance=provenance)
+        if restore is None:
+            _init_eval_progress(eval_progress_path, eval_identity, provenance)
+            restore = {"fresh": [], "carried": []}
     except RunConflict as err:
         print(f"[oppoint] eval progress conflict: {err}")
         return
-    if restore is None:
-        _init_eval_progress(eval_progress_path, eval_identity)
-        restore = {"fresh": [], "carried": []}
     try:
         report = _eval_sessions(eval_backend, eval_cfg, cal, split["eval"],
                                 hcfg=eval_hcfg, gen=gen, seed_base=seed + 3000, chains=args.eval_chains, deadline=deadline,
-                                restore=restore,
+                                restore=restore, provenance=provenance,
                                 on_progress=lambda regime, rec, txns, ng: _append_eval_progress(eval_progress_path, regime, rec, txns))
     except RunConflict as err:
         print(f"[oppoint] eval progress conflict: {err}")
         return
-    json.dump(report, open(os.path.join(args.out, "eval-operating-point.json"), "w"), indent=2)
+    _write_json(os.path.join(args.out, "eval-operating-point.json"), report)
     if not (report["fresh"]["complete"] and report["carried"]["complete"]):
         # the deadline stopped evaluation; complete sessions are checkpointed. Stop BEFORE the follow-up
         # smoke and the verdict so a partial screen is never scored; re-run to resume from the cursor.
@@ -749,13 +875,19 @@ def main() -> None:
 
     # predeclared follow-up smoke (separate from Dolly; never fit/tuned on)
     followups = _run_followups(eval_backend, eval_cfg, cal, gen, seed + 4000, args.followups, eval_hcfg, deadline)
-    json.dump(followups, open(os.path.join(args.out, "followups-result.json"), "w"), indent=2)
+    followups["provenance"] = provenance  # follow-ups rerun wholesale, so one invocation produced them all
+    _write_json(os.path.join(args.out, "followups-result.json"), followups)
 
     verdict = _check_criterion(report)
     v = _screen_verdict(fit_complete=bool(fit_meta["calibration_fit_complete"]), report=report, followups=followups, verdict=verdict)
+    eval_provenances = _eval_provenances(report)
     result = {"thresholds": cal.thresholds, "criterion": verdict, "settings": vars(args), "seeds_base": seed, **v,
-              "dev_split": "unused (reserved for pre-freeze changes only)"}
-    json.dump(result, open(os.path.join(args.out, "screen-result.json"), "w"), indent=2)
+              "dev_split": "unused (reserved for pre-freeze changes only)",
+              "provenance": {"this_invocation": provenance, "eval_sessions": eval_provenances,
+                             "eval_spans_multiple": len(eval_provenances) > 1}}
+    _write_json(os.path.join(args.out, "screen-result.json"), result)
+    if len(eval_provenances) > 1:
+        print(f"[oppoint] NOTE: the eval sessions span {len(eval_provenances)} invocation provenances; see screen-result.json")
     print(f"[oppoint] pass={v['pass']} valid={v['valid']} complete={v['complete']} "
           f"(fit={v['fit_complete']}, eval={v['eval_complete']}, followups_ran={v['followups_ran']}, followups_ok={v['followups_ok']})")
     print(f"[oppoint] artifacts in {args.out}")

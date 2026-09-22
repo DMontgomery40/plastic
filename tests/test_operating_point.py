@@ -273,7 +273,8 @@ def test_screen_verdict_separates_completion_from_pass():
 
 def _fake_args(**over):
     from types import SimpleNamespace
-    base = dict(n_fit=8, n_cusum=4, n_dev=4, n_eval=4, max_prompt_tokens=256, max_new_tokens=8, eval_chains=2, smoke=False, exclusions=None)
+    base = dict(n_fit=8, n_cusum=4, n_dev=4, n_eval=4, max_prompt_tokens=256, max_new_tokens=8, eval_chains=2, smoke=False, exclusions=None,
+                device="cpu")
     base.update(over)
     return SimpleNamespace(**base)
 
@@ -287,6 +288,7 @@ def test_settings_identity_changes_with_each_determining_setting():
     assert base != _settings_identity(_fake_args(), "digestY", "rev1")           # checkpoint changed
     assert base != _settings_identity(_fake_args(), "digestX", "rev2")           # dataset revision changed
     assert base != _settings_identity(_fake_args(), "digestX", "rev1", "excl_v2")  # exclusion CONTENT bound
+    assert base != _settings_identity(_fake_args(device="mps"), "digestX", "rev1")  # device bound (FABLE-085 #1)
 
 
 def _split_of(ids_per):
@@ -657,3 +659,206 @@ def test_eval_progress_interior_corruption_is_refused(tmp_path):
     open(path, "w", encoding="utf-8").write("\n".join(lines) + "\n")
     with pytest.raises(RunConflict):
         _load_eval_progress(path, "idA")  # interior corruption is refused, not silently dropped
+
+
+# ---- FABLE-085 hardening: crash-shape recovery, record schema, header, provenance, follow-up identity ----
+
+import hashlib as _hashlib
+import json as _json
+import os as _os
+import re as _re
+
+import pytest as _pytest
+
+_FRAGMENT = '{"regime": "fresh", "record": {"ids": [1'            # a kill mid-append: truncated JSON
+_VALID_1 = '{"regime": "fresh", "record": {"ids": [1]}, "txns": []}'
+_VALID_2 = '{"regime": "fresh", "record": {"ids": [2]}, "txns": []}'
+
+
+def _progress_with(tmp_path, tail):
+    """A log with one completed session, then ``tail`` written verbatim (a crash shape or corruption)."""
+    from scripts.experiments.qwen_operating_point import _append_eval_progress, _init_eval_progress
+    path = str(tmp_path / "eval-progress.jsonl")
+    _init_eval_progress(path, "idA")
+    _append_eval_progress(path, "fresh", {"ids": [0]}, [])
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(tail)
+    return path
+
+
+def _fresh_ids(path):
+    from scripts.experiments.qwen_operating_point import _load_eval_progress
+    return [s["record"]["ids"] for s in _load_eval_progress(path, "idA", log=lambda *_: None)["fresh"]]
+
+
+@_pytest.mark.parametrize("tail, expect", [
+    (_FRAGMENT, [[0]]),                 # unterminated truncated record: the crash shape -> quarantined
+    ("garbage", [[0]]),                 # unterminated non-JSON final segment -> quarantined
+    (_VALID_1, [[0], [1]]),             # complete record that lost only its newline -> restored
+    (_VALID_1 + "\n", [[0], [1]]),      # complete terminated record -> restored
+    (_FRAGMENT + "\n", "refuse"),       # newline-terminated malformed final line: NOT a crash fragment
+    ("garbage\n", "refuse"),
+])
+def test_eval_progress_final_line_recovery_matrix(tmp_path, tail, expect):
+    # FABLE-085 #2a: only an UNTERMINATED malformed final line is quarantined (each record and its
+    # newline are one append); a terminated malformed final line is corruption, refused and preserved
+    from scripts.experiments.qwen_operating_point import RunConflict, _append_eval_progress, _load_eval_progress
+    path = _progress_with(tmp_path, tail)
+    if expect == "refuse":
+        before = open(path, "rb").read()
+        with _pytest.raises(RunConflict, match="newline-terminated final"):
+            _load_eval_progress(path, "idA")
+        assert open(path, "rb").read() == before
+        return
+    assert _fresh_ids(path) == expect
+    _append_eval_progress(path, "fresh", {"ids": [7]}, [])  # the next append lands on a clean boundary
+    assert _fresh_ids(path) == expect + [[7]]
+
+
+@_pytest.mark.parametrize("bad, why", [
+    ("[1, 2]", "not a JSON object"),
+    ('{"regime": "stale", "record": {"ids": [1]}, "txns": []}', "unknown regime"),
+    ('{"regime": "fresh", "txns": []}', "missing session record"),
+    ('{"regime": "fresh", "record": [1], "txns": []}', "missing session record"),
+    ('{"regime": "fresh", "record": {"seed": 1}, "txns": []}', "no ids list"),
+    ('{"regime": "fresh", "record": {"ids": [1], "regime": "carried"}, "txns": []}', "differs from the line regime"),
+    ('{"regime": "fresh", "record": {"ids": [1], "incomplete": true}, "txns": []}', "incomplete session was persisted"),
+    ('{"regime": "fresh", "record": {"ids": [1]}}', "missing transactions list"),
+    ('{"regime": "fresh", "record": {"ids": [1]}, "txns": {}}', "missing transactions list"),
+])
+@_pytest.mark.parametrize("position", ["interior", "final_terminated", "final_unterminated"])
+def test_eval_progress_schema_invalid_record_is_refused(tmp_path, bad, why, position):
+    # FABLE-085 #2b: a PARSEABLE line that is not a completed-session record the writer could produce is
+    # corruption wherever it sits (a truncated JSON object never parses) -- refused with RunConflict,
+    # never silently ignored (unknown regime) nor surfaced as a bare KeyError (missing keys)
+    from scripts.experiments.qwen_operating_point import RunConflict, _load_eval_progress
+    tail = {"interior": bad + "\n" + _VALID_2 + "\n", "final_terminated": bad + "\n", "final_unterminated": bad}[position]
+    path = _progress_with(tmp_path, tail)
+    with _pytest.raises(RunConflict, match=_re.escape(why)):
+        _load_eval_progress(path, "idA")
+
+
+def test_eval_progress_header_is_atomic_and_never_overwritten(tmp_path):
+    from scripts.experiments.qwen_operating_point import RunConflict, _append_eval_progress, _init_eval_progress
+    path = str(tmp_path / "eval-progress.jsonl")
+    prov = {"code_commit": "a" * 40, "code_dirty": False, "torch": "t", "transformers": "x", "device": "cpu"}
+    _init_eval_progress(path, "idA", prov)
+    assert _json.loads(open(path, encoding="utf-8").read().splitlines()[0]) == {"identity": "idA", "provenance": prov}
+    assert sorted(_os.listdir(tmp_path)) == ["eval-progress.jsonl"]  # temp + replace leaves no temp behind
+    _append_eval_progress(path, "fresh", {"ids": [0]}, [])
+    with _pytest.raises(RunConflict):
+        _init_eval_progress(path, "idA", prov)  # an existing log (holding a session) is never clobbered
+    assert _fresh_ids(path) == [[0]]
+
+
+def test_eval_progress_missing_or_damaged_header_is_refused_never_truncated(tmp_path):
+    # FABLE-085 #5/#6: the append-boundary repair never creates, empties or de-headers a log, and the
+    # loader's refusal names the precise remedy (remove only the progress log; calibration unaffected)
+    from scripts.experiments.qwen_operating_point import RunConflict, _append_eval_progress, _load_eval_progress
+    path = str(tmp_path / "eval-progress.jsonl")
+    with _pytest.raises(RunConflict):  # missing: an append never creates a headerless log
+        _append_eval_progress(path, "fresh", {"ids": [0]}, [])
+    assert not _os.path.exists(path)
+
+    open(path, "w").close()  # empty
+    with _pytest.raises(RunConflict, match="remove ONLY this eval-progress.jsonl") as exc:
+        _load_eval_progress(path, "idA")
+    assert "calibration" in str(exc.value) and "unaffected" in str(exc.value)
+    with _pytest.raises(RunConflict):
+        _append_eval_progress(path, "fresh", {"ids": [0]}, [])
+    assert _os.path.getsize(path) == 0
+
+    damaged = '{"identity": "id'  # a damaged header and no newline anywhere
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(damaged)
+    with _pytest.raises(RunConflict, match="unreadable identity header"):
+        _load_eval_progress(path, "idA")
+    with _pytest.raises(RunConflict, match="no complete identity header"):
+        _append_eval_progress(path, "fresh", {"ids": [0]}, [])
+    assert open(path, encoding="utf-8").read() == damaged  # preserved, not truncated to empty
+
+
+def _prov(commit):
+    return {"code_commit": commit, "code_dirty": False, "torch": "t", "transformers": "x", "device": "cpu"}
+
+
+def test_eval_provenance_stamped_per_invocation_and_listed(tmp_path, monkeypatch):
+    # FABLE-085 #3: an eval resumed across invocations records which invocation produced each complete
+    # session, warns (does not refuse) on a provenance change, and lists every contributor with counts
+    import scripts.experiments.qwen_operating_point as qop
+    from scripts.experiments.qwen_operating_point import (
+        _append_eval_progress, _eval_provenances, _eval_sessions, _init_eval_progress, _load_eval_progress,
+    )
+    prompts = [{"id": i, "prompt": f"p{i}"} for i in range(4)]
+    path = str(tmp_path / "eval-progress.jsonl")
+    clock = {"t": 0.0}
+    monkeypatch.setattr(qop.time, "time", lambda: clock["t"])
+
+    def clock_drive(runner, tok, prompt, *, max_new_tokens, temperature, top_k, gen):
+        out = _seed_drive(runner, tok, prompt, max_new_tokens=max_new_tokens, temperature=temperature, top_k=top_k, gen=gen)
+        clock["t"] += 1.0
+        return out
+
+    def append(regime, rec, txns, ng):
+        _append_eval_progress(path, regime, rec, txns)
+
+    def run(restore, prov, deadline):
+        return _eval_sessions(None, None, None, prompts, hcfg=None, gen=_gen_settings(), seed_base=0, chains=2,
+                              deadline=deadline, restore=restore, on_progress=append, provenance=prov,
+                              _runner=_FakeRunner(["commit"] * 100), _drive=clock_drive)
+
+    _init_eval_progress(path, "eid", _prov("a"))
+    run({"fresh": [], "carried": []}, _prov("a"), deadline=2.5)  # invocation A: 3 fresh sessions, then cut
+    quiet: list[str] = []
+    same = _load_eval_progress(path, "eid", provenance=_prov("a"), log=quiet.append)
+    assert [s["record"]["provenance"]["code_commit"] for s in same["fresh"]] == ["a", "a", "a"]
+    assert not any("WARNING" in m for m in quiet)  # same provenance: nothing to warn about
+
+    logs: list[str] = []
+    restore = _load_eval_progress(path, "eid", provenance=_prov("b"), log=logs.append)
+    assert any("WARNING" in m and "provenance" in m for m in logs)  # changed: warned, NOT refused
+    rep = run(restore, _prov("b"), deadline=1e18)  # invocation B completes the screen
+    assert [s["provenance"]["code_commit"] for s in rep["fresh"]["sessions"]] == ["a", "a", "a", "b"]
+    assert [s["provenance"]["code_commit"] for s in rep["carried"]["sessions"]] == ["b", "b"]
+    contributors = _eval_provenances(rep)
+    assert [(c["provenance"]["code_commit"], c["sessions"]) for c in contributors] == [
+        ("a", {"fresh": 3, "carried": 0}), ("b", {"fresh": 1, "carried": 2})]
+
+    # a deadline-cut (incomplete) group is reported but never counted as a contributing session
+    cut = dict(rep)
+    cut["carried"] = {**rep["carried"], "sessions": rep["carried"]["sessions"] + [{"incomplete": True, "provenance": _prov("c")}]}
+    assert [c["provenance"]["code_commit"] for c in _eval_provenances(cut)] == ["a", "b"]
+
+
+def test_invocation_provenance_records_code_dependencies_and_device():
+    from scripts.experiments.qwen_operating_point import _REPO_ROOT, _invocation_provenance
+    prov = _invocation_provenance("cpu")
+    assert set(prov) == {"code_commit", "code_dirty", "torch", "transformers", "device"}
+    assert prov["device"] == "cpu" and prov["torch"]
+    if _os.path.exists(_os.path.join(_REPO_ROOT, ".git")):  # a checkout (or worktree), not a source export
+        assert _re.fullmatch(r"[0-9a-f]{40}", prov["code_commit"])
+        assert prov["code_dirty"] in (True, False)
+
+
+def test_followups_record_fixture_identity_and_seed(tmp_path):
+    # ASTRA-106 condition 1: the wholesale-rerun follow-up result names the exact fixture BYTES it ran
+    # (path + sha256) and its seed base; a missing fixture is skipped yet still names path and seed
+    from scripts.experiments.qwen_operating_point import _run_followups
+    fixture = {"purpose": "p", "sessions": [{"id": "s0", "turns": ["a"]}]}
+    fp = tmp_path / "followups.json"
+    raw = _json.dumps(fixture).encode("utf-8")
+    fp.write_bytes(raw)
+
+    def run(path):
+        return _run_followups(None, None, None, _gen_settings(), 4242, str(path), None, deadline=1e18,
+                              _runner=_FakeRunner(["commit"] * 4), _drive=_fake_drive)
+
+    out = run(fp)
+    assert (out["fixture_path"], out["seed0"], out["all_ok"]) == (str(fp), 4242, True)
+    assert out["fixture_sha256"] == _hashlib.sha256(raw).hexdigest()
+    fp.write_bytes(_json.dumps({**fixture, "purpose": "edited"}).encode("utf-8"))
+    assert run(fp)["fixture_sha256"] != out["fixture_sha256"]  # an edited fixture is a different run
+
+    miss = run(tmp_path / "absent.json")
+    assert miss["skipped"] and miss["fixture_sha256"] is None
+    assert (miss["fixture_path"], miss["seed0"]) == (str(tmp_path / "absent.json"), 4242)

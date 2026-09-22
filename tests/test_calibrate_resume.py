@@ -224,3 +224,31 @@ def test_malformed_checkpoint_is_rejected_and_preserved(tmp_path, over, why):
     with pytest.raises(CalibrationCheckpointError):
         _collect(_FakeCalRunner(), ["f0", "f1"], ["c0", "c1"], checkpoint_path=ckpt, identity="id-A")
     assert open(ckpt, "rb").read() == before, f"file must be preserved on rejection ({why})"
+
+
+def test_calibration_identity_binds_device_and_every_field():
+    # FABLE-085 #1: a checkpoint collected on one device must not be extended on another (kernels need
+    # not match numerically); every other bound field still changes the identity
+    from plastic.harness.config import HarnessConfig
+    base_kw = dict(model_signature="qwen:abc", seed=0, gen=dict(GEN), target_fpr=0.01, chunk=8,
+                   fit_prompts=["a", "b"], cusum_prompts=["c"], corpus_hash="h", harness_cfg=HarnessConfig(), device="cpu")
+    base = cal._calibration_identity(**base_kw)
+    assert base == cal._calibration_identity(**dict(base_kw))  # stable
+    variants = {"device": "mps", "model_signature": "qwen:def", "seed": 1, "gen": {**GEN, "top_k": 1},
+                "target_fpr": 0.02, "chunk": 16, "fit_prompts": ["b", "a"], "cusum_prompts": ["d"],
+                "corpus_hash": "h2", "harness_cfg": HarnessConfig(cusum_k=0.7)}
+    for key, value in variants.items():
+        assert cal._calibration_identity(**{**base_kw, key: value}) != base, key
+
+
+def test_checkpoint_from_another_device_is_rejected_and_preserved(tmp_path):
+    from plastic.harness.config import HarnessConfig
+    kw = dict(model_signature="qwen:abc", seed=0, gen=dict(GEN), target_fpr=0.01, chunk=8,
+              fit_prompts=["f0", "f1"], cusum_prompts=["c0", "c1"], corpus_hash="h", harness_cfg=HarnessConfig())
+    ckpt = str(tmp_path / "cal.ckpt")
+    cal._ckpt_save(ckpt, _valid_ckpt(identity=cal._calibration_identity(**kw, device="cpu")))
+    before = open(ckpt, "rb").read()
+    with pytest.raises(CalibrationCheckpointError):
+        _collect(_FakeCalRunner(), ["f0", "f1"], ["c0", "c1"], checkpoint_path=ckpt,
+                 identity=cal._calibration_identity(**kw, device="mps"))
+    assert open(ckpt, "rb").read() == before

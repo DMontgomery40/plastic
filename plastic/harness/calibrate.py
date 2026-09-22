@@ -462,14 +462,15 @@ def _validate_checkpoint(st: dict[str, Any], path: str, identity: str, fit_reque
 
 def _calibration_identity(*, model_signature: str, seed: int, gen: dict[str, Any], target_fpr: float,
                           chunk: int, fit_prompts: list[str], cusum_prompts: list[str],
-                          corpus_hash: str | None, harness_cfg: HarnessConfig) -> str:
-    """Bind a checkpoint to the exact model, decoding, corpus (ordered) and full harness config, so a
-    checkpoint from any different run is rejected rather than silently extended into an invalid mix."""
+                          corpus_hash: str | None, harness_cfg: HarnessConfig, device: str) -> str:
+    """Bind a checkpoint to the exact model, decoding, corpus (ordered), full harness config and compute
+    device, so a checkpoint from any different run -- including the same run on another device, whose
+    kernels need not match numerically -- is rejected rather than silently extended into an invalid mix."""
     return _stable_hash({
         "model_signature": model_signature, "seed": int(seed), "gen": gen,
         "target_fpr": float(target_fpr), "chunk": int(chunk),
         "fit_prompts": list(fit_prompts), "cusum_prompts": list(cusum_prompts),
-        "corpus_hash": corpus_hash, "harness_cfg": harness_cfg.to_dict(),
+        "corpus_hash": corpus_hash, "harness_cfg": harness_cfg.to_dict(), "device": str(device),
     })
 
 
@@ -636,7 +637,7 @@ def calibrate_qwen(
     identity = _calibration_identity(
         model_signature=f"qwen:{backend.checkpoint_digest}", seed=seed, gen=gen, target_fpr=target_fpr,
         chunk=cfg.chunk, fit_prompts=prompts, cusum_prompts=cusum_list, corpus_hash=corpus_hash,
-        harness_cfg=hcfg,
+        harness_cfg=hcfg, device=str(device),
     )
     # per-chunk reference (fresh chat per prompt) and continuous-CUSUM reference (no reset), both
     # through the real generation path; with a checkpoint_path a deadline persists progress and
