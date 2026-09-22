@@ -520,13 +520,18 @@ def test_eval_progress_skips_a_malformed_trailing_line(tmp_path):
 def test_eval_identity_binds_calibration_content_and_policy():
     from types import SimpleNamespace
     from scripts.experiments.qwen_operating_point import _eval_identity
-    cal_a = SimpleNamespace(thresholds={"chunk_loss": 1.0}, cusum_reference=[1, 2, 3], model_signature="qwen:x")
+    def cal(thresholds, reference, cusum_reference, sig="qwen:x"):
+        return SimpleNamespace(thresholds=thresholds, reference=reference, cusum_reference=cusum_reference, model_signature=sig)
+
+    cal_a = cal({"chunk_loss": 1.0}, {"chunk_loss": [0.1, 0.2]}, [1, 2, 3])
     recs1 = [{"id": 0, "text_sha256": "h0", "prompt": "p0"}, {"id": 1, "text_sha256": "h1", "prompt": "p1"}]
     recs_diff_content = [{"id": 0, "text_sha256": "hZ", "prompt": "different"}, {"id": 1, "text_sha256": "h1", "prompt": "p1"}]
     base = _eval_identity(recs1, "settings1", cal_a, {"freeze_on_alarm": True})
     assert base == _eval_identity(recs1, "settings1", cal_a, {"freeze_on_alarm": True})  # stable
-    cal_b = SimpleNamespace(thresholds={"chunk_loss": 9.0}, cusum_reference=[1, 2, 3], model_signature="qwen:x")
-    assert base != _eval_identity(recs1, "settings1", cal_b, {"freeze_on_alarm": True})  # calibration content
+    # decision-distinct calibrations must never share a progress identity (ASTRA-105):
+    assert base != _eval_identity(recs1, "settings1", cal({"chunk_loss": 9.0}, {"chunk_loss": [0.1, 0.2]}, [1, 2, 3]), {"freeze_on_alarm": True})  # thresholds
+    assert base != _eval_identity(recs1, "settings1", cal({"chunk_loss": 1.0}, {"chunk_loss": [9.9, 9.9]}, [1, 2, 3]), {"freeze_on_alarm": True})  # reference window values
+    assert base != _eval_identity(recs1, "settings1", cal({"chunk_loss": 1.0}, {"chunk_loss": [0.1, 0.2]}, [7, 8, 9]), {"freeze_on_alarm": True})  # cusum VALUES, same length
     assert base != _eval_identity(recs_diff_content, "settings1", cal_a, {"freeze_on_alarm": True})  # SAME ids, diff CONTENT
     assert base != _eval_identity(recs1, "settings2", cal_a, {"freeze_on_alarm": True})  # settings
     assert base != _eval_identity(recs1, "settings1", cal_a, {"freeze_on_alarm": False})  # eval policy

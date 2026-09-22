@@ -457,9 +457,14 @@ def _eval_identity(eval_records: list[dict[str, Any]], settings_identity: str, c
     signature -- reuse can hand a calibration from a prior invocation), and the frozen eval harness
     config. A mismatch on any of these refuses to reuse stale eval progress (ASTRA-100/103/104)."""
     eval_content = [{"id": r["id"], "sha256": r.get("text_sha256", ""), "prompt": r.get("prompt", "")} for r in eval_records]
+    # bind the DECISION-relevant calibration content the runner actually consumes -- thresholds, the
+    # per-signal reference windows (compute_z standardizes against them) and the CUSUM reference VALUES
+    # (not just its length) -- so two decision-distinct calibrations can never share a progress identity
+    # (ASTRA-105). model_signature alone is not enough (it is model-compat, not content).
     cal = {
         "thresholds": {k: float(v) for k, v in (getattr(calibration, "thresholds", {}) or {}).items()},
-        "cusum_reference_len": len(getattr(calibration, "cusum_reference", []) or []),
+        "reference": {k: [float(x) for x in v] for k, v in (getattr(calibration, "reference", {}) or {}).items()},
+        "cusum_reference": [float(x) for x in (getattr(calibration, "cusum_reference", []) or [])],
         "model_signature": getattr(calibration, "model_signature", None),
     }
     payload = {"eval_content": eval_content, "settings_identity": settings_identity,
