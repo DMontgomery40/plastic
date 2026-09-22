@@ -30,6 +30,23 @@ Open [the dashboard](http://127.0.0.1:5173). The API listens on
 The launcher defaults to CPU and does not download data or train a model.
 A fresh checkout needs model artifacts before session features become useful.
 
+### Public pretrained checkpoints
+
+Download the trained baselines from Hugging Face; both repositories are public and
+ungated. Each model card contains a tested Python loading example and links to the
+compatible source revision.
+
+| Model | Parameters | Hugging Face |
+| --- | ---: | --- |
+| WikiText next-token prediction | 6.85M | [plastic-text-6.85m](https://huggingface.co/dmontgomery40/plastic-text-6.85m) |
+| Hidden-friction physics | 3.56M | [plastic-physics-3.56m](https://huggingface.co/dmontgomery40/plastic-physics-3.56m) |
+
+Packages include weights, configuration, saved evaluation, license, and a checksum
+manifest; the text model also includes its tokenizer. They use this project's
+custom PyTorch runtime. Calibration files and session state are separate, so direct
+model loading does not apply the transactional harness. The existing noncommercial
+license applies; public availability does not remove its commercial-use restriction.
+
 For an isolated store or different device/ports:
 
 ```bash
@@ -207,7 +224,9 @@ The default store is `artifacts/`: checkpoints, configs, tokenizers, evaluation 
 calibration files, session state/traces, and attack results. New generated artifacts
 and `training_data/` contents are Git-ignored. A Git push is **not a checkpoint or
 dataset backup**; copy those separately. Existing tracked historical artifacts are
-an exception. A clean clone does not include the trained checkpoints reported above.
+an exception. A clean clone does not include the trained checkpoints reported above;
+download them from the public Hugging Face repositories linked above. Those releases
+back up the published model packages, not all local experiment or session artifacts.
 
 Read [AGENTS.md](AGENTS.md) before changing model or harness contracts. Coordinate
 concurrent work through the append-only [shared scratchpad](SHARED_SCRATCHPAD.md).
