@@ -411,6 +411,7 @@ def calibrate_qwen(
     cusum_prompts: Iterable[str] | None = None,
     harness_cfg: HarnessConfig | None = None,
     device: torch.device | str = "cpu",
+    deadline: float | None = None,
     log=print,
 ) -> "Calibration":
     """Calibrate Qwen harness thresholds on the ACTUAL Session.chat protocol.
@@ -450,12 +451,17 @@ def calibrate_qwen(
         g = torch.Generator().manual_seed(int(seed) + salt)
         drive_chat_turn(runner, tok, prompt, max_new_tokens=max_new_tokens, temperature=temperature, top_k=top_k, gen=g)
 
-    # per-chunk reference: a fresh chat per prompt (reset between) through the real generation path
+    # per-chunk reference: a fresh chat per prompt (reset between) through the real generation path.
+    # A deadline stops fitting early (partial, resumable-by-count) so a bounded run protects eval time.
     records: list[dict[str, Any]] = []
+    fit_used = 0
     for i, prompt in enumerate(prompts):
+        if deadline is not None and time.time() > deadline:
+            break
         runner.reset()
         _chat(prompt, i)
         records.extend(runner.transactions)
+        fit_used += 1
     if not records:
         raise ValueError("no chunks observed during calibration")
     signals = [r["signals"] for r in records]
@@ -469,6 +475,8 @@ def calibrate_qwen(
         runner.reset()
         cont: list[float] = []
         for i, prompt in enumerate(list(cusum_prompts) if cusum_prompts is not None else prompts):
+            if deadline is not None and time.time() > deadline:
+                break
             _chat(prompt, 1000 + i)
             cont.extend(float(r["signals"]["log_delta_norm"]) for r in runner.transactions if r["signals"].get("log_delta_norm") is not None)
         if len(cont) >= 16:
@@ -500,6 +508,8 @@ def calibrate_qwen(
     store.register_model(model_id, {
         "calibrated_at_unix": cal.created_at_unix, "calibration_chunks": cal.n_chunks,
         "calibration_prompt_chunks": prompt_chunks, "calibration_generation_chunks": gen_chunks,
+        "calibration_fit_prompts_used": fit_used, "calibration_fit_prompts_requested": len(prompts),
+        "calibration_fit_complete": fit_used == len(prompts),
     })
     log(f"[calibrate] qwen {model_id}: {len(signals)} chunks ({prompt_chunks} prompt, {gen_chunks} generation); "
         + "thresholds: " + ", ".join(f"{k}={v:.4g}" for k, v in thresholds.items()))

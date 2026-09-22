@@ -64,30 +64,62 @@ def load_dolly_prompts(max_rows: int) -> tuple[list[dict[str, Any]], str]:
     return rows, revision
 
 
+def _stratify_by_category(groups: list[list[dict[str, Any]]], seed: int) -> list[list[dict[str, Any]]]:
+    """Round-robin the groups across their (first row's) category so each split draws from present
+    categories, deterministically."""
+    buckets: dict[str, list] = {}
+    for g in groups:
+        buckets.setdefault(g[0]["category"], []).append(g)
+    cats = sorted(buckets, key=lambda c: hashlib.sha256(f"{seed}:{c}".encode()).hexdigest())
+    out: list[list[dict[str, Any]]] = []
+    while any(buckets[c] for c in cats):
+        for c in cats:
+            if buckets[c]:
+                out.append(buckets[c].pop(0))
+    return out
+
+
 def build_split(rows: list[dict[str, Any]], encode_chat, *, counts: dict[str, int], seed: int, max_prompt_tokens: int) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
-    """Cap by native rendered prompt-token count (exclude, never truncate), order deterministically,
-    and take disjoint groups. Returns (split, manifest)."""
+    """Cap by native rendered prompt-token count (exclude, never truncate), GROUP rows that share a
+    nonempty normalized context so a passage never crosses a split boundary (ASTRA-085), order the
+    groups deterministically and category-stratified, and assign WHOLE groups to disjoint splits until
+    each requested count is met. Returns (split, manifest with actual counts + an immutable corpus hash)."""
     kept, excluded = [], 0
     for r in rows:
-        n_tok = len(encode_chat(r["prompt"]))
-        if n_tok > max_prompt_tokens:
+        if len(encode_chat(r["prompt"])) > max_prompt_tokens:
             excluded += 1
             continue
-        kept.append({**r, "n_prompt_tokens": n_tok})
-    kept.sort(key=lambda r: hashlib.sha256(f"{seed}:{r['text_sha256']}".encode()).hexdigest())
-    need = sum(counts.values())
-    if len(kept) < need:
-        raise ValueError(f"only {len(kept)} eligible prompts (<= {max_prompt_tokens} tokens), need {need}")
-    split, at = {}, 0
+        kept.append({**r, "n_prompt_tokens": len(encode_chat(r["prompt"]))})
+    # group by nonempty normalized context; empty-context rows are singleton groups
+    ctx_groups: dict[str, list] = {}
+    groups: list[list[dict[str, Any]]] = []
+    for r in kept:
+        ctx = _norm(r["context"])
+        if ctx:
+            ctx_groups.setdefault(ctx, []).append(r)
+        else:
+            groups.append([r])
+    groups.extend(ctx_groups.values())
+    groups.sort(key=lambda g: hashlib.sha256(f"{seed}:{g[0]['text_sha256']}".encode()).hexdigest())
+    groups = _stratify_by_category(groups, seed)
+
+    split: dict[str, list[dict[str, Any]]] = {name: [] for name in ("fit", "cusum", "dev", "eval")}
+    gi = 0
     for name in ("fit", "cusum", "dev", "eval"):
-        split[name] = kept[at:at + counts[name]]
-        at += counts[name]
+        while len(split[name]) < counts[name] and gi < len(groups):
+            split[name].extend(groups[gi])
+            gi += 1
+        if len(split[name]) < counts[name]:
+            raise ValueError(f"not enough grouped prompts for split '{name}': {len(split[name])} < {counts[name]}")
+    all_hashes = sorted(r["text_sha256"] for v in split.values() for r in v)
     manifest = {
         "seed": seed, "max_prompt_tokens": max_prompt_tokens, "excluded_over_cap": excluded,
-        "counts": {k: len(v) for k, v in split.items()},
+        "requested_counts": dict(counts), "actual_counts": {k: len(v) for k, v in split.items()},
         "category_counts": {k: _cat_counts(v) for k, v in split.items()},
         "ids": {k: [r["id"] for r in v] for k, v in split.items()},
         "text_hashes": {k: [r["text_sha256"] for r in v] for k, v in split.items()},
+        "corpus_hash": hashlib.sha256("".join(all_hashes).encode()).hexdigest(),
+        "n_context_groups": len(ctx_groups),
     }
     return split, manifest
 
@@ -100,12 +132,11 @@ def _cat_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
 
 
 def _eval_sessions(backend, cfg, calibration, prompts, *, hcfg, gen, seed_base, chains, deadline):
-    """Run eval prompts as fresh sessions (reset between) and as fixed multi-turn chains (state
-    retained within a chain), on ONE reused backend/runner with the frozen calibration installed —
-    identical per-turn transaction protocol to Session.chat via the shared drive_chat_turn. Returns
-    the collected transactions per regime plus per-session summaries; stops early (partial) at the
-    deadline. A ``fresh`` session here is one prompt from a reset (position-zero) state, matching
-    ASTRA-083's fresh cell; carried is a per-chain constructed instruction chain."""
+    """Evaluate the locked set through the frozen harness in two regimes on ONE reused backend/runner
+    (fresh sessions reset between; carried chains retain state within a chain), via the shared
+    drive_chat_turn. Records per-session eligible/accepted-by-source, read-only, completions and
+    outcomes, and the ordered raw transactions; the deadline is honored per turn; completion is by
+    processed-vs-expected ids."""
     import torch
 
     from plastic.harness.calibrate import summarize_operating_point
@@ -115,42 +146,155 @@ def _eval_sessions(backend, cfg, calibration, prompts, *, hcfg, gen, seed_base, 
     tok = _QwenTextIO(backend)
     runner = TransactionRunner(None, cfg, hcfg, calibration=calibration, device=backend.device, backend=backend)
 
-    def _one(prompt: str, seed: int) -> tuple[list[dict], bool, Any]:
+    def _turn(prompt: str, seed: int) -> dict[str, Any]:
         runner.transactions = []
         g = torch.Generator().manual_seed(int(seed))
-        drive_chat_turn(runner, tok, prompt, max_new_tokens=gen["max_new_tokens"], temperature=gen["temperature"], top_k=gen["top_k"], gen=g)
-        return list(runner.transactions), runner.read_only, runner.read_only_reason
+        t0 = time.time()
+        completion, out_ids, in_ids = drive_chat_turn(runner, tok, prompt, max_new_tokens=gen["max_new_tokens"],
+                                                       temperature=gen["temperature"], top_k=gen["top_k"], gen=g)
+        return {"seed": seed, "completion": completion, "n_in": len(in_ids), "n_out": len(out_ids),
+                "outcome": ("cap" if len(out_ids) >= gen["max_new_tokens"] else ("empty" if not out_ids else "eos")),
+                "seconds": time.time() - t0, "transactions": list(runner.transactions),
+                "read_only": runner.read_only, "read_only_reason": runner.read_only_reason}
 
-    fresh_tx: list[dict] = []
-    fresh_sessions: list[dict] = []
-    for i, r in enumerate(prompts):
-        if time.time() > deadline:
-            break
-        runner.reset()
-        txns, ro, ror = _one(r["prompt"], seed_base + i)
-        fresh_tx.extend(txns)
-        fresh_sessions.append({"id": r["id"], "read_only": ro, "read_only_reason": ror})
+    def _session_record(ids: list[int], regime: str, turns: list[dict]) -> tuple[dict, list[dict]]:
+        txns = [t for turn in turns for t in turn["transactions"]]
+        op = summarize_operating_point(txns)
+        acc = {"prompt": op["prompt"]["accepted_change"], "generation": op["generation"]["accepted_change"]}
+        elig = {"prompt": op["prompt"]["eligible"], "generation": op["generation"]["eligible"]}
+        rec = {"ids": ids, "regime": regime, "read_only": turns[-1]["read_only"], "read_only_reason": turns[-1]["read_only_reason"],
+               "eligible_by_source": elig, "accepted_by_source": acc,
+               "retained_both": acc["prompt"] > 0 and acc["generation"] > 0,
+               "anomalies": op["anomalies"],
+               "turns": [{"id": ids[j], **{k: turn[k] for k in ("seed", "completion", "n_in", "n_out", "outcome", "seconds")}} for j, turn in enumerate(turns)]}
+        return rec, txns
 
-    carried_tx: list[dict] = []
-    carried_sessions: list[dict] = []
-    per = max(1, len(prompts) // chains) if chains else 0
+    def _run(regime: str, groups: list[list[dict]], seed0: int) -> dict[str, Any]:
+        expected = [r["id"] for g in groups for r in g]
+        sessions, all_tx, processed, salt = [], [], [], 0
+        for g in groups:
+            if time.time() > deadline:
+                break
+            runner.reset()
+            turns = []
+            for r in g:
+                if time.time() > deadline:
+                    break
+                turns.append(_turn(r["prompt"], seed0 + salt))
+                processed.append(r["id"])
+                salt += 1
+            if len(turns) != len(g):  # a turn was cut by the deadline -> this session is incomplete, drop it
+                break
+            rec, txns = _session_record([r["id"] for r in g], regime, turns)
+            sessions.append(rec)
+            all_tx.extend(txns)
+        return {"operating_point": summarize_operating_point(all_tx), "sessions": sessions,
+                "expected_ids": expected, "processed_ids": processed,
+                "complete": processed == expected, "raw_transactions": all_tx}
+
+    fresh_groups = [[r] for r in prompts]
+    carried_groups = _split_into_chains(prompts, chains)
+    return {"fresh": _run("fresh", fresh_groups, seed_base), "carried": _run("carried", carried_groups, seed_base + 10000)}
+
+
+def _split_into_chains(prompts: list[Any], chains: int) -> list[list[Any]]:
+    """Partition prompts into ``chains`` contiguous groups, distributing the remainder so NO prompt is
+    dropped (plain integer division drops the tail — the ASTRA-085 five-prompt/two-chain case)."""
+    if chains <= 0 or not prompts:
+        return []
+    base, rem = divmod(len(prompts), chains)
+    out, at = [], 0
     for c in range(chains):
+        size = base + (1 if c < rem else 0)
+        if size:
+            out.append(prompts[at:at + size])
+            at += size
+    return out
+
+
+def _check_criterion(report: dict[str, Any], *, elig_max: float = 0.10, readonly_max: float = 0.10, retained_min: float = 0.90) -> dict[str, Any]:
+    """The full ASTRA-083 verdict: per source x regime the eligible-intervention rate and read-only
+    rate must be <= 10% on a NONZERO eligible denominator, AND >= 90% of the regime's sessions must
+    retain a finite positive accepted change from BOTH sources, AND every regime must have run to
+    completion (processed == expected ids) with zero reporting anomalies. An incomplete or invalid
+    run cannot pass — the timing deadline is not evidence that all requested work ran."""
+    out: dict[str, Any] = {"cells": {}, "regimes": {}}
+    valid = True
+    for regime in ("fresh", "carried"):
+        blk = report[regime]
+        op = blk["operating_point"]
+        n = len(blk["sessions"])
+        retained = sum(1 for s in blk["sessions"] if s["retained_both"])
+        retained_frac = (retained / n) if n else None
+        complete = bool(blk.get("complete"))
+        anomalies_clean = not any(op.get("anomalies", {}).values())
+        out["regimes"][regime] = {
+            "n_sessions": n, "retained_both": retained, "retained_fraction": retained_frac,
+            "retained_ok": (retained_frac is not None and retained_frac >= retained_min),
+            "complete": complete, "anomalies_clean": anomalies_clean,
+        }
+        if not complete or not anomalies_clean or n == 0:
+            valid = False
+        for src in ("prompt", "generation"):
+            rec = op[src]
+            eir, ror = rec["eligible_intervention_rate"], rec["readonly_rate"]
+            out["cells"][f"{regime}.{src}"] = {
+                "eligible": rec["eligible"], "eligible_intervention_rate": eir, "readonly_rate": ror,
+                "eligible_ok": (eir is not None and eir <= elig_max),
+                "readonly_ok": (ror is not None and ror <= readonly_max),
+                "nonzero_eligible": rec["eligible"] > 0,
+            }
+    cells_ok = all(c["eligible_ok"] and c["readonly_ok"] and c["nonzero_eligible"] for c in out["cells"].values())
+    regimes_ok = all(r["retained_ok"] and r["complete"] and r["anomalies_clean"] for r in out["regimes"].values())
+    out["valid"] = valid
+    out["pass"] = bool(valid and cells_ok and regimes_ok)
+    return out
+
+
+def _run_followups(backend, cfg, calibration, gen, seed0, fixture_path, hcfg, deadline):
+    """Run the predeclared multi-turn follow-up sessions (never fit/tuned on). Each turn must complete
+    without exception or nonfinite state and must not be entirely read-only; saved answers are for
+    textual review, reported separately from any rate. Returns per-session outcomes + an all_ok flag."""
+    import torch
+
+    from plastic.harness.calibrate import summarize_operating_point
+    from plastic.harness.transaction import TransactionRunner
+    from plastic.session.runner import _QwenTextIO, drive_chat_turn
+
+    if not os.path.exists(fixture_path):
+        return {"skipped": "fixture missing", "path": fixture_path}
+    fixture = json.load(open(fixture_path))
+    tok = _QwenTextIO(backend)
+    runner = TransactionRunner(None, cfg, hcfg, calibration=calibration, device=backend.device, backend=backend)
+
+    out = {"purpose": fixture.get("purpose", ""), "sessions": []}
+    salt = 0
+    for sess in fixture.get("sessions", []):
         if time.time() > deadline:
-            break
-        turns = prompts[c * per:(c + 1) * per]
-        if not turns:
+            out["incomplete"] = True
             break
         runner.reset()
-        ro, ror = False, None
-        for j, r in enumerate(turns):
-            txns, ro, ror = _one(r["prompt"], seed_base + c * per + j)
-            carried_tx.extend(txns)
-        carried_sessions.append({"turns": [r["id"] for r in turns], "read_only": ro, "read_only_reason": ror})
-
-    return {
-        "fresh": {"operating_point": summarize_operating_point(fresh_tx), "sessions": fresh_sessions, "n_sessions": len(fresh_sessions)},
-        "carried": {"operating_point": summarize_operating_point(carried_tx), "sessions": carried_sessions, "n_chains": len(carried_sessions)},
-    }
+        turns = []
+        session_ok = True
+        for text in sess["turns"]:
+            try:
+                completion, out_ids, _ = drive_chat_turn(runner, tok, text, max_new_tokens=gen["max_new_tokens"],
+                                                          temperature=gen["temperature"], top_k=gen["top_k"],
+                                                          gen=torch.Generator().manual_seed(seed0 + salt))
+                txns = list(runner.transactions)
+                op = summarize_operating_point(txns)
+                all_readonly = bool(txns) and all(t["decision"]["kind"] == "readonly" for t in txns)
+                finite = runner.backend.is_finite(runner.committed)
+                turn_ok = (not all_readonly) and finite and not any(op["anomalies"].values())
+            except Exception as e:  # noqa: BLE001
+                completion, out_ids, turn_ok, all_readonly, finite = f"<exception: {type(e).__name__}: {e}>", [], False, None, None
+            session_ok = session_ok and turn_ok
+            turns.append({"prompt": text, "completion": completion, "n_out": len(out_ids),
+                          "all_readonly": all_readonly, "finite": finite, "ok": turn_ok})
+            salt += 1
+        out["sessions"].append({"id": sess.get("id"), "ok": session_ok, "turns": turns})
+    out["all_ok"] = bool(out["sessions"]) and all(s["ok"] for s in out["sessions"]) and not out.get("incomplete")
+    return out
 
 
 def main() -> None:
@@ -165,6 +309,7 @@ def main() -> None:
     ap.add_argument("--eval-chains", type=int, default=4)
     ap.add_argument("--max-new-tokens", type=int, default=64)
     ap.add_argument("--max-prompt-tokens", type=int, default=256)
+    ap.add_argument("--followups", default="artifacts/astra/qwen-runtime-20260922/conversation-followups-v1.json")
     ap.add_argument("--minutes", type=float, default=45.0, help="wall-clock budget; partial results are saved")
     ap.add_argument("--smoke", action="store_true", help="tiny counts to validate wiring (NOT the ASTRA-083 screen)")
     args = ap.parse_args()
@@ -188,57 +333,59 @@ def main() -> None:
     be_for_tok = QwenBackend.load(args.checkpoint, device="cpu")
     counts = {"fit": args.n_fit, "cusum": args.n_cusum, "dev": args.n_dev, "eval": args.n_eval}
     split, manifest = build_split(rows, be_for_tok.encode_chat, counts=counts, seed=seed, max_prompt_tokens=args.max_prompt_tokens)
+    import subprocess
+
+    try:
+        code_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    except Exception:
+        code_commit = "unknown"
     manifest.update({"dataset": "databricks/databricks-dolly-15k", "revision": revision,
-                     "checkpoint_digest": _checkpoint_digest(args.checkpoint), "smoke": args.smoke})
+                     "checkpoint_digest": _checkpoint_digest(args.checkpoint), "smoke": args.smoke,
+                     "code_commit": code_commit, "settings": vars(args)})
     del be_for_tok
     json.dump(manifest, open(os.path.join(args.out, "split-manifest.json"), "w"), indent=2)
-    print(f"[oppoint] corpus split saved: {manifest['counts']} (excluded_over_cap={manifest['excluded_over_cap']})")
+    print(f"[oppoint] corpus split saved: {manifest['actual_counts']} (excluded_over_cap={manifest['excluded_over_cap']}, corpus_hash={manifest['corpus_hash'][:12]})")
 
     store = ArtifactStore(os.path.join(args.out, "store"))
     mid = store.new_model_id("qwen")
     store.register_model(mid, {"backend": "qwen", "checkpoint_dir": args.checkpoint, "domain": "text", "chunk": 8, "status": "completed"})
 
     gen = {"max_new_tokens": args.max_new_tokens, "temperature": 0.9, "top_k": 50}
-    # fit (log-only inside calibrate_qwen): thresholds on fresh fit prompts, CUSUM on the cusum set
+    # fit (log-only inside calibrate_qwen): thresholds on fresh fit prompts, CUSUM on the cusum set;
+    # the deadline stops fitting early so a bounded run still reaches evaluation (partial, recorded)
     cal = calibrate_qwen(store, mid, [r["prompt"] for r in split["fit"]], cusum_prompts=[r["prompt"] for r in split["cusum"]],
-                         target_fpr=0.01, max_new_tokens=args.max_new_tokens, seed=seed, device=args.device)
-    print(f"[oppoint] fit: {cal.n_chunks} chunks; thresholds={cal.thresholds}")
+                         target_fpr=0.01, max_new_tokens=args.max_new_tokens, seed=seed, device=args.device, deadline=deadline)
+    fit_meta = store.load_model_record(mid)
+    print(f"[oppoint] fit: {cal.n_chunks} chunks; fit_prompts {fit_meta['calibration_fit_prompts_used']}/{fit_meta['calibration_fit_prompts_requested']}; thresholds={cal.thresholds}")
 
     # frozen evaluation harness: stats + rollback on, generation learning on, alarm latch, no budget
     from plastic.config import ModelConfig
 
+    eval_cfg = ModelConfig(domain="text", chunk=8)
     eval_hcfg = HarnessConfig(enable_stats=True, enable_rollback=True, log_only=False,
                               learn_from_generation=True, freeze_on_alarm=True, alarm_cooldown=0)
     eval_backend = QwenBackend.load(args.checkpoint, device=args.device)
-    report = _eval_sessions(eval_backend, ModelConfig(domain="text", chunk=8), cal, split["eval"],
+    report = _eval_sessions(eval_backend, eval_cfg, cal, split["eval"],
                             hcfg=eval_hcfg, gen=gen, seed_base=seed + 3000, chains=args.eval_chains, deadline=deadline)
     json.dump(report, open(os.path.join(args.out, "eval-operating-point.json"), "w"), indent=2)
 
-    # criterion check per source x regime: eligible intervention <= 10%, read-only <= 10% of chunks
+    # predeclared follow-up smoke (separate from Dolly; never fit/tuned on)
+    followups = _run_followups(eval_backend, eval_cfg, cal, gen, seed + 4000, args.followups, eval_hcfg, deadline)
+    json.dump(followups, open(os.path.join(args.out, "followups-result.json"), "w"), indent=2)
+
     verdict = _check_criterion(report)
-    json.dump({"thresholds": cal.thresholds, "criterion": verdict, "settings": vars(args), "seeds_base": seed,
-               "complete": time.time() <= deadline},
-              open(os.path.join(args.out, "screen-result.json"), "w"), indent=2)
-    print(f"[oppoint] criterion: {json.dumps(verdict, indent=2)}")
-    print(f"[oppoint] {'COMPLETE' if time.time() <= deadline else 'INCOMPLETE (deadline)'}; artifacts in {args.out}")
-
-
-def _check_criterion(report: dict[str, Any], *, elig_max: float = 0.10, readonly_max: float = 0.10) -> dict[str, Any]:
-    out: dict[str, Any] = {}
-    for regime in ("fresh", "carried"):
-        op = report[regime]["operating_point"]
-        for src in ("prompt", "generation"):
-            rec = op[src]
-            eir = rec["eligible_intervention_rate"]
-            ror = rec["readonly_rate"]
-            out[f"{regime}.{src}"] = {
-                "eligible": rec["eligible"], "eligible_intervention_rate": eir, "readonly_rate": ror,
-                "eligible_ok": (eir is not None and eir <= elig_max),
-                "readonly_ok": (ror is not None and ror <= readonly_max),
-                "nonzero_eligible": rec["eligible"] > 0,
-            }
-    out["pass"] = all(v["eligible_ok"] and v["readonly_ok"] and v["nonzero_eligible"] for v in out.values() if isinstance(v, dict))
-    return out
+    fit_complete = bool(fit_meta["calibration_fit_complete"])
+    eval_complete = report["fresh"]["complete"] and report["carried"]["complete"]
+    followups_ok = followups.get("all_ok", False) if not followups.get("skipped") else None
+    complete = fit_complete and eval_complete and bool(followups_ok)
+    result = {"thresholds": cal.thresholds, "criterion": verdict, "settings": vars(args), "seeds_base": seed,
+              "fit_complete": fit_complete, "eval_complete": {"fresh": report["fresh"]["complete"], "carried": report["carried"]["complete"]},
+              "followups_ok": followups_ok, "valid": verdict["valid"], "pass": bool(verdict["pass"] and complete), "complete": complete,
+              "dev_split": "unused (reserved for pre-freeze changes only)"}
+    json.dump(result, open(os.path.join(args.out, "screen-result.json"), "w"), indent=2)
+    print(f"[oppoint] pass={result['pass']} valid={verdict['valid']} complete={complete} "
+          f"(fit={fit_complete}, eval={eval_complete}, followups={followups_ok})")
+    print(f"[oppoint] artifacts in {args.out}")
 
 
 if __name__ == "__main__":
