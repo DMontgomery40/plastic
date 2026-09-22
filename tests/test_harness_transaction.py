@@ -207,10 +207,11 @@ def test_projection_budget_recheck_float_rounding():
     # ASTRA-061: at committed S = 2**20 the float32 ULP is 0.125, so a scaled projected delta can
     # round to a *representable* stored change that still violates the budget cap — the branch that
     # fires the SECOND apply_projected (the recheck) in _apply. In exact arithmetic the first scaled
-    # apply lands precisely at the cap, so this branch is unreachable through ordinary token
-    # forwards; the committed/working S, the proposed delta, and the (orthogonal) canary gradient
-    # are therefore set directly. The three caps make ULP rounding give, respectively: accept in one
-    # apply, accept-zero after a recheck, and a budget_unrepresentable rollback that charges zero.
+    # apply lands precisely at the cap, so a rounding fixture is what makes the recheck reproducible;
+    # this is deterministic coverage of the branch, NOT a claim that real float token forwards can
+    # never reach it (ASTRA-062). The committed/working S, the proposed delta, and the (orthogonal)
+    # canary gradient are set directly. The three caps make ULP rounding give, respectively: accept
+    # in one apply, accept-zero after a recheck, and a budget_unrepresentable rollback charging zero.
     from plastic.harness.policy import Decision
     from plastic.harness.signals import ChunkSignals
 
