@@ -14,6 +14,14 @@ export const UNAVAILABLE = 'unavailable';
 /** A null threshold means the bound is unlimited, which is not the same as unknown. */
 export const UNBOUNDED = 'unbounded';
 
+/**
+ * A valid-only red team aggregate is null when no attack in that family met the
+ * plausibility constraint. The campaign ran and nothing qualified, which is a
+ * different statement from a number that was never reported, and very different
+ * from zero damage.
+ */
+export const NO_VALID_PAYLOADS = 'no valid payloads';
+
 /** True for a real, finite number. The API can send null or NaN for several signals. */
 export function isNum(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
@@ -150,4 +158,14 @@ export function cleanErrorMessage(raw: string, max = 240): string {
   if (!text) return 'the API returned an error with no readable message';
   const firstLine = text.split(/(?:Traceback|  File ")/)[0].trim() || text;
   return firstLine.length <= max ? firstLine : `${firstLine.slice(0, max - 1)}…`;
+}
+
+/** A valid-only aggregate: null means no payload qualified, not zero damage. */
+export function fmtValidOnly(v: number | null | undefined, decimals = 4): string {
+  return isNum(v) ? fmt(v, decimals) : NO_VALID_PAYLOADS;
+}
+
+/** A valid-only fraction, with the same null semantics. */
+export function fmtValidOnlyPercent(v: number | null | undefined, decimals = 0): string {
+  return isNum(v) ? fmtPercent(v, decimals) : NO_VALID_PAYLOADS;
 }

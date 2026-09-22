@@ -2,7 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { hasRunningJob, initialState, isPolling, startJobPolling, stopJobPolling, useStore } from './index';
 import { buildLineageForest } from '../components/tabs/SessionsTab';
 import { countsFromSession, interventionRate } from '../components/panels/RatePanel';
-import { UNAVAILABLE, UNBOUNDED, cleanErrorMessage, fmt, fmtThreshold } from '../utils/formatting';
+import {
+  NO_VALID_PAYLOADS,
+  UNAVAILABLE,
+  UNBOUNDED,
+  cleanErrorMessage,
+  fmt,
+  fmtThreshold,
+  fmtValidOnly,
+  fmtValidOnlyPercent,
+} from '../utils/formatting';
 import type {
   ChunkSignals,
   Health,
@@ -621,5 +630,65 @@ describe('error messages', () => {
     const message = useStore.getState().error ?? '';
     expect(message).toContain('502 Bad Gateway');
     expect(message).not.toContain('<');
+  });
+});
+
+describe('red team valid-only aggregates', () => {
+  // A family where nothing met the plausibility constraint: the valid-only
+  // fields are null, and null here means "nothing qualified", not "no damage".
+  const NO_VALID = {
+    n: 2,
+    n_valid: 0,
+    damage_mean: 0.0121,
+    damage_max: 0.0257,
+    unprotected_damage_mean: 0.1536,
+    frozen_damage_mean: 0.0121,
+    valid_damage_mean: null,
+    valid_damage_max: null,
+    provisional_damage_max: 0.0100,
+    gated_fraction: 1,
+    constraint_violated_fraction: 1,
+    over_threshold_fraction: 0.5,
+    valid_over_threshold_fraction: null,
+  };
+
+  it('distinguishes no qualifying payload from an unreported number', () => {
+    expect(fmtValidOnly(NO_VALID.valid_damage_mean)).toBe(NO_VALID_PAYLOADS);
+    expect(fmtValidOnlyPercent(NO_VALID.valid_over_threshold_fraction)).toBe(NO_VALID_PAYLOADS);
+    expect(NO_VALID_PAYLOADS).not.toBe(UNAVAILABLE);
+  });
+
+  it('never renders a null valid-only aggregate as zero', () => {
+    expect(fmtValidOnly(null)).not.toContain('0');
+    expect(fmtValidOnly(0)).toBe('0.0000');
+    expect(fmtValidOnlyPercent(0)).toBe('0%');
+  });
+
+  it('keeps the all-attempt numbers when the valid-only ones are absent', () => {
+    expect(fmt(NO_VALID.damage_mean)).toBe('0.0121');
+    expect(fmt(NO_VALID.unprotected_damage_mean)).toBe('0.1536');
+  });
+
+  it('measures what the harness prevented as unprotected minus accepted', () => {
+    const prevented = NO_VALID.unprotected_damage_mean - NO_VALID.damage_mean;
+    expect(prevented).toBeCloseTo(0.1415, 4);
+  });
+
+  it('carries the family stats through the store unchanged', async () => {
+    const run = {
+      run_id: 'rt_lm_1_1',
+      model_id: 'lm_1',
+      created_at_unix: 1_726_905_000,
+      threshold_coherence: 0.0142,
+      families: { repeat: NO_VALID },
+    };
+    mockRoutes({ ...FULL_ROUTES, '/api/redteam': [run], '/api/redteam/rt_lm_1_1': { summary: run, results: [] } });
+    await useStore.getState().refreshRedteam();
+    await useStore.getState().loadRedteamRun('rt_lm_1_1');
+    const fam = useStore.getState().redteamDetail?.summary.families.repeat;
+    expect(fam?.valid_damage_mean).toBeNull();
+    expect(fam?.n_valid).toBe(0);
+    expect(fam?.unprotected_damage_mean).toBe(0.1536);
+    expect(fam?.frozen_damage_mean).toBe(0.0121);
   });
 });

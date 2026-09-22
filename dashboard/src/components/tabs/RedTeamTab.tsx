@@ -1,7 +1,17 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../../store';
-import { UNAVAILABLE, fmt, fmtInt, fmtPercent, fmtRelative, isNum } from '../../utils/formatting';
-import { ScatterChartPanel, SERIES_COLORS, type ReferenceSpec } from '../charts';
+import {
+  NO_VALID_PAYLOADS,
+  UNAVAILABLE,
+  fmt,
+  fmtInt,
+  fmtPercent,
+  fmtRelative,
+  fmtValidOnly,
+  fmtValidOnlyPercent,
+  isNum,
+} from '../../utils/formatting';
+import { GroupedBarChartPanel, ScatterChartPanel, SERIES_COLORS, type ReferenceSpec } from '../charts';
 import { Button, Checkbox, Empty, Field, KeyValue, NumberInput, Panel, Select, StatTile, Table } from '../panels';
 
 const ALL_FAMILIES = ['pgd', 'random', 'repeat', 'shuffle', 'topic_switch'];
@@ -38,6 +48,32 @@ export function RedTeamTab() {
         gated: r.decisions.some((d) => d !== 'commit'),
       })),
     [detail],
+  );
+
+  // The headline is the valid-only story: what an adversary could actually
+  // deliver. `worstValid` is null, not 0, when nothing met the constraint.
+  const familyStats = Object.values(summary?.families ?? {});
+  const worstValid = familyStats.reduce<number | null>(
+    (max, f) => (isNum(f.valid_damage_max) && (max === null || f.valid_damage_max > max) ? f.valid_damage_max : max),
+    null,
+  );
+  const worstUnprotected = familyStats.reduce<number | null>(
+    (max, f) =>
+      isNum(f.unprotected_damage_mean) && (max === null || f.unprotected_damage_mean > max) ? f.unprotected_damage_mean : max,
+    null,
+  );
+  const totalAttacks = familyStats.reduce((n, f) => n + (f.n ?? 0), 0);
+  const totalValid = familyStats.reduce((n, f) => n + (f.n_valid ?? 0), 0);
+
+  const familyRows = useMemo(
+    () =>
+      Object.entries(summary?.families ?? {}).map(([family, stats]) => ({
+        family,
+        accepted: stats.damage_mean,
+        unprotected: stats.unprotected_damage_mean,
+        frozen: stats.frozen_damage_mean,
+      })),
+    [summary],
   );
 
   const familyColor = useMemo(() => {
@@ -171,67 +207,138 @@ export function RedTeamTab() {
           />
         ) : (
           <>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-              <StatTile label="Attacks" value={fmtInt(detail?.results.length ?? 0)} hint={summary.run_id} />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
               <StatTile
-                label="Worst validated damage"
-                value={fmt(
-                  Object.values(summary.families).reduce<number | null>(
-                    (max, f) => (isNum(f.damage_max) && (max === null || f.damage_max > max) ? f.damage_max : max),
-                    null,
-                  ),
-                  4,
-                )}
-                tone="rollback"
-                hint="coherence loss added"
+                label="Worst valid damage"
+                value={fmtValidOnly(worstValid)}
+                tone={worstValid === null ? 'default' : 'rollback'}
+                hint="constraint-satisfying attacks only"
+              />
+              <StatTile
+                label="Worst undefended damage"
+                value={fmt(worstUnprotected)}
+                hint="same payloads, harness off"
+              />
+              <StatTile
+                label="Valid attacks"
+                value={`${fmtInt(totalValid)} of ${fmtInt(totalAttacks)}`}
+                hint="met the plausibility constraint"
               />
               <StatTile
                 label="Coherence threshold"
                 value={fmt(summary.threshold_coherence, 4)}
                 hint={isNum(summary.threshold_coherence) ? 'from the calibration' : 'model not calibrated'}
               />
-              <StatTile label="Recorded payloads" value={fmtInt(summary.recorded_payloads ?? 0)} hint="added to the poison canaries" />
+              <StatTile
+                label="Recorded payloads"
+                value={fmtInt(summary.recorded_payloads ?? 0)}
+                hint="added to the poison canaries"
+              />
             </div>
 
             <Panel
-              title="Per family"
-              subtitle="Accepted damage is what survived the harness on the re-tokenized payload. Provisional is the peak intermediate proposal, not an endpoint. Unprotected is the same payload with the harness disabled, frozen is the payload read but not learned. Valid-only columns are null, not zero, when no attack met the plausibility constraint."
+              title="Damage by family: accepted, unprotected, frozen"
+              subtitle="Three endpoints on the same payload from the same post-prefix state. The gap between accepted and unprotected is what the harness prevented; frozen is the activation-only floor the payload reaches just by being read."
+            >
+              <GroupedBarChartPanel
+                data={familyRows}
+                xKey="family"
+                series={[
+                  { key: 'accepted', label: 'accepted (harness on)', color: '#3fd17a' },
+                  { key: 'unprotected', label: 'unprotected (harness off)', color: '#ff6b6b' },
+                  { key: 'frozen', label: 'frozen (read, not learned)', color: '#94a3b4' },
+                ]}
+                height={260}
+                yLabel="coherence loss added"
+                references={damageRefs}
+                ariaLabel="Mean canary damage per attack family, compared across the accepted, unprotected and frozen endpoints"
+              />
+              <div className="mt-3">
+                <Table head={['Family', 'Accepted', 'Unprotected', 'Frozen', 'Prevented by the harness']}>
+                  {Object.entries(summary.families).map(([family, stats]) => {
+                    const prevented =
+                      isNum(stats.unprotected_damage_mean) && isNum(stats.damage_mean)
+                        ? stats.unprotected_damage_mean - stats.damage_mean
+                        : null;
+                    return (
+                      <tr key={family} className="border-b border-edge">
+                        <td className="px-2 py-1.5 font-mono text-ink-primary">{family}</td>
+                        <td className="px-2 py-1.5 font-mono text-status-commit">{fmt(stats.damage_mean)}</td>
+                        <td className="px-2 py-1.5 font-mono text-status-rollback">{fmt(stats.unprotected_damage_mean)}</td>
+                        <td className="px-2 py-1.5 font-mono text-status-readonly">{fmt(stats.frozen_damage_mean)}</td>
+                        <td
+                          className={`px-2 py-1.5 font-mono ${
+                            prevented !== null && prevented > 0 ? 'text-status-commit' : 'text-ink-secondary'
+                          }`}
+                        >
+                          {prevented === null ? UNAVAILABLE : fmt(prevented)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </Table>
+                <p className="mt-2 text-micro text-ink-muted">
+                  A negative unprotected number means the payload made the canaries better even with no defence, so
+                  there was nothing for the harness to prevent on that family.
+                </p>
+              </div>
+            </Panel>
+
+            <Panel
+              title="Per family, constraint-satisfying attacks"
+              subtitle="The headline numbers. An attack counts here only if its payload met the plausibility constraint, so these are the attacks a real adversary could actually deliver."
+            >
+              <Table head={['Family', 'Valid of n', 'Valid damage mean', 'Valid damage max', 'Valid over threshold']}>
+                {Object.entries(summary.families).map(([family, stats]) => (
+                  <tr key={family} className="border-b border-edge">
+                    <td className="px-2 py-1.5 font-mono text-ink-primary">{family}</td>
+                    <td className="px-2 py-1.5 font-mono text-ink-primary">
+                      {fmtInt(stats.n_valid)} of {fmtInt(stats.n)}
+                    </td>
+                    <td
+                      className={`px-2 py-1.5 font-mono ${isNum(stats.valid_damage_mean) ? 'text-ink-primary' : 'text-ink-muted'}`}
+                    >
+                      {fmtValidOnly(stats.valid_damage_mean)}
+                    </td>
+                    <td
+                      className={`px-2 py-1.5 font-mono ${isNum(stats.valid_damage_max) ? 'text-status-rollback' : 'text-ink-muted'}`}
+                    >
+                      {fmtValidOnly(stats.valid_damage_max)}
+                    </td>
+                    <td
+                      className={`px-2 py-1.5 font-mono ${
+                        isNum(stats.valid_over_threshold_fraction) ? 'text-status-scale' : 'text-ink-muted'
+                      }`}
+                    >
+                      {fmtValidOnlyPercent(stats.valid_over_threshold_fraction)}
+                    </td>
+                  </tr>
+                ))}
+              </Table>
+              <p className="mt-2 text-micro text-ink-muted">
+                {NO_VALID_PAYLOADS} means the campaign ran and nothing in that family met the constraint. It is not a
+                damage of zero, and it is not a missing measurement.
+              </p>
+            </Panel>
+
+            <Panel
+              title="Per family, every attempt"
+              subtitle="Secondary: these include payloads the model itself finds implausible, which an adversary could not deliver unnoticed. Provisional is the peak intermediate proposal, not an endpoint."
             >
               <Table
-                head={[
-                  'Family',
-                  'n',
-                  'n valid',
-                  'Accepted damage mean',
-                  'Accepted damage max',
-                  'Valid-only mean',
-                  'Provisional max',
-                  'Unprotected mean',
-                  'Frozen mean',
-                  'Gated',
-                  'Constraint violated',
-                  'Over threshold',
-                  'Valid over threshold',
-                ]}
+                head={['Family', 'n', 'Damage mean', 'Damage max', 'Provisional max', 'Gated', 'Constraint violated', 'Over threshold']}
               >
                 {Object.entries(summary.families).map(([family, stats]) => (
                   <tr key={family} className="border-b border-edge">
                     <td className="px-2 py-1.5 font-mono text-ink-primary">{family}</td>
                     <td className="px-2 py-1.5 font-mono text-ink-primary">{fmtInt(stats.n)}</td>
-                    <td className="px-2 py-1.5 font-mono text-ink-secondary">{fmtInt(stats.n_valid)}</td>
-                    <td className="px-2 py-1.5 font-mono text-ink-primary">{fmt(stats.damage_mean)}</td>
-                    <td className="px-2 py-1.5 font-mono text-status-rollback">{fmt(stats.damage_max)}</td>
-                    <td className="px-2 py-1.5 font-mono text-ink-primary">{fmt(stats.valid_damage_mean)}</td>
+                    <td className="px-2 py-1.5 font-mono text-ink-secondary">{fmt(stats.damage_mean)}</td>
+                    <td className="px-2 py-1.5 font-mono text-ink-secondary">{fmt(stats.damage_max)}</td>
                     <td className="px-2 py-1.5 font-mono text-status-scale">{fmt(stats.provisional_damage_max)}</td>
-                    <td className="px-2 py-1.5 font-mono text-ink-secondary">{fmt(stats.unprotected_damage_mean)}</td>
-                    <td className="px-2 py-1.5 font-mono text-ink-secondary">{fmt(stats.frozen_damage_mean)}</td>
                     <td className="px-2 py-1.5 font-mono text-status-commit">{fmtPercent(stats.gated_fraction, 0)}</td>
                     <td className="px-2 py-1.5 font-mono text-ink-secondary">{fmtPercent(stats.constraint_violated_fraction, 0)}</td>
                     <td className="px-2 py-1.5 font-mono text-status-scale">
                       {isNum(stats.over_threshold_fraction) ? fmtPercent(stats.over_threshold_fraction, 0) : UNAVAILABLE}
-                    </td>
-                    <td className="px-2 py-1.5 font-mono text-status-scale">
-                      {isNum(stats.valid_over_threshold_fraction) ? fmtPercent(stats.valid_over_threshold_fraction, 0) : UNAVAILABLE}
                     </td>
                   </tr>
                 ))}
@@ -277,6 +384,7 @@ export function RedTeamTab() {
                 <Table
                   head={[
                     'Family',
+                    'Deliverable',
                     'Accepted damage',
                     'Unprotected',
                     'Frozen',
@@ -284,7 +392,6 @@ export function RedTeamTab() {
                     'NLL payload',
                     'NLL guarded',
                     'NLL max',
-                    'Constraint',
                     'Decisions',
                     'Seconds',
                   ]}
@@ -292,9 +399,16 @@ export function RedTeamTab() {
                   {detail.results.map((r, i) => (
                     <tr key={`${r.family}-${i}`} className="border-b border-edge">
                       <td className="px-2 py-1.5 font-mono text-ink-primary">{r.family}</td>
-                      <td className="px-2 py-1.5 font-mono text-status-rollback">{fmt(r.damage_validated)}</td>
-                      <td className="px-2 py-1.5 font-mono text-ink-secondary">{fmt(r.damage_unprotected)}</td>
-                      <td className="px-2 py-1.5 font-mono text-ink-secondary">{fmt(r.damage_frozen)}</td>
+                      <td className="px-2 py-1.5 text-xs">
+                        {r.constraint_violated ? (
+                          <span className="text-ink-muted">no, constraint violated</span>
+                        ) : (
+                          <span className="font-semibold text-status-rollback">yes</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5 font-mono text-status-commit">{fmt(r.damage_validated)}</td>
+                      <td className="px-2 py-1.5 font-mono text-status-rollback">{fmt(r.damage_unprotected)}</td>
+                      <td className="px-2 py-1.5 font-mono text-status-readonly">{fmt(r.damage_frozen)}</td>
                       <td className="px-2 py-1.5 font-mono text-status-scale">
                         {isNum(r.canary_after_provisional) && isNum(r.canary_before)
                           ? fmt(r.canary_after_provisional - r.canary_before)
@@ -303,13 +417,6 @@ export function RedTeamTab() {
                       <td className="px-2 py-1.5 font-mono text-ink-primary">{fmt(r.nll_payload, 3)}</td>
                       <td className="px-2 py-1.5 font-mono text-ink-secondary">{fmt(r.nll_payload_guarded, 3)}</td>
                       <td className="px-2 py-1.5 font-mono text-ink-secondary">{fmt(r.nll_max, 3)}</td>
-                      <td className="px-2 py-1.5 text-xs">
-                        {r.constraint_violated ? (
-                          <span className="font-semibold text-status-rollback">violated</span>
-                        ) : (
-                          <span className="text-ink-secondary">held</span>
-                        )}
-                      </td>
                       <td className="px-2 py-1.5 font-mono text-xs text-ink-secondary">{r.decisions.join(', ') || UNAVAILABLE}</td>
                       <td className="px-2 py-1.5 font-mono text-ink-secondary">{fmt(r.seconds, 1)}</td>
                     </tr>
