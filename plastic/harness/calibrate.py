@@ -396,3 +396,59 @@ def calibrate_model(
     store.register_model(model_id, {"calibrated_at_unix": cal.created_at_unix, "calibration_chunks": cal.n_chunks})
     log(f"[calibrate] thresholds: " + ", ".join(f"{k}={v:.4g}" for k, v in cal.thresholds.items()))
     return cal
+
+
+def calibrate_qwen(
+    store,
+    model_id: str,
+    conversations: Iterable[tuple[str, str]],
+    *,
+    n_chunks: int = 512,
+    target_fpr: float = 0.01,
+    harness_cfg: HarnessConfig | None = None,
+    device: torch.device | str = "cpu",
+    reset_every: int | None = 32,
+    log=print,
+) -> "Calibration":
+    """Calibrate Qwen harness thresholds on a conversational corpus, through the SAME reduced-signal
+    runner a chat session uses.
+
+    ``conversations`` is an iterable of ``(user, assistant)`` string pairs; each is rendered with the
+    native chat template (no generation prompt — a completed reference) and fed as the benign write
+    stream. Qwen produces only the reduced decision signals (chunk NLL and recurrent-state change),
+    so the others get no reference/threshold. The calibration is stamped with the ACTUAL loaded
+    checkpoint digest, so it installs only on the matching model (ASTRA-078). Writes calibration.json.
+
+    Calibrate on conversations DISJOINT from any used to evaluate; do not tune on demonstration
+    prompts. This produces thresholds, not a measured intervention-rate or safety claim.
+    """
+    from plastic.backends.qwen import QwenBackend
+    from plastic.config import ModelConfig
+    from plastic.harness.transaction import TransactionRunner
+
+    device = torch.device(device)
+    rec = store.load_model_record(model_id)
+    if rec.get("backend") != "qwen":
+        raise ValueError(f"calibrate_qwen requires a qwen model, got backend={rec.get('backend')!r}")
+    backend = QwenBackend.load(rec["checkpoint_dir"], device=device)
+    cfg = ModelConfig(domain="text", chunk=int(rec.get("chunk", 8)))
+    hcfg = log_only(harness_cfg or HarnessConfig(target_fpr=target_fpr))
+    runner = TransactionRunner(None, cfg, hcfg, device=device, backend=backend)
+
+    def stream():
+        for user, assistant in conversations:
+            ids = backend.tokenizer.apply_chat_template(
+                [{"role": "user", "content": user}, {"role": "assistant", "content": assistant}],
+                add_generation_prompt=False, enable_thinking=False, tokenize=True, return_dict=False,
+            )
+            yield [int(t) for t in ids]
+
+    cal = calibrate_from_runner(
+        runner, stream(), n_chunks=n_chunks, model_signature=f"qwen:{backend.checkpoint_digest}",
+        target_fpr=target_fpr, reset_every=reset_every,
+    )
+    cal.save(store.model_dir(model_id))
+    store.register_model(model_id, {"calibrated_at_unix": cal.created_at_unix, "calibration_chunks": cal.n_chunks})
+    log(f"[calibrate] qwen {model_id}: {cal.n_chunks} chunks; thresholds: "
+        + ", ".join(f"{k}={v:.4g}" for k, v in cal.thresholds.items()))
+    return cal

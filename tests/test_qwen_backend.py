@@ -656,6 +656,42 @@ def test_qwen_session_chat_end_to_end(tmp_path):
     assert sess2.runner.pos == pos_before_zero + res3.n_tokens_in + close_len
 
 
+def test_qwen_calibration_produces_installable_thresholds(tmp_path):
+    # The native conversational calibrator: build Qwen thresholds from a conversational corpus through
+    # the same reduced-signal runner a chat uses, stamped with the actual checkpoint digest, and
+    # confirm a session installs them (the identity gate accepts the matching signature).
+    import gc
+
+    from plastic.harness.calibrate import calibrate_qwen
+    from plastic.harness.config import HarnessConfig
+    from plastic.session.runner import Session
+    from plastic.store import ArtifactStore
+
+    store = ArtifactStore(str(tmp_path))
+    mid = store.new_model_id("qwen")
+    store.register_model(mid, {"backend": "qwen", "checkpoint_dir": CKPT, "domain": "text", "chunk": 8, "status": "completed"})
+
+    convos = [
+        ("What is the capital of France?", "The capital of France is Paris."),
+        ("Name a primary color.", "Red is a primary color."),
+        ("How many days are in a week?", "There are seven days in a week."),
+        ("What is two plus two?", "Two plus two is four."),
+        ("What color is the sky on a clear day?", "The sky is blue on a clear day."),
+    ]
+    cal = calibrate_qwen(store, mid, convos, n_chunks=20, target_fpr=0.1, reset_every=8, log=lambda s: None)
+    # reduced-signal references/thresholds only, stamped with the actual loaded checkpoint digest
+    assert cal.model_signature.startswith("qwen:") and len(cal.model_signature) > len("qwen:")
+    assert set(cal.reference.keys()) == {"chunk_loss", "log_delta_norm"}
+    assert "chunk_loss" in cal.thresholds and "log_delta_norm" in cal.thresholds
+    assert "surprise_mean" not in cal.thresholds and "log_write_norm" not in cal.thresholds
+    gc.collect()
+
+    # a session on this model installs the calibration (identity gate accepts the matching signature)
+    sess = Session.create(store, model_id=mid, harness_cfg=HarnessConfig(enable_projection=False), device="cpu")
+    assert sess.calibration_status == "installed" and sess.runner.calibration is not None
+    assert sess.runner.calibration.model_signature == cal.model_signature
+
+
 def test_qwen_session_calibration_identity(tmp_path):
     # ASTRA-078: a Qwen session installs a persisted calibration only if its signature matches the
     # ACTUAL loaded checkpoint content — not a stale registry digest — on create and on reopen.
