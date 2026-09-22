@@ -1,5 +1,5 @@
 import type { CalibrationSummary, SessionSummary } from '../../api/types';
-import { UNAVAILABLE, fmt, fmtInt, fmtPercent, isNum } from '../../utils/formatting';
+import { UNAVAILABLE, fmtInt, fmtPercent, isNum } from '../../utils/formatting';
 import { Empty, KeyValue } from './index';
 
 /**
@@ -119,5 +119,3 @@ export function rateSummaryText(counts: InterventionCounts): string {
   const rate = interventionRate(counts);
   return rate === null ? UNAVAILABLE : `${fmtPercent(rate, 1)} intervened`;
 }
-
-export { fmt };

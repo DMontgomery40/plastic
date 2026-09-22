@@ -13,6 +13,7 @@ import {
   Table,
   TextInput,
 } from '../panels';
+import { countsFromSession, rateSummaryText } from '../panels/RatePanel';
 
 interface TreeNode {
   session: SessionSummary;
@@ -142,7 +143,7 @@ export function SessionsTab() {
 
         <Panel
           title="All sessions"
-          subtitle="Counts come from the session's own transaction log."
+          subtitle="Counts come from the session's own transaction log. Intervened is the fraction of chunks not committed, observed on that session's own traffic."
           actions={
             currentSessionId ? (
               <Button size="sm" onClick={() => setActiveTab('session')}>
@@ -166,6 +167,7 @@ export function SessionsTab() {
                 'Scale',
                 'Project',
                 'Read-only',
+                'Intervened',
                 'Budget used',
                 'Updated',
                 '',
@@ -198,6 +200,12 @@ export function SessionsTab() {
                   <td className="px-2 py-1.5 font-mono text-status-scale">{fmtInt(s.scales)}</td>
                   <td className="px-2 py-1.5 font-mono text-status-project">{fmtInt(s.projects)}</td>
                   <td className="px-2 py-1.5 font-mono text-status-readonly">{fmtInt(s.readonly)}</td>
+                  <td
+                    className="px-2 py-1.5 font-mono text-ink-secondary"
+                    title="Fraction of chunks not committed. An observed rate on this session's own traffic, not a false-positive rate."
+                  >
+                    {rateSummaryText(countsFromSession(s))}
+                  </td>
                   <td className="px-2 py-1.5 font-mono text-ink-primary">{fmt(s.budget_used, 3)}</td>
                   <td className="px-2 py-1.5 text-xs text-ink-secondary">{fmtRelative(s.updated_at_unix)}</td>
                   <td className="px-2 py-1.5">

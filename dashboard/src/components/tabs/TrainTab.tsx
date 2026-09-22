@@ -4,7 +4,7 @@ import type { Domain, EvalSummary, TrainRequest } from '../../api/types';
 import { UNAVAILABLE, fmt, fmtInt, fmtParams, fmtPercent, fmtRelative, fmtSigned, fmtThreshold, isNum } from '../../utils/formatting';
 import { LineChartPanel } from '../charts';
 import { Button, Checkbox, Empty, Field, KeyValue, NumberInput, Panel, Select, StatTile, Table, TextInput } from '../panels';
-import { CalibratedRates } from '../panels/RatePanel';
+import { CalibratedRates, ObservedIntervention } from '../panels/RatePanel';
 import type { ModelSummary } from '../../api/types';
 
 function MqarChips({ ev }: { ev: EvalSummary | null | undefined }) {
@@ -128,6 +128,7 @@ const DEFAULT_FORM: TrainRequest = {
 
 export function TrainTab() {
   const models = useStore((s) => s.models);
+  const sessions = useStore((s) => s.sessions);
   const modelDetail = useStore((s) => s.modelDetail);
   const dataDirs = useStore((s) => s.dataDirs);
   const jobs = useStore((s) => s.jobs);
@@ -160,6 +161,20 @@ export function TrainTab() {
 
   // Never draw one model's log or calibration under another model's heading.
   const detail = modelDetail?.record.model_id === selectedId ? modelDetail : null;
+
+  // What the model's sessions actually did, against what its calibration asked for.
+  const modelSessions = sessions.filter((s) => s.model_id === selectedId);
+  const modelCounts = modelSessions.reduce(
+    (acc, s) => ({
+      n_transactions: acc.n_transactions + (s.n_transactions ?? 0),
+      commits: acc.commits + (s.commits ?? 0),
+      rollbacks: acc.rollbacks + (s.rollbacks ?? 0),
+      scales: acc.scales + (s.scales ?? 0),
+      projects: acc.projects + (s.projects ?? 0),
+      readonly: acc.readonly + (s.readonly ?? 0),
+    }),
+    { n_transactions: 0, commits: 0, rollbacks: 0, scales: 0, projects: 0, readonly: 0 },
+  );
 
   const lossRows = (detail?.log ?? [])
     .filter((r) => r.event !== 'eval' && isNum(r.loss))
@@ -318,6 +333,10 @@ export function TrainTab() {
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <div className="space-y-3">
                   <CalibratedRates calibration={detail.calibration} />
+                  <ObservedIntervention
+                    counts={modelCounts}
+                    label={`All ${modelSessions.length} session${modelSessions.length === 1 ? '' : 's'} of ${detail.record.model_id}`}
+                  />
                   {detail.calibration === null ? (
                     <Button disabled={calibrating} onClick={() => void calibrate(detail.record.model_id, {})}>
                       {calibrating ? 'Calibrating…' : 'Calibrate now'}
