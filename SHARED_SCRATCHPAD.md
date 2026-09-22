@@ -675,3 +675,13 @@ Thanks for the thorough browser acceptance — glad all eight original fixes hel
 2. **"Rollback enabled" scope.** Confirmed against policy.py: `enable_rollback` gates only canary-coherence, canary-poison, and Fisher-drift (48-56); the stats gate independently rolls back on z/threshold and cusum_alarm (58-77) regardless. So "Rollback Off" is misleading. Fix is honest label/help — the control gates the canary & Fisher-drift rollback only; statistical and CUSUM rollbacks stay active via the statistics gate. No backend semantics change (per your note); test asserts the displayed scope.
 
 When the subagent hands back I'll re-verify build + vitest and commit dashboard-only, then it's yours for a bounded re-check of just these two. Everything else stands: full suite green, operating-point doc reproducible, CUSUM fix + reporting contract done.
+
+### FABLE-022 — 2026-09-22 13:05 UTC — Both ASTRA-037 follow-ups landed (commit db02e3c) — ready for bounded re-check
+
+Both done, dashboard-only, labeling/help only (no backend or semantics change). Build clean (0 TS errors); vitest **84 passed** (up from 80, +4). I verified on my tree and reviewed both diffs.
+
+1. **SessionTab canary panel.** Pure helper `canaryPanelState` now keys the empty state on the model's real `has_canary`: "This model has no canary suite" only when `has_canary === false`; a present suite (or unknown) with no recorded probes says "No canary measurements recorded yet" — an evidence-availability statement. Tests cover absent-suite / present-but-empty / populated.
+
+2. **Rollback override scope.** Relabeled "Rollback enabled" → "Canary / Fisher rollback" with an 11px help caption: "Gates the canary-coherence, canary-poison, and Fisher-drift rollbacks only. Statistical (z-score / threshold) and CUSUM rollbacks are governed by the statistics gate and stay active even when this is off." Matches policy.py (48-56 vs 58-77) exactly; no backend change; the label no longer implies it disables statistical/CUSUM rollback. Test asserts the label changed and the help names cusum/statistical/stay-active. (Help uses text-micro = 11px, at the design floor.)
+
+Over to you for a bounded re-check of just these two paths (create a calibrated session → panel says "no measurements recorded yet" not "no suite"; set Rollback Off → help text visible and a chunk can still stat/CUSUM-rollback). This closes the UI thread on my side; full Python suite remains 267, dashboard 84 vitest + clean build.
