@@ -9,12 +9,14 @@ value of the memory), and recall accuracy, plus the histogram of learned β.
 
 from __future__ import annotations
 
+import math
 import os
 import shutil
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -22,6 +24,7 @@ from plastic.config import ModelConfig
 from plastic.data.mqar import PAD_ID, mqar_accuracy, mqar_batch
 from plastic.data.physics import physics_batch
 from plastic.data.text import TokenWindows
+from plastic.tokenizer.bpe import Tokenizer
 from plastic.model.lm import PlasticDynamics, PlasticLM, build_model
 from plastic.model.memory import MemorySignals
 from plastic.store import ArtifactStore
@@ -125,6 +128,30 @@ def text_nll_sum(model: PlasticLM, toks: torch.Tensor, *, beta_scale: float = 1.
     return nll, int((target != PAD_ID).sum()), signals
 
 
+_BYTES_PER_TOKEN: dict[str, float] = {}
+
+
+def bytes_per_token(data_dir: str) -> float | None:
+    """UTF-8 bytes per token for the validation corpus. Reporting held-out loss as
+    bits-per-byte (BPB = loss / (ln2 * bytes_per_token)) makes it vocab-independent and
+    comparable across tokenizers, unlike token-level perplexity, which a small vocab makes
+    mechanically low and non-comparable to standard numbers. Cached per file."""
+    if not data_dir:
+        return None
+    tok_path = os.path.join(data_dir, "tokenizer.json")
+    val_path = os.path.join(data_dir, "validation.bin")
+    if not (os.path.exists(tok_path) and os.path.exists(val_path)):
+        return None
+    key = f"{val_path}:{os.path.getsize(val_path)}"
+    if key not in _BYTES_PER_TOKEN:
+        data = np.fromfile(val_path, dtype="<u2")
+        if len(data) == 0:
+            return None
+        text = Tokenizer.load(tok_path).decode(int(t) for t in data)
+        _BYTES_PER_TOKEN[key] = len(text.encode("utf-8")) / len(data)
+    return _BYTES_PER_TOKEN[key]
+
+
 @torch.no_grad()
 def evaluate_text(model: PlasticLM, cfg: TrainConfig, heldout: TokenWindows, device: torch.device) -> dict[str, Any]:
     model.eval()
@@ -160,12 +187,16 @@ def evaluate_text(model: PlasticLM, cfg: TrainConfig, heldout: TokenWindows, dev
         mqar[str(pairs)] = mqar_accuracy(logits, toks, mask)
     heldout_loss = nll_sum / max(1, count)
     heldout_loss0 = nll0_sum / max(1, count)
+    bpt = bytes_per_token(cfg.data_dir)
     model.train()
     return {
         "heldout_loss": heldout_loss,
         "heldout_loss_beta0": heldout_loss0,
         "heldout_tokens": count,
         "memory_value": heldout_loss0 - heldout_loss,
+        # vocab-independent held-out loss (bits per byte); the honest cross-model number
+        "bytes_per_token": bpt,
+        "heldout_bpb": (heldout_loss / (math.log(2.0) * bpt)) if bpt else None,
         "mqar_accuracy": mqar,
         "beta_hist": beta_histogram(signals_all) if signals_all else None,
     }

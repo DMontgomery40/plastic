@@ -60,6 +60,11 @@ def test_text_training_writes_artifacts(tmp_path):
         assert key in ev, key
     assert "4" in ev["mqar_accuracy"]
     assert len(ev["beta_hist"]["counts"]) == 20
+    # bits-per-byte is reported and is the vocab-independent restatement of the held-out loss
+    import math
+
+    assert ev["bytes_per_token"] > 0 and ev["heldout_bpb"] > 0
+    assert abs(ev["heldout_bpb"] - ev["heldout_loss"] / (math.log(2.0) * ev["bytes_per_token"])) < 1e-9
     log = store.read_log(mid)
     assert any(r.get("event") == "eval" for r in log) and any("loss" in r and "tok_per_s" in r for r in log)
     cfg2, model, info = store.load_checkpoint(mid)
