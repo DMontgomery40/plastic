@@ -42,9 +42,9 @@ function Provenance({ m }: { m: ModelSummary }) {
 
 /**
  * The sleep consolidation outcome of a child model. The manifest is written by
- * plastic/sleep/consolidate.py onto the model record; the API does not forward
- * it yet, so an absent manifest is reported as unavailable rather than guessed
- * from the model's type.
+ * plastic/sleep/consolidate.py onto the model record and forwarded by the API.
+ * A child whose record carries no manifest is reported as such rather than
+ * having an outcome guessed from its type.
  */
 function SleepPanel({ m }: { m: ModelSummary | null }) {
   if (!m) return null;
@@ -57,9 +57,9 @@ function SleepPanel({ m }: { m: ModelSummary | null }) {
     return (
       <Panel title="Sleep consolidation" subtitle={`${m.model_id} is a consolidated child of ${m.parent_model_id ?? 'an unknown parent'}.`}>
         <Empty
-          title="The consolidation manifest is not reported by the API."
-          detail="The accept or reject outcome and its canary deltas live on the model record, but GET /api/models does not forward the sleep field, so this panel has nothing to show. It is not a rejection and not a zero."
-          command={`cat artifacts/models/${m.model_id}/checkpoint.pt  # the manifest is stored alongside the checkpoint`}
+          title="This model carries no consolidation manifest."
+          detail="Its record has no sleep field, so the accept or reject outcome and the canary deltas are unavailable. That is not a rejection and not a zero."
+          command={`uv run plastic sleep <parent_model_id> --sessions <session_id>`}
         />
       </Panel>
     );

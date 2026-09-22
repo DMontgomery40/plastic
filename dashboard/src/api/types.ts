@@ -72,11 +72,8 @@ export interface ModelSummary {
   type?: string | null;
   /**
    * The sleep consolidation manifest of a child model, with its accept/reject
-   * outcome and canary deltas.
-   *
-   * NOTE: as of this writing `model_summary()` in plastic/api/service.py does
-   * not forward this field, so it arrives undefined. The UI renders an explicit
-   * "not reported" state rather than inventing an outcome.
+   * outcome and canary deltas. Absent for a model that was never consolidated,
+   * and for an older child whose record predates the field.
    */
   sleep?: SleepManifest | null;
   device?: string | null;
