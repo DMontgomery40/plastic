@@ -456,8 +456,15 @@ def _invocation_provenance(device: str) -> dict[str, Any]:
             versions[mod] = str(importlib.import_module(mod).__version__)
         except Exception:
             versions[mod] = None
+    # the commit above describes the DRIVER's checkout; record where `plastic` actually imported from, because the
+    # venv's editable-install .pth can resolve it to a different checkout (FABLE-098, ASTRA-130, CODEX-004)
+    import plastic
+
+    pkg_path = os.path.abspath(plastic.__file__)
+    pkg_root = os.path.dirname(os.path.dirname(pkg_path))
     return {"code_commit": _git("rev-parse", "HEAD") or "unknown", "code_dirty": None if status is None else bool(status),
-            **versions, "device": str(device)}
+            **versions, "device": str(device), "plastic_package_path": pkg_path,
+            "package_from_driver_checkout": os.path.realpath(pkg_root) == os.path.realpath(_REPO_ROOT)}
 
 
 def _eval_provenances(report: dict[str, Any]) -> list[dict[str, Any]]:
@@ -555,6 +562,9 @@ def _run_provenance_check(invocations: list[dict[str, Any]]) -> dict[str, Any]:
         if p.get("code_dirty") is not False:
             reasons.append(f"source at {p.get('code_commit')} was not clean (code_dirty={p.get('code_dirty')}); "
                            f"a dirty flag is not a content identity")
+        if p.get("package_from_driver_checkout") is not True:
+            reasons.append(f"the imported plastic package ({p.get('plastic_package_path')}) is not from the driver's "
+                           f"checkout, so the recorded commit does not identify the code that ran")
     return {"ok": not reasons, "reasons": reasons, "distinct": distinct}
 
 

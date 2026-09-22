@@ -963,7 +963,8 @@ def test_eval_progress_missing_or_damaged_header_is_refused_never_truncated(tmp_
 
 
 def _prov(commit):
-    return {"code_commit": commit, "code_dirty": False, "torch": "t", "transformers": "x", "device": "cpu"}
+    return {"code_commit": commit, "code_dirty": False, "torch": "t", "transformers": "x", "device": "cpu",
+            "plastic_package_path": "/pinned/plastic/__init__.py", "package_from_driver_checkout": True}
 
 
 def test_eval_provenance_stamped_per_invocation_and_listed(tmp_path, monkeypatch):
@@ -1017,8 +1018,10 @@ def test_eval_provenance_stamped_per_invocation_and_listed(tmp_path, monkeypatch
 def test_invocation_provenance_records_code_dependencies_and_device():
     from scripts.experiments.qwen_operating_point import _REPO_ROOT, _invocation_provenance
     prov = _invocation_provenance("cpu")
-    assert set(prov) == {"code_commit", "code_dirty", "torch", "transformers", "device"}
+    assert set(prov) == {"code_commit", "code_dirty", "torch", "transformers", "device", "plastic_package_path",
+                         "package_from_driver_checkout"}
     assert prov["device"] == "cpu" and prov["torch"]
+    assert prov["package_from_driver_checkout"] is True  # the suite imports this checkout's plastic
     if _os.path.exists(_os.path.join(_REPO_ROOT, ".git")):  # a checkout (or worktree), not a source export
         assert _re.fullmatch(r"[0-9a-f]{40}", prov["code_commit"])
         assert prov["code_dirty"] in (True, False)
@@ -1394,3 +1397,22 @@ def test_cli_requires_an_explicit_stage(monkeypatch):
     with _pytest.raises(SystemExit) as exc:
         main()
     assert exc.value.code == 2
+
+
+def test_invocation_provenance_flags_a_package_imported_from_another_checkout(monkeypatch, tmp_path):
+    # FABLE-098 / ASTRA-130 / CODEX-004: the venv's editable install can resolve `plastic` to the ROOT checkout while
+    # the driver runs from a pinned one; the record must say so, and such a run is never a clean identified source
+    import plastic
+
+    from scripts.experiments.qwen_operating_point import _invocation_provenance, _run_provenance_check
+    other = tmp_path / "root-checkout" / "plastic" / "__init__.py"
+    other.parent.mkdir(parents=True)
+    other.write_text("", encoding="utf-8")
+    monkeypatch.setattr(plastic, "__file__", str(other))
+    prov = _invocation_provenance("cpu")
+    assert prov["package_from_driver_checkout"] is False and prov["plastic_package_path"] == str(other)
+    check = _run_provenance_check([{"t_unix": 0, "mode": "fresh", "provenance": {**prov, "code_commit": "a" * 40,
+                                                                                   "code_dirty": False}}])
+    assert check["ok"] is False and any("not from the driver's checkout" in r for r in check["reasons"])
+    matching = {**prov, "code_commit": "a" * 40, "code_dirty": False, "package_from_driver_checkout": True}
+    assert _run_provenance_check([{"t_unix": 0, "mode": "fresh", "provenance": matching}])["ok"] is True
