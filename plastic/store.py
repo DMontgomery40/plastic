@@ -313,7 +313,16 @@ class SessionStoreMixin:
             root_id = str(parent.get("root_session_id", parent_session_id))
             forked_at = parent.get("pos", 0)
         now = int(time.time())
-        committed_pos = int((runner_state or {}).get("committed", {}).get("pos", 0)) if runner_state else 0
+
+        def _committed_pos(rs: dict[str, Any] | None) -> int:
+            # prefer the backend-independent cursor; fall back to a plastic state's serialized 'pos'
+            if not rs:
+                return 0
+            if "committed_pos" in rs:
+                return int(rs["committed_pos"])
+            return int(rs.get("committed", {}).get("pos", rs.get("working", {}).get("pos", 0)))
+
+        committed_pos = _committed_pos(runner_state)
         if parent_session_id is not None:
             forked_at = committed_pos  # a fork starts from the parent's committed state
         meta: dict[str, Any] = {
@@ -327,7 +336,7 @@ class SessionStoreMixin:
             "created_at_unix": now,
             "updated_at_unix": now,
             "harness": harness_cfg.to_dict() if hasattr(harness_cfg, "to_dict") else dict(harness_cfg),
-            "pos": 0 if runner_state is None else int(runner_state.get("committed", {}).get("pos", runner_state.get("working", {}).get("pos", 0))),
+            "pos": committed_pos,
             "n_transactions": 0,
             "commits": 0,
             "rollbacks": 0,

@@ -46,6 +46,30 @@ def test_qwen_model_signature_and_session_lifecycle(tmp_path):
         store.verify_session_model(sid)
 
 
+def test_fork_metadata_uses_backend_independent_cursor(tmp_path):
+    # ASTRA-074: session/fork metadata must read a backend-independent committed cursor, not a
+    # plastic state's serialized committed['pos'] (which Qwen's serialized state does not carry).
+    from plastic.harness.config import HarnessConfig
+    from plastic.harness.transaction import fork_state_dict
+
+    store = ArtifactStore(str(tmp_path))
+    mid = store.new_model_id("qwen")
+    store.register_model(mid, {"backend": "qwen", "checkpoint_digest": "d", "domain": "text", "chunk": 8})
+    # a Qwen-shaped runner state: the committed cursor is exposed at top level, not inside committed
+    parent_state = {"committed_pos": 24, "working_pos": 24, "committed": {"backend": "qwen"}, "working": {"backend": "qwen"}}
+    p = store.new_session_id("chat")
+    store.create_session(p, model_id=mid, domain="text", harness_cfg=HarnessConfig(), runner_state=parent_state)
+    assert store.load_session_meta(p)["pos"] == 24  # not 0
+
+    child = store.new_session_id("chat")
+    store.create_session(
+        child, model_id=mid, domain="text", harness_cfg=HarnessConfig(),
+        parent_session_id=p, runner_state=fork_state_dict(parent_state),
+    )
+    cmeta = store.load_session_meta(child)
+    assert cmeta["pos"] == 24 and cmeta["forked_at_pos"] == 24  # lineage cursor preserved, not 0/0
+
+
 def test_retried_run_does_not_inherit_stale_error(tmp_path):
     # A failed attempt records an error; a retry at the same model_id must not carry it forward.
     store = ArtifactStore(str(tmp_path))

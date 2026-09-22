@@ -518,6 +518,11 @@ class TransactionRunner:
     # ------------------------------------------------------------------ persistence
     def state_dict(self) -> dict[str, Any]:
         return {
+            # backend-independent cursors for lineage/display metadata (a backend's serialized state
+            # need not carry a readable position — Qwen's does not), so the store never digs into a
+            # backend-specific 'pos' field.
+            "committed_pos": self.backend.position(self.committed),
+            "working_pos": self.backend.position(self.working),
             "committed": self.backend.state_dict(self.committed),
             "working": self.backend.state_dict(self.working),
             "anchor": self.backend.state_dict(self.anchor),
@@ -584,7 +589,12 @@ def fork_state_dict(d: dict[str, Any]) -> dict[str, Any]:
     """The runner state a fork starts from: the parent's committed state, no pending inputs,
     the harness history and controls carried over, and a fresh transaction count."""
     committed = d.get("committed", {})
+    # a fork starts from the parent's committed state, so working == committed and both cursors equal
+    # the parent's committed cursor (backend-independent; Qwen's serialized state carries no 'pos')
+    committed_pos = int(d.get("committed_pos", committed.get("pos", 0) if isinstance(committed, dict) else 0))
     out = {
+        "committed_pos": committed_pos,
+        "working_pos": committed_pos,
         "committed": committed,
         "working": committed,
         "anchor": d.get("anchor", committed),
