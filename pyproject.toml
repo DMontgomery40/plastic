@@ -17,6 +17,8 @@ dependencies = [
     "uvicorn>=0.30",
     "pydantic>=2.7",
     "huggingface_hub>=1.32",
+    "tokenizers>=0.21",
+    "datasets>=3.0",
 ]
 
 [project.optional-dependencies]
