@@ -103,7 +103,22 @@ class QwenBackend:
         self.config = config
         self.device = device
         self.vocab_size = int(config.vocab_size)
+        # Overlapping GPU work aborts the MPS runtime (Metal command-buffer assertion, exit 134,
+        # ASTRA-053), and the thread-local freeze flag does not make concurrent forwards safe. All
+        # model/cache/probe execution on this shared backend is serialized through one lock, with
+        # an MPS sync before release; a per-session lock would not suffice (sessions share the
+        # backend). CPU is unaffected but takes the same cheap uncontended path.
+        self._lock = threading.Lock()
         _install_frozen_kernels()
+
+    @contextmanager
+    def _serialized(self):
+        with self._lock:
+            try:
+                yield
+            finally:
+                if self.device.type == "mps":
+                    torch.mps.synchronize()
 
     # ------------------------------------------------------------------ loading
     @classmethod
@@ -157,11 +172,12 @@ class QwenBackend:
         harness consumes, not a snapshot-restore of the final tensor.
         """
         x = torch.tensor([ids], dtype=torch.long, device=self.device)
-        if freeze:
-            with _frozen():
+        with self._serialized():
+            if freeze:
+                with _frozen():
+                    out = self.model(x, past_key_values=state.cache, use_cache=True)
+            else:
                 out = self.model(x, past_key_values=state.cache, use_cache=True)
-        else:
-            out = self.model(x, past_key_values=state.cache, use_cache=True)
         state.cache = out.past_key_values
         return out.logits[0], state
 
@@ -169,7 +185,8 @@ class QwenBackend:
     def logits_full(self, ids: list[int]) -> torch.Tensor:
         """A single full-sequence pass (no incremental cache) — the parity reference."""
         x = torch.tensor([ids], dtype=torch.long, device=self.device)
-        return self.model(x, use_cache=False).logits[0]
+        with self._serialized():
+            return self.model(x, use_cache=False).logits[0]
 
     # ------------------------------------------------------------------ canary gradient
     def recurrent_grad(self, state: QwenState, probe_ids: list[int], target_ids: list[int]) -> list[torch.Tensor]:
@@ -197,12 +214,13 @@ class QwenBackend:
 
             layer.update_recurrent_state = types.MethodType(_update, layer)
         x = torch.tensor([probe_ids], dtype=torch.long, device=self.device)
-        with _frozen():
-            y = self.model(x, past_key_values=probe, use_cache=True)
-        loss = torch.nn.functional.cross_entropy(
-            y.logits.reshape(-1, self.vocab_size), torch.tensor(target_ids, dtype=torch.long, device=self.device)
-        )
-        return list(torch.autograd.grad(loss, leaves))
+        with self._serialized():
+            with _frozen():
+                y = self.model(x, past_key_values=probe, use_cache=True)
+            loss = torch.nn.functional.cross_entropy(
+                y.logits.reshape(-1, self.vocab_size), torch.tensor(target_ids, dtype=torch.long, device=self.device)
+            )
+            return list(torch.autograd.grad(loss, leaves))
 
 
 def _recurrent_snapshot(cache) -> list[dict[int, torch.Tensor]] | None:
