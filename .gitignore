@@ -49,3 +49,6 @@ artifacts/
 # Local training corpus (user-synced)
 training_data/*
 !training_data/README.md
+
+# Internal AI-coordination log (kept local, not published)
+SHARED_SCRATCHPAD.md
