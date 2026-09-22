@@ -261,6 +261,14 @@ def _eval_sessions(backend, cfg, calibration, prompts, *, hcfg, gen, seed_base, 
 
     fresh_groups = [[r] for r in prompts]
     carried_groups = _split_into_chains(prompts, chains)
+    # restored progress must be the EXACT completed prefix of each regime's groups: the i-th restored
+    # session's ids must equal the i-th group's ids (a stable count is not compatibility) -- ASTRA-104
+    for regime, groups in (("fresh", fresh_groups), ("carried", carried_groups)):
+        for i, x in enumerate((restore or {}).get(regime) or []):
+            if i >= len(groups) or [r["id"] for r in groups[i]] != list(x["record"]["ids"]):
+                raise RunConflict(
+                    f"restored eval progress for {regime} does not match the pinned groups at session {i}; "
+                    f"refusing to resume. Use a fresh --out.")
     # ASTRA-083: the SAME per-row eval seed in fresh and carried (seed0 + the row's ordinal position in
     # both), so the only difference between the regimes is fresh vs carried state, not the RNG
     return {"fresh": _run("fresh", fresh_groups, seed_base), "carried": _run("carried", carried_groups, seed_base)}
@@ -353,13 +361,13 @@ class RunConflict(Exception):
     must use a fresh ``--out``."""
 
 
-def _settings_identity(args: Any, checkpoint_digest: str, revision: str) -> str:
+def _settings_identity(args: Any, checkpoint_digest: str, revision: str, exclusions_digest: str | None = None) -> str:
     """A stable digest of the settings that determine the corpus and the calibration, so a
     re-invocation with different settings is refused rather than silently overwriting a run."""
     payload = {
         "counts": {"fit": args.n_fit, "cusum": args.n_cusum, "dev": args.n_dev, "eval": args.n_eval},
         "max_prompt_tokens": args.max_prompt_tokens, "max_new_tokens": args.max_new_tokens,
-        "eval_chains": args.eval_chains, "smoke": args.smoke, "exclusions": args.exclusions,
+        "eval_chains": args.eval_chains, "smoke": args.smoke, "exclusions": exclusions_digest,
         "checkpoint_digest": checkpoint_digest, "revision": revision,
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
@@ -442,17 +450,19 @@ def _reconcile_run(out_dir: str, manifest: dict[str, Any], split: dict[str, list
     return "fresh", mid, manifest, split
 
 
-def _eval_identity(split_identity: str, settings_identity: str, calibration: Any, eval_hcfg: dict[str, Any]) -> str:
-    """Bind eval progress to the exact content/config/calibration/policy: the ordered split, the run
-    settings, the calibration CONTENT actually in effect (thresholds + CUSUM-reference length, not just
-    the model-compatibility signature), and the frozen eval harness config. A mismatch on any of these
-    refuses to reuse stale eval progress (ASTRA-100/103)."""
+def _eval_identity(eval_records: list[dict[str, Any]], settings_identity: str, calibration: Any, eval_hcfg: dict[str, Any]) -> str:
+    """Bind eval progress to the exact content/config/calibration/policy: the ordered raw eval prompt
+    CONTENT (id + full text hash + prompt, not IDs alone), the run settings, the calibration CONTENT
+    actually in effect (thresholds + CUSUM-reference length, not just the model-compatibility
+    signature -- reuse can hand a calibration from a prior invocation), and the frozen eval harness
+    config. A mismatch on any of these refuses to reuse stale eval progress (ASTRA-100/103/104)."""
+    eval_content = [{"id": r["id"], "sha256": r.get("text_sha256", ""), "prompt": r.get("prompt", "")} for r in eval_records]
     cal = {
         "thresholds": {k: float(v) for k, v in (getattr(calibration, "thresholds", {}) or {}).items()},
         "cusum_reference_len": len(getattr(calibration, "cusum_reference", []) or []),
         "model_signature": getattr(calibration, "model_signature", None),
     }
-    payload = {"split_identity": split_identity, "settings_identity": settings_identity,
+    payload = {"eval_content": eval_content, "settings_identity": settings_identity,
                "calibration": cal, "eval_hcfg": eval_hcfg}
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
@@ -591,12 +601,17 @@ def main() -> None:
     # corpus + split + manifest (saved before any generation)
     rows, revision = load_dolly_prompts(max_rows=20000)
     exclusion_report: dict[str, Any] = {"applied": False}
+    exclusions_digest: str | None = None
     if args.exclusions:
         # reserve rows (and their duplicate/context groups) exposed in earlier smoke/pilot splits, so a
         # newly locked evaluation never reuses a prompt the model has already seen through the harness
         excl_ids, excl_prefixes = _load_exclusions(args.exclusions)
+        # bind the exclusion CONTENT (not the pathname) into the run identity (ASTRA-104)
+        exclusions_digest = hashlib.sha256(
+            json.dumps({"ids": sorted(excl_ids), "prefixes": sorted(excl_prefixes)}, sort_keys=True).encode("utf-8")
+        ).hexdigest()
         rows, exclusion_report = _apply_exclusions(rows, excl_ids, excl_prefixes)
-        exclusion_report.update({"applied": True, "spec": args.exclusions})
+        exclusion_report.update({"applied": True, "spec": args.exclusions, "content_digest": exclusions_digest})
     be_for_tok = QwenBackend.load(args.checkpoint, device="cpu")
     counts = {"fit": args.n_fit, "cusum": args.n_cusum, "dev": args.n_dev, "eval": args.n_eval}
     split, manifest = build_split(rows, be_for_tok.encode_chat, counts=counts, seed=seed, max_prompt_tokens=args.max_prompt_tokens)
@@ -612,7 +627,7 @@ def main() -> None:
     del be_for_tok
     # reuse an existing run's model id + immutable manifest when the configuration matches, and refuse
     # (never overwrite) when it differs, BEFORE any run-artifact write (ASTRA-092 manifest preservation)
-    settings_identity = _settings_identity(args, manifest["checkpoint_digest"], revision)
+    settings_identity = _settings_identity(args, manifest["checkpoint_digest"], revision, exclusions_digest)
     store = ArtifactStore(os.path.join(args.out, "store"))
     try:
         # on resume this restores the exact ordered split from the pinned manifest (not the rebuild),
@@ -668,7 +683,7 @@ def main() -> None:
     # durable eval progress bound to the exact split/settings/calibration-content/policy: complete
     # sessions are appended and restored on re-invocation, so a bounded run resumes rather than re-evals
     eval_progress_path = os.path.join(args.out, "eval-progress.jsonl")
-    eval_identity = _eval_identity(_split_identity(split), settings_identity, cal, eval_hcfg.to_dict())
+    eval_identity = _eval_identity(split["eval"], settings_identity, cal, eval_hcfg.to_dict())
     try:
         restore = _load_eval_progress(eval_progress_path, eval_identity)
     except RunConflict as err:
@@ -677,10 +692,14 @@ def main() -> None:
     if restore is None:
         _init_eval_progress(eval_progress_path, eval_identity)
         restore = {"fresh": [], "carried": []}
-    report = _eval_sessions(eval_backend, eval_cfg, cal, split["eval"],
-                            hcfg=eval_hcfg, gen=gen, seed_base=seed + 3000, chains=args.eval_chains, deadline=deadline,
-                            restore=restore,
-                            on_progress=lambda regime, rec, txns, ng: _append_eval_progress(eval_progress_path, regime, rec, txns))
+    try:
+        report = _eval_sessions(eval_backend, eval_cfg, cal, split["eval"],
+                                hcfg=eval_hcfg, gen=gen, seed_base=seed + 3000, chains=args.eval_chains, deadline=deadline,
+                                restore=restore,
+                                on_progress=lambda regime, rec, txns, ng: _append_eval_progress(eval_progress_path, regime, rec, txns))
+    except RunConflict as err:
+        print(f"[oppoint] eval progress conflict: {err}")
+        return
     json.dump(report, open(os.path.join(args.out, "eval-operating-point.json"), "w"), indent=2)
     if not (report["fresh"]["complete"] and report["carried"]["complete"]):
         # the deadline stopped evaluation; complete sessions are checkpointed. Stop BEFORE the follow-up

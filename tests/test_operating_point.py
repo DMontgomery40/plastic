@@ -286,6 +286,7 @@ def test_settings_identity_changes_with_each_determining_setting():
     assert base != _settings_identity(_fake_args(n_fit=16), "digestX", "rev1")   # counts changed
     assert base != _settings_identity(_fake_args(), "digestY", "rev1")           # checkpoint changed
     assert base != _settings_identity(_fake_args(), "digestX", "rev2")           # dataset revision changed
+    assert base != _settings_identity(_fake_args(), "digestX", "rev1", "excl_v2")  # exclusion CONTENT bound
 
 
 def _split_of(ids_per):
@@ -520,9 +521,25 @@ def test_eval_identity_binds_calibration_content_and_policy():
     from types import SimpleNamespace
     from scripts.experiments.qwen_operating_point import _eval_identity
     cal_a = SimpleNamespace(thresholds={"chunk_loss": 1.0}, cusum_reference=[1, 2, 3], model_signature="qwen:x")
-    base = _eval_identity("split1", "settings1", cal_a, {"freeze_on_alarm": True})
-    assert base == _eval_identity("split1", "settings1", cal_a, {"freeze_on_alarm": True})  # stable
+    recs1 = [{"id": 0, "text_sha256": "h0", "prompt": "p0"}, {"id": 1, "text_sha256": "h1", "prompt": "p1"}]
+    recs_diff_content = [{"id": 0, "text_sha256": "hZ", "prompt": "different"}, {"id": 1, "text_sha256": "h1", "prompt": "p1"}]
+    base = _eval_identity(recs1, "settings1", cal_a, {"freeze_on_alarm": True})
+    assert base == _eval_identity(recs1, "settings1", cal_a, {"freeze_on_alarm": True})  # stable
     cal_b = SimpleNamespace(thresholds={"chunk_loss": 9.0}, cusum_reference=[1, 2, 3], model_signature="qwen:x")
-    assert base != _eval_identity("split1", "settings1", cal_b, {"freeze_on_alarm": True})  # calibration content
-    assert base != _eval_identity("split2", "settings1", cal_a, {"freeze_on_alarm": True})  # split
-    assert base != _eval_identity("split1", "settings1", cal_a, {"freeze_on_alarm": False})  # eval policy
+    assert base != _eval_identity(recs1, "settings1", cal_b, {"freeze_on_alarm": True})  # calibration content
+    assert base != _eval_identity(recs_diff_content, "settings1", cal_a, {"freeze_on_alarm": True})  # SAME ids, diff CONTENT
+    assert base != _eval_identity(recs1, "settings2", cal_a, {"freeze_on_alarm": True})  # settings
+    assert base != _eval_identity(recs1, "settings1", cal_a, {"freeze_on_alarm": False})  # eval policy
+
+
+def test_eval_restore_rejects_records_not_matching_pinned_groups():
+    # ASTRA-104: restored progress must be the EXACT completed prefix of the regime's groups; a
+    # record whose ids do not match the pinned group at that position is refused, not silently reused
+    import pytest
+
+    from scripts.experiments.qwen_operating_point import RunConflict, _eval_sessions
+    prompts = [{"id": i, "prompt": f"p{i}"} for i in range(4)]
+    bad = {"fresh": [{"record": {"ids": [99]}, "txns": []}], "carried": []}  # group 0's id is 0, not 99
+    with pytest.raises(RunConflict):
+        _eval_sessions(None, None, None, prompts, hcfg=None, gen=_gen_settings(), seed_base=0, chains=2,
+                       deadline=1e18, restore=bad, _runner=_FakeRunner(["commit"] * 100), _drive=_seed_drive)
