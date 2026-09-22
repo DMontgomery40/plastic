@@ -409,6 +409,35 @@ def test_alarm_freeze_modes():
     assert not r.read_only  # 1 -> 0, auto-resumed, this chunk learns again
 
 
+def test_ineligible_chunk_is_readonly_not_rollback():
+    # A chunk with no learning-eligible token (a read-only session, or generated tokens with
+    # learn_from_generation off) proposes no write, so it must be reported as a read-only
+    # observation — never a threshold rollback, and with no redundant frozen replay.
+    from plastic.harness.calibrate import Calibration
+
+    cfg, lm = _lm()
+    # a threshold so low any chunk exceeds it: an *eligible* chunk would roll back on it
+    cal = Calibration(thresholds={"chunk_loss": 0.01})
+    r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), calibration=cal, device=CPU)
+
+    # control: an eligible user chunk over the threshold rolls back (the threshold is live)
+    r.feed_tokens(_ids(8, seed=1), source="user")
+    assert r.transactions[-1]["decision"]["kind"] == "rollback"
+
+    # a generated chunk (learn_from_generation defaults off) writes nothing -> read-only, not rollback
+    r.feed_tokens(_ids(8, seed=2), source="model")
+    rec = r.transactions[-1]
+    assert rec["decision"]["kind"] == "readonly" and "learning_ineligible" in rec["decision"]["reasons"]
+    assert rec["accepted"]["delta_norm"] < 1e-6  # no write accepted
+    assert rec["signals"]["z"] == {n: None for n in rec["signals"]["z"]}  # ineligible: no z fed to history
+
+    # a mixed chunk (some eligible tokens) is NOT short-circuited — it goes through the policy
+    r2 = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), calibration=cal, device=CPU)
+    r2.feed_tokens(_ids(4, seed=3), source="user")
+    r2.feed_tokens(_ids(4, seed=4), source="model")  # completes one L=8 chunk, partly eligible
+    assert r2.transactions[-1]["decision"]["kind"] != "readonly"
+
+
 def test_read_only_chunks_do_not_feed_statistics():
     cfg, lm = _lm()
     r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)

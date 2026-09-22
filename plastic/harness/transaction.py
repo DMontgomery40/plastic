@@ -290,8 +290,15 @@ class TransactionRunner:
         budget_before = self.budget_used
         sig, deltas, g = self._measure()
         thresholds = self.calibration.thresholds if self.calibration is not None else None
-        decision = decide(sig, self.hcfg, thresholds, read_only=self.read_only)
-        applied = self._apply(decision, sig, deltas, g)
+        if not self.pending_eligible:
+            # No token in this chunk was permitted to learn (a read-only session, or generated /
+            # ineligible tokens): it proposed no write, so it is an observation, not an intervention.
+            # Commit its already-frozen state directly — no threshold decision, and no redundant
+            # frozen replay — and record it read-only rather than as a spurious rollback.
+            decision = applied = self._commit_observed()
+        else:
+            decision = decide(sig, self.hcfg, thresholds, read_only=self.read_only)
+            applied = self._apply(decision, sig, deltas, g)
         accepted = self._accepted_metrics(pre_committed, budget_before, sig)
         if (
             self.hcfg.enable_budget
@@ -373,6 +380,20 @@ class TransactionRunner:
         self.budget_used += self._candidate_delta_norm()
         self.committed = self.working.clone()
         return Decision(kind, reasons, scale)  # type: ignore[arg-type]
+
+    def _commit_observed(self) -> Decision:
+        """Commit a chunk that proposed no write (read-only / learning-ineligible) as an
+        observation, not an intervention. Its working state is already the frozen result of the
+        pending inputs (activation advanced, memory unchanged), so it is committed directly — no
+        rejection, no frozen replay. If reading the inputs produced a non-finite state, fall back
+        to the last good state and latch read-only."""
+        if not self._finite(self.working):
+            self.working = self.committed.clone()
+            self.read_only = True
+            self.read_only_reason = "nonfinite_frozen_recompute"
+            return Decision("rollback", ["nonfinite_frozen_recompute"])
+        self.committed = self.working.clone()
+        return Decision("readonly", ["session_read_only" if self.read_only else "learning_ineligible"])
 
     def _reject_frozen(self, kind: str, reasons: list[str]) -> Decision:
         """Refuse the chunk as training signal: recompute it frozen and commit that."""
