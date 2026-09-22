@@ -359,6 +359,56 @@ def test_continuous_cusum_reference_is_gathered_and_centers_the_signal(tmp_path)
     assert abs(median) < 0.6, median
 
 
+def _force_next_cusum_alarm(r):
+    # a finite cusum reference makes z_ld computable from the first chunk; pre-loading the
+    # statistic past a zero threshold makes the next eligible chunk alarm deterministically.
+    r.cusum.h = 0.0
+    r.cusum.s_hi = 1e9
+
+
+def test_alarm_freeze_modes():
+    from plastic.harness.calibrate import Calibration
+
+    cref = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]  # finite spread -> z_ld is never None
+
+    # off: a CUSUM alarm rolls the chunk back but does not freeze the session
+    cfg, lm = _lm()
+    r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False, freeze_on_alarm=False),
+                          calibration=Calibration(cusum_reference=cref), device=CPU)
+    _force_next_cusum_alarm(r)
+    r.feed_tokens(_ids(8, seed=1))
+    assert r.transactions[-1]["signals"]["cusum_alarm"] is True
+    assert r.transactions[-1]["decision"]["kind"] == "rollback" and not r.read_only
+
+    # latch (alarm_cooldown=0): freeze read-only until resume()
+    cfg, lm = _lm()
+    r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False, freeze_on_alarm=True, alarm_cooldown=0),
+                          calibration=Calibration(cusum_reference=cref), device=CPU)
+    _force_next_cusum_alarm(r)
+    r.feed_tokens(_ids(8, seed=1))
+    assert r.read_only and r.read_only_reason == "cusum_alarm"
+    for s in range(4):  # stays latched no matter how long the benign stream runs
+        r.feed_tokens(_ids(8, seed=100 + s))
+        assert r.read_only
+    r.resume()
+    assert not r.read_only
+
+    # cooldown (alarm_cooldown=3): auto-resume after 3 quiet chunks
+    cfg, lm = _lm()
+    r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False, freeze_on_alarm=True, alarm_cooldown=3),
+                          calibration=Calibration(cusum_reference=cref), device=CPU)
+    _force_next_cusum_alarm(r)
+    r.feed_tokens(_ids(8, seed=1))
+    r.cusum.h = 1e9  # no further alarms; let the cooldown run out
+    assert r.read_only
+    r.feed_tokens(_ids(8, seed=101))
+    assert r.read_only  # 3 -> 2
+    r.feed_tokens(_ids(8, seed=102))
+    assert r.read_only  # 2 -> 1
+    r.feed_tokens(_ids(8, seed=103))
+    assert not r.read_only  # 1 -> 0, auto-resumed, this chunk learns again
+
+
 def test_read_only_chunks_do_not_feed_statistics():
     cfg, lm = _lm()
     r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)

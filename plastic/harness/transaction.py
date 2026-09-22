@@ -85,6 +85,7 @@ class TransactionRunner:
         self._exhausted = False
         self.read_only = False
         self.read_only_reason: str | None = None
+        self._alarm_cooldown_left = 0
         self.n_transactions = 0
         self.transactions: list[dict[str, Any]] = []
 
@@ -278,6 +279,13 @@ class TransactionRunner:
 
     def _transact(self) -> dict[str, Any]:
         t0 = time.time()
+        # a self-clearing CUSUM freeze: count down the quiet chunks and auto-resume when spent
+        # (alarm_cooldown=0 never enters this branch, so the freeze latches until resume()).
+        if self.read_only and self.read_only_reason == "cusum_alarm" and self._alarm_cooldown_left > 0:
+            self._alarm_cooldown_left -= 1
+            if self._alarm_cooldown_left == 0:
+                self.read_only = False
+                self.read_only_reason = None
         pre_committed = self.committed.clone()
         budget_before = self.budget_used
         sig, deltas, g = self._measure()
@@ -298,6 +306,8 @@ class TransactionRunner:
         if sig.cusum_alarm and self.hcfg.freeze_on_alarm and not self.hcfg.log_only:
             self.read_only = True
             self.read_only_reason = "cusum_alarm"
+            # 0 => latch until resume(); N => self-clear after N quiet chunks (see _transact top)
+            self._alarm_cooldown_left = int(self.hcfg.alarm_cooldown)
         if applied.kind in ("commit", "project"):
             for name in STAT_SIGNALS:
                 v = sig.value(name)
@@ -450,6 +460,7 @@ class TransactionRunner:
         """Lift a latched read-only state (after a verification pass by the caller)."""
         self.read_only = False
         self.read_only_reason = None
+        self._alarm_cooldown_left = 0
         self._exhausted = False
 
     def reset(self) -> None:
@@ -466,6 +477,7 @@ class TransactionRunner:
         self._exhausted = False
         self.read_only = False
         self.read_only_reason = None
+        self._alarm_cooldown_left = 0
 
     # ------------------------------------------------------------------ persistence
     def state_dict(self) -> dict[str, Any]:
@@ -488,6 +500,7 @@ class TransactionRunner:
             "budget_used": self.budget_used,
             "read_only": self.read_only,
             "read_only_reason": self.read_only_reason,
+            "alarm_cooldown_left": self._alarm_cooldown_left,
             "n_transactions": self.n_transactions,
         }
 
@@ -513,6 +526,7 @@ class TransactionRunner:
         self.budget_used = float(d.get("budget_used", 0.0))
         self.read_only = bool(d.get("read_only", False))
         self.read_only_reason = d.get("read_only_reason")
+        self._alarm_cooldown_left = int(d.get("alarm_cooldown_left", 0))
         self.n_transactions = int(d.get("n_transactions", 0))
 
     def summary(self) -> dict[str, Any]:

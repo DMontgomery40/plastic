@@ -37,7 +37,12 @@ class HarnessConfig:
     # sequential change detection on log update norm
     cusum_k: float = 0.5
     cusum_h: float = 5.0
+    # response to a CUSUM alarm. freeze_on_alarm=False: the chunk still rolls back but the
+    # session is not frozen. True: freeze read-only. alarm_cooldown then chooses how long:
+    # 0 latches until the caller resume()s (a verification pass); N>0 auto-resumes after N
+    # subsequent chunks pass without an alarm (a self-clearing cooldown for a sandbox).
     freeze_on_alarm: bool = True
+    alarm_cooldown: int = 0
 
     history_window: int = 64
     target_fpr: float = 0.01

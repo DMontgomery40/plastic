@@ -86,16 +86,18 @@ After the fix, a 200-chunk continuous benign stream shows **no read-only latch**
 per-chunk gating (the number in §1). Regression tests cover both halves: the run-length property
 of `calibrated_cusum_h`, and that the continuous reference centers the live signal.
 
-**Known sharp edge, left as a policy decision.** `freeze_on_alarm` latches read-only permanently
-on a single CUSUM alarm, and `resume()` is the only way back. The in-sample alarm rate is 0.78%
+**A configurable sharp edge.** A CUSUM alarm freezes the session read-only, and on a long enough
+benign auto-committing stream one alarm will eventually fire. The in-sample alarm rate is 0.78%
 (2 alarms in the 256-chunk fitted reference, at chunks 81 and 165); a naive geometric reading of
 that would put a false latch every ~130 chunks, but that fresh-data run-length is *not*
 established by an in-sample fit. What is directly observed on this corpus: after the fix the first
 benign latch moved from chunk ~50 to beyond chunk 200 on a continuous validation stream (note that
 stream and the CUSUM reference both draw from the validation split, so this is an in-distribution
-observation, not a held-out generalization test). Either way a long enough benign auto-committing
-session will eventually latch on one alarm. Whether that latch should decay, require N alarms, or
-auto-clear after a quiet period is a policy question for the operator, not one to settle here. The
+observation, not a held-out generalization test). The response is now a config choice rather than a
+hardcoded permanent latch: `freeze_on_alarm=False` (the alarm rolls the chunk back but does not
+freeze the session), or `freeze_on_alarm=True` with `alarm_cooldown` = 0 (latch until the caller
+`resume()`s after a verification pass) or N (self-clear after N quiet chunks — sensible for an
+interactive sandbox). The default stays latch-until-resume, the conservative choice. The
 red-team results below are unaffected by this latch — not asserted from length but from the
 records: across all 40 attacks the applied decisions are only rollback (31) and commit (9), with
 zero readonly/CUSUM latches (each attack validates a single payload chunk).
