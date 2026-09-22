@@ -62,6 +62,7 @@ class TransactionRunner:
         calibration: Calibration | None = None,
         suite: CanarySuite | None = None,
         device: torch.device | str = "cpu",
+        backend: Any = None,
     ) -> None:
         self.model = model
         self.cfg = model_cfg
@@ -72,7 +73,9 @@ class TransactionRunner:
         self.L = int(model_cfg.chunk)
         self.domain = model_cfg.domain
         self.fisher = calibration.fisher if calibration is not None else None
-        self.backend = PlasticBackend(model, model_cfg, device=self.device)
+        # a pretrained backend (e.g. QwenBackend) may be supplied directly; otherwise the native
+        # model is wrapped. model_cfg still carries the chunk size and domain either way.
+        self.backend = backend if backend is not None else PlasticBackend(model, model_cfg, device=self.device)
 
         self.committed: SessionState = self.backend.init_state()
         self.working: SessionState = self.backend.clone(self.committed)

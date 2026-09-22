@@ -359,6 +359,48 @@ def test_apply_projected_overwrites_recurrent_from_committed(backend):
         assert torch.equal(c, p)
 
 
+def test_qwen_runs_end_to_end_through_the_transaction_runner(backend):
+    # The whole stack: a real QwenBackend driven through TransactionRunner. Validates the reduced
+    # signal (None) path and generation-write accounting against the actual model on CPU.
+    import io
+
+    from plastic.config import ModelConfig
+    from plastic.harness.config import HarnessConfig
+    from plastic.harness.transaction import TransactionRunner
+
+    L = 8
+    cfg = ModelConfig(domain="text", chunk=L)
+    r = TransactionRunner(
+        None, cfg, HarnessConfig(enable_projection=False), device=torch.device("cpu"), backend=backend
+    )
+    prompt = backend.encode("The quick brown fox jumps over the lazy dog and then keeps on running along.")
+    assert len(prompt) >= 2 * L
+
+    # a user prompt chunk: reduced signals None, real chunk_loss/log_delta_norm, eligible, valid decision
+    r.feed_tokens(prompt[:L], source="user")
+    s = r.transactions[0]["signals"]
+    assert s["surprise_mean"] is None and s["write_norm_sum"] is None and s["log_write_norm"] is None
+    assert isinstance(s["chunk_loss"], float) and s["chunk_loss"] == s["chunk_loss"]
+    assert isinstance(s["log_delta_norm"], float)
+    assert r.transactions[0]["eligible"] is True and r.transactions[0]["sources"] == {"user": L, "model": 0}
+    assert r.transactions[0]["decision"]["kind"] in ("commit", "rollback", "scale")
+
+    # generation tokens write on Qwen: eligible, recorded as model source, and the recurrent state moves
+    pre = [t.clone() for t in r.committed.recurrent_leaves()]
+    r.feed_tokens(prompt[L : 2 * L], source="model")
+    grec = r.transactions[1]
+    assert grec["eligible"] is True and grec["sources"] == {"user": 0, "model": L}
+    moved = any(not torch.equal(a, b) for a, b in zip(pre, r.committed.recurrent_leaves()))
+    assert moved  # native generation wrote to memory
+
+    # the whole runner state (Qwen cache included) round-trips through torch.save/load
+    buf = io.BytesIO()
+    torch.save(r.state_dict(), buf)
+    buf.seek(0)
+    r.load_state_dict(torch.load(buf, weights_only=False))
+    assert r.pos == 2 * L
+
+
 def test_encode_chat_returns_integer_ids(backend):
     # apply_chat_template defaults to a dict in tf 5.17; encode_chat must return native integer ids
     # that tensorize, for empty / ascii / unicode, matching render-then-tokenize.
