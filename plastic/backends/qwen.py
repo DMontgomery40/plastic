@@ -101,10 +101,20 @@ class QwenBackend:
     def process(self, ids: list[int], state: QwenState, *, freeze: bool = False) -> tuple[torch.Tensor, QwenState]:
         """Run one chunk of tokens through the model, advancing ``state``'s cache in place.
 
-        ``freeze`` implements the harness's no-write semantics for the recurrent memory: the
-        gated-delta ``recurrent_states`` are restored to their pre-chunk values afterward (memory
-        unchanged), while the KV cache and position advance (activation state progresses). This
-        matches "freeze disables both write and decay while the activation state advances".
+        ``freeze`` implements *don't persist the recurrent write*: the gated-delta
+        ``recurrent_states`` are restored to their pre-chunk values afterward (memory unchanged),
+        while the KV cache and position advance. The **carried state is identical** to a true
+        constant-memory freeze (recurrent = pre-chunk, KV/conv advanced), which is all the harness
+        carries forward — so committed-state correctness is unaffected.
+
+        It is deliberately *not* a constant-memory freeze: within the chunk, later tokens still
+        read earlier tokens' recurrent updates (Qwen's normal behaviour), so the intermediate
+        logits differ from zeroing β and the log-decay g in the kernel. That is the right choice
+        here: Qwen's recurrent state *is* its language context, so a constant-memory freeze would
+        degrade coherence, and those intermediate logits are discarded for a rejected write. A
+        canary probe that must not be perturbed by its own tokens uses ``recurrent_grad`` on a
+        disposable copy instead. (A true constant-memory freeze would need a per-session kernel
+        override zeroing β and g; add that only if a use actually needs the frozen intermediates.)
         """
         x = torch.tensor([ids], dtype=torch.long)
         pre = _recurrent_snapshot(state.cache) if freeze else None
