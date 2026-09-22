@@ -235,6 +235,12 @@ class Session:
             "backend": self.backend_kind,
             "calibration": self.calibration_status,
             "signals_available": list(self.runner.backend.signal_names()),
+            # the EFFECTIVE generation-write policy for this session: model-source (generated) tokens
+            # are write-eligible when the backend writes that source (Qwen's recurrent state does) OR
+            # learn_from_generation overrides it. This is the configured capability; the read-only latch
+            # (surfaced separately) suppresses all writes regardless. Write-eligible is not the same as
+            # retained learning: each chunk still transacts and can be rolled back or scaled.
+            "writes_generation": bool(self.runner.backend.writes_for_source("model")) or bool(self.hcfg.learn_from_generation),
         })
         return s
 

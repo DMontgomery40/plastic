@@ -271,20 +271,21 @@ export function fmtValidOnlyPercent(v: number | null | undefined, decimals = 0):
 }
 
 /**
- * How this session treats GENERATED tokens, derived from the harness control rather than a blanket
- * default: with learn_from_generation the model's own generated chunks are learned (subject to the
- * read-only latch and budget); without it they are not. A read-only latch or exhausted budget
- * suppresses learning regardless, so the caller passes those through as the current effective state.
+ * How this session treats GENERATED tokens, from the EFFECTIVE write policy rather than the raw
+ * learn_from_generation flag: model-source tokens are write-eligible when the backend writes that
+ * source (Qwen's recurrent state does, even with the flag off) OR the flag overrides it. Write-
+ * eligible means each chunk transacts and may be rolled back or scaled -- it is NOT guaranteed
+ * retained learning. A read-only latch suppresses all writes, so the caller passes that through.
  */
-export function generationLearningCopy(learnFromGeneration: boolean, readOnly: boolean): string {
-  const prompt = 'Prompt tokens are learned through transactions';
+export function generationLearningCopy(generationWriteEligible: boolean, readOnly: boolean): string {
   if (readOnly) {
-    return `${prompt}; the session is currently read-only, so neither prompt nor generated tokens are being learned.`;
+    return 'The session is currently read-only, so no chunk writes: every chunk transacts as read-only.';
   }
-  if (learnFromGeneration) {
-    return `${prompt}, and generated tokens (including turn-closure tokens) are also learned in this session.`;
+  const prompt = 'Prompt tokens are write-eligible';
+  if (generationWriteEligible) {
+    return `${prompt}, and generated tokens (including turn-closure tokens) are also write-eligible — each chunk is subject to the harness decision and a write can still be rolled back or scaled, not guaranteed retained.`;
   }
-  return `${prompt}; generated tokens are not learned in this session (learn_from_generation is off).`;
+  return `${prompt}; generated tokens are read-only in this session (not write-eligible).`;
 }
 
 export interface SourceBucket {

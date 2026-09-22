@@ -88,21 +88,29 @@ describe('calibrationView', () => {
 });
 
 describe('generationLearningCopy', () => {
-  it('does not claim generation is read-only by default; reflects the harness control', () => {
+  it('write-eligible generation is described as eligible/attempted, not guaranteed learning', () => {
+    // ASTRA-101: the EFFECTIVE write policy -- Qwen generation is write-eligible even with
+    // learn_from_generation off -- and eligibility is not retained learning.
     const on = generationLearningCopy(true, false);
     expect(on).toMatch(/generated tokens/i);
-    expect(on).toMatch(/also learned/i);
-    expect(on).toMatch(/closure/i); // closure tokens are part of model-source learning
+    expect(on).toMatch(/write-eligible/i);
+    expect(on).toMatch(/closure/i);
+    expect(on).toMatch(/rolled back|not guaranteed retained/i); // eligible != retained learning
+    expect(on).not.toMatch(/read-only by default/i);
+    expect(on).not.toMatch(/\blearned\b(?! )/i); // avoid claiming plain "learned"
+  });
+
+  it('generation that is not write-eligible reads read-only, not learned', () => {
     const off = generationLearningCopy(false, false);
-    expect(off).toMatch(/not learned/i);
-    expect(off).toMatch(/learn_from_generation/i);
+    expect(off).toMatch(/read-only/i);
+    expect(off).toMatch(/not write-eligible/i);
     expect(off).not.toMatch(/read-only by default/i);
   });
 
-  it('a read-only session says neither is being learned', () => {
+  it('a read-only session says no chunk writes', () => {
     const ro = generationLearningCopy(true, true);
     expect(ro).toMatch(/read-only/i);
-    expect(ro).toMatch(/neither/i);
+    expect(ro).toMatch(/no chunk writes/i);
   });
 });
 

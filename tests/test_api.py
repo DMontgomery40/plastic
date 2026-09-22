@@ -565,3 +565,19 @@ def test_session_detail_exposes_loaded_calibration_not_replaced_artifact(api):
     assert detail_after["summary"]["calibration"] == "installed"
     assert detail_after["calibration"]["thresholds"] == loaded_thresholds
     assert detail_after["calibration"]["thresholds"] != model_after["calibration"]["thresholds"]
+
+
+def test_session_summary_reports_effective_generation_write_policy(api):
+    # ASTRA-101: writes_generation is the EFFECTIVE policy (backend source capability OR
+    # learn_from_generation). A plastic session freezes generation by default; the flag makes it
+    # write-eligible. (Qwen's generation writes regardless -- that path is model-gated.)
+    sid = api.client.post("/api/sessions", json={"model_id": api.text}).json()["session_id"]
+    body = api.client.get(f"/api/sessions/{sid}").json()
+    assert body["summary"]["backend"] == "plastic"
+    assert body["summary"]["writes_generation"] is False  # default: generation frozen read-only
+
+    sid2 = api.client.post(
+        "/api/sessions", json={"model_id": api.text, "harness": {"learn_from_generation": True}}
+    ).json()["session_id"]
+    body2 = api.client.get(f"/api/sessions/{sid2}").json()
+    assert body2["summary"]["writes_generation"] is True  # the override makes generation write-eligible

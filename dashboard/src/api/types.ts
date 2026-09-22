@@ -324,6 +324,10 @@ export interface RunnerSummary {
   backend?: string;
   calibration?: CalibrationStatus;
   signals_available?: string[];
+  // EFFECTIVE generation-write policy: model-source (generated) tokens are write-eligible when the
+  // backend writes that source (Qwen's recurrent state does) OR learn_from_generation overrides it.
+  // The read_only latch suppresses all writes regardless. Write-eligible is not retained learning.
+  writes_generation?: boolean;
 }
 
 // -------------------------------------------------------------------- sessions

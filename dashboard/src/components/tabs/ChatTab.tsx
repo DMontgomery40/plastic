@@ -52,11 +52,10 @@ export function ChatTab() {
 
   const turns = (sessionDetail?.trace ?? []).filter((t) => t.kind === 'chat').slice().reverse();
 
-  // effective generation-write description from the harness control + read-only latch, not a blanket
-  // "read-only by default" (false for the native backend, which learns from generation when enabled)
-  const harness = sessionDetail?.meta.harness;
+  // EFFECTIVE generation-write policy from the backend (Qwen generation is write-eligible even with
+  // learn_from_generation off), not the raw flag, and not a blanket "read-only by default"
   const summary = sessionDetail?.summary;
-  const promptSubtitle = generationLearningCopy(harness?.learn_from_generation ?? false, summary?.read_only ?? false);
+  const promptSubtitle = generationLearningCopy(summary?.writes_generation ?? false, summary?.read_only ?? false);
   const backend = summary?.backend ?? 'plastic';
   const cal = calibrationDisplay(summary?.calibration);
   const accounting = chatResult ? sourceAccounting(chatResult.transactions) : null;
