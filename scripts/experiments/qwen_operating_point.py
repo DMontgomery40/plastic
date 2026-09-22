@@ -442,6 +442,61 @@ def _reconcile_run(out_dir: str, manifest: dict[str, Any], split: dict[str, list
     return "fresh", mid, manifest, split
 
 
+def _eval_identity(split_identity: str, settings_identity: str, calibration: Any, eval_hcfg: dict[str, Any]) -> str:
+    """Bind eval progress to the exact content/config/calibration/policy: the ordered split, the run
+    settings, the calibration CONTENT actually in effect (thresholds + CUSUM-reference length, not just
+    the model-compatibility signature), and the frozen eval harness config. A mismatch on any of these
+    refuses to reuse stale eval progress (ASTRA-100/103)."""
+    cal = {
+        "thresholds": {k: float(v) for k, v in (getattr(calibration, "thresholds", {}) or {}).items()},
+        "cusum_reference_len": len(getattr(calibration, "cusum_reference", []) or []),
+        "model_signature": getattr(calibration, "model_signature", None),
+    }
+    payload = {"split_identity": split_identity, "settings_identity": settings_identity,
+               "calibration": cal, "eval_hcfg": eval_hcfg}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def _init_eval_progress(path: str, identity: str) -> None:
+    with open(path, "w", encoding="utf-8") as f:  # a single identity header line; sessions are appended
+        f.write(json.dumps({"identity": identity}) + "\n")
+
+
+def _append_eval_progress(path: str, regime: str, record: dict[str, Any], txns: list[dict[str, Any]]) -> None:
+    with open(path, "a", encoding="utf-8") as f:  # append-only: each COMPLETE session written once
+        f.write(json.dumps({"regime": regime, "record": record, "txns": txns}) + "\n")
+
+
+def _load_eval_progress(path: str, identity: str, *, log=print) -> dict[str, list[dict[str, Any]]] | None:
+    """Restore per-regime COMPLETE sessions from the append-only eval progress log, or None if absent.
+    The header pins the identity; a mismatch (different content/config/calibration/policy) raises
+    RunConflict rather than silently reusing stale progress. A malformed trailing line (a crash
+    mid-append) is skipped -- that one session re-runs deterministically."""
+    if not os.path.exists(path):
+        return None
+    restore: dict[str, list[dict[str, Any]]] = {"fresh": [], "carried": []}
+    with open(path, encoding="utf-8") as f:
+        try:
+            head = json.loads(f.readline())
+        except Exception as e:
+            raise RunConflict(f"eval progress at {path} is unreadable ({e}); refusing to reuse. Use a fresh --out.")
+        if head.get("identity") != identity:
+            raise RunConflict(
+                f"eval progress at {path} is for a different content/config/calibration; refusing to reuse. Use a fresh --out.")
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except Exception:
+                log("[oppoint] skipping a malformed trailing eval-progress line (that session re-runs)")
+                continue
+            if rec.get("regime") in restore:
+                restore[rec["regime"]].append({"record": rec["record"], "txns": rec["txns"]})
+    return restore
+
+
 def _run_followups(backend, cfg, calibration, gen, seed0, fixture_path, hcfg, deadline, *, _runner=None, _drive=None, _fixture=None):
     """Run the predeclared multi-turn follow-up sessions (never fit/tuned on). Each turn must complete
     without exception or nonfinite state and must not be entirely read-only; saved answers are for
@@ -610,9 +665,29 @@ def main() -> None:
     eval_hcfg = HarnessConfig(enable_stats=True, enable_rollback=True, log_only=False,
                               learn_from_generation=True, freeze_on_alarm=True, alarm_cooldown=0)
     eval_backend = QwenBackend.load(args.checkpoint, device=args.device)
+    # durable eval progress bound to the exact split/settings/calibration-content/policy: complete
+    # sessions are appended and restored on re-invocation, so a bounded run resumes rather than re-evals
+    eval_progress_path = os.path.join(args.out, "eval-progress.jsonl")
+    eval_identity = _eval_identity(_split_identity(split), settings_identity, cal, eval_hcfg.to_dict())
+    try:
+        restore = _load_eval_progress(eval_progress_path, eval_identity)
+    except RunConflict as err:
+        print(f"[oppoint] eval progress conflict: {err}")
+        return
+    if restore is None:
+        _init_eval_progress(eval_progress_path, eval_identity)
+        restore = {"fresh": [], "carried": []}
     report = _eval_sessions(eval_backend, eval_cfg, cal, split["eval"],
-                            hcfg=eval_hcfg, gen=gen, seed_base=seed + 3000, chains=args.eval_chains, deadline=deadline)
+                            hcfg=eval_hcfg, gen=gen, seed_base=seed + 3000, chains=args.eval_chains, deadline=deadline,
+                            restore=restore,
+                            on_progress=lambda regime, rec, txns, ng: _append_eval_progress(eval_progress_path, regime, rec, txns))
     json.dump(report, open(os.path.join(args.out, "eval-operating-point.json"), "w"), indent=2)
+    if not (report["fresh"]["complete"] and report["carried"]["complete"]):
+        # the deadline stopped evaluation; complete sessions are checkpointed. Stop BEFORE the follow-up
+        # smoke and the verdict so a partial screen is never scored; re-run to resume from the cursor.
+        print(f"[oppoint] eval incomplete (fresh {report['fresh']['n_complete_sessions']}/{report['fresh']['n_expected_sessions']}, "
+              f"carried {report['carried']['n_complete_sessions']}/{report['carried']['n_expected_sessions']}); progress checkpointed. Re-run to resume.")
+        return
 
     # predeclared follow-up smoke (separate from Dolly; never fit/tuned on)
     followups = _run_followups(eval_backend, eval_cfg, cal, gen, seed + 4000, args.followups, eval_hcfg, deadline)

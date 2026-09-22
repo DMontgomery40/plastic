@@ -477,3 +477,52 @@ def test_eval_operating_point_aggregates_complete_sessions_only(monkeypatch):
     # but the operating point aggregated zero complete sessions -> no eligible denominator from the partial
     assert carried["operating_point"]["prompt"]["eligible"] == 0
     assert carried["operating_point"]["generation"]["eligible"] == 0
+
+
+def test_eval_progress_round_trips_and_rejects_mismatched_identity(tmp_path):
+    # ASTRA-100/103: eval progress restores complete sessions and refuses reuse under a different
+    # content/config/calibration/policy identity, never a silent fresh start
+    from scripts.experiments.qwen_operating_point import (
+        RunConflict, _append_eval_progress, _init_eval_progress, _load_eval_progress,
+    )
+    import pytest
+
+    path = str(tmp_path / "eval-progress.jsonl")
+    assert _load_eval_progress(path, "idA") is None  # absent -> fresh start
+
+    _init_eval_progress(path, "idA")
+    _append_eval_progress(path, "fresh", {"ids": [0]}, [{"decision": {"kind": "commit"}}])
+    _append_eval_progress(path, "carried", {"ids": [1, 2]}, [{"x": 1}, {"x": 2}])
+    _append_eval_progress(path, "fresh", {"ids": [3]}, [{"y": 1}])
+
+    restore = _load_eval_progress(path, "idA")
+    assert [s["record"]["ids"] for s in restore["fresh"]] == [[0], [3]]       # order preserved per regime
+    assert [s["record"]["ids"] for s in restore["carried"]] == [[1, 2]]
+    assert restore["carried"][0]["txns"] == [{"x": 1}, {"x": 2}]
+
+    with pytest.raises(RunConflict):  # a different identity is refused, the log preserved
+        _load_eval_progress(path, "idB")
+    assert _load_eval_progress(path, "idA") is not None  # still usable under the right identity
+
+
+def test_eval_progress_skips_a_malformed_trailing_line(tmp_path):
+    from scripts.experiments.qwen_operating_point import _append_eval_progress, _init_eval_progress, _load_eval_progress
+    path = str(tmp_path / "eval-progress.jsonl")
+    _init_eval_progress(path, "idA")
+    _append_eval_progress(path, "fresh", {"ids": [0]}, [])
+    with open(path, "a", encoding="utf-8") as f:
+        f.write('{"regime": "fresh", "record": {"ids": [1]')  # a crash mid-append: truncated JSON
+    restore = _load_eval_progress(path, "idA")
+    assert [s["record"]["ids"] for s in restore["fresh"]] == [[0]]  # the completed one kept, the partial skipped
+
+
+def test_eval_identity_binds_calibration_content_and_policy():
+    from types import SimpleNamespace
+    from scripts.experiments.qwen_operating_point import _eval_identity
+    cal_a = SimpleNamespace(thresholds={"chunk_loss": 1.0}, cusum_reference=[1, 2, 3], model_signature="qwen:x")
+    base = _eval_identity("split1", "settings1", cal_a, {"freeze_on_alarm": True})
+    assert base == _eval_identity("split1", "settings1", cal_a, {"freeze_on_alarm": True})  # stable
+    cal_b = SimpleNamespace(thresholds={"chunk_loss": 9.0}, cusum_reference=[1, 2, 3], model_signature="qwen:x")
+    assert base != _eval_identity("split1", "settings1", cal_b, {"freeze_on_alarm": True})  # calibration content
+    assert base != _eval_identity("split2", "settings1", cal_a, {"freeze_on_alarm": True})  # split
+    assert base != _eval_identity("split1", "settings1", cal_a, {"freeze_on_alarm": False})  # eval policy
