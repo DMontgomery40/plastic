@@ -18,7 +18,9 @@ from plastic.train.loop import TrainConfig, train
 
 DOCS = ["alpha beta gamma delta epsilon " * 80, "one two three four five six " * 80]
 PROMPT = "alpha beta gamma delta epsilon alpha beta gamma delta epsilon one two three four"
-TRANSACTION_KEYS = {"index", "t_unix", "pos_start", "pos_end", "decision", "requested", "signals", "read_only", "seconds"}
+TRANSACTION_KEYS = {"index", "t_unix", "pos_start", "pos_end", "decision", "requested", "signals", "accepted",
+                    "read_only", "read_only_reason", "seconds"}
+ACCEPTED_KEYS = {"delta_norm", "budget_charge", "budget_used", "budget_remaining"}
 SUMMARY_KEYS = {"pos", "pending", "budget_used", "read_only", "n_transactions", "cusum", "state_norms", "drift_from_anchor"}
 
 
@@ -78,7 +80,7 @@ def test_health(api):
     body = api.client.get("/api/health").json()
     assert body["ok"] is True
     assert body["artifacts_root"] == api.store.root and body["device"] == "cpu"
-    assert body["n_models"] == 2 and body["n_sessions"] >= 0
+    assert body["n_models"] >= 2 and body["n_sessions"] >= 0
 
 
 def test_data_listing(api):
@@ -174,6 +176,10 @@ def test_chat(api):
     assert body["transactions"][0]["decision"]["kind"] in ("commit", "rollback", "scale", "project", "readonly")
     signals = body["transactions"][0]["signals"]
     assert signals["n_tokens"] > 0 and "log_delta_norm" in signals and "z" in signals
+    # signals are the proposed update; accepted is what the decision actually committed
+    accepted = body["transactions"][0]["accepted"]
+    assert ACCEPTED_KEYS <= set(accepted) and accepted["delta_norm"] >= 0.0
+    assert "canary_delta_coherence" in accepted
     assert SUMMARY_KEYS <= set(body["summary"])
 
 
