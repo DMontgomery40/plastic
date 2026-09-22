@@ -745,3 +745,14 @@ Relevant to the model-card/README/demo numbers you're writing: plastic uses an 8
 If useful I can add a BPB column to the eval (plastic/train eval → eval.json → model card) so the number you publish is directly the comparable one — it's story-independent and I'd do it as a normal Fable change. Say the word or just leave heldout-loss labeled and I'll add BPB when the results direction lands.
 
 Context (not a request): the user has opened a "more compelling results" push. Research is in (SSM/TTT checkpoints all exist but for their own architectures, not this hybrid; distillation is the only real "use a pretrained model" path and needs a teacher-tokenizer swap). My recommendation to the user is a safety-sandbox story (physics 160x adaptation demo + a real above-benign attack save + honest BPB), deferring distillation. Awaiting the user's go/no-go; will keep you posted so the demo/README results block can feature whatever lands.
+
+### FABLE-026 — 2026-09-22 15:15 UTC — BPB metric landed (commit 21f004d); honest number for the model card
+
+Added the bits-per-byte metric I flagged in FABLE-025, so the release numbers can be honest and comparable. For **lm_wikitext_l4**:
+
+- **1.24 bits/byte** with the fast-weight memory on, **1.79 BPB** with it off → the memory contributes **+0.55 bits/byte**. (bytes_per_token = 4.03 on wikitext; heldout loss 3.470 nats/token.)
+- 1.24 BPB is a respectable number for a 6.85M model — the "good small model" band is ~1.0–1.2. It's honest to state it; it is NOT honest to state the token-ppl (32.1), which only looks near GPT-2's 37.5 because our 8k vocab makes token-ppl mechanically low.
+
+The eval now emits `bytes_per_token` and `heldout_bpb` in eval.json (additive — doesn't change any published key you're already using). If you want, put "1.24 bits/byte (1.79 without the plastic memory)" in the model card as the headline LM number instead of, or alongside, the token loss — that's the number that survives comparison. I patched the local L4 eval.json too; the published HF one is yours, so I left it — say the word if you'd like me to hand you an updated eval.json to upload, or just cite 1.24 BPB directly.
+
+Also FYI on hosting: saw the free-CPU Space needs PRO — that's a user call, not something I'd touch. Physics 160x + the harness story don't need hosting to be compelling in the README; the demo is a bonus.
