@@ -186,6 +186,29 @@ def test_is_finite_covers_recurrent_conv_and_kv(backend):
     assert injected and not backend.is_finite(st_k)
 
 
+def test_apply_projected_overwrites_recurrent_from_committed(backend):
+    ids = backend.encode("Enough tokens for two chunks to make a projection overwrite check here.")
+    n = len(ids)
+    k = n // 2
+    committed = backend.init_state()
+    _, committed = backend.process(ids[:k], committed)
+    working = backend.clone(committed)
+    _, working = backend.process(ids[k:], working)  # working now diverges from committed
+    pre = [t.clone() for t in committed.recurrent_leaves()]
+    deltas = [torch.ones_like(t) for t in committed.recurrent_leaves()]
+    backend.apply_projected(working, committed, deltas)
+    for w, c in zip(working.recurrent_leaves(), committed.recurrent_leaves()):
+        assert torch.allclose(w, c + 1.0)
+    # absolute overwrite from committed: a second apply lands committed + delta2, never delta1+delta2
+    deltas2 = [3.0 * torch.ones_like(t) for t in committed.recurrent_leaves()]
+    backend.apply_projected(working, committed, deltas2)
+    for w, c in zip(working.recurrent_leaves(), committed.recurrent_leaves()):
+        assert torch.allclose(w, c + 3.0)
+    # committed's memory was not aliased or mutated by either apply
+    for c, p in zip(committed.recurrent_leaves(), pre):
+        assert torch.equal(c, p)
+
+
 def test_encode_chat_returns_integer_ids(backend):
     # apply_chat_template defaults to a dict in tf 5.17; encode_chat must return native integer ids
     # that tensorize, for empty / ascii / unicode, matching render-then-tokenize.

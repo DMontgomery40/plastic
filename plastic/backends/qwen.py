@@ -317,6 +317,25 @@ class QwenBackend:
             )
             return list(torch.autograd.grad(loss, leaves))
 
+    @torch.no_grad()
+    def apply_projected(self, working: QwenState, committed: QwenState, projected: list[torch.Tensor]) -> None:
+        """Write a corrected per-unit delta onto ``working``'s recurrent memory for the project
+        decision: each of the 18 gated-delta leaves becomes ``committed + projected[i]`` — an
+        absolute overwrite from ``committed`` (matching plastic's ``layer.S = committed.S + d``, so a
+        second apply with a rescaled delta never compounds onto an already-scaled state), replacing
+        the tensor rather than writing in place so ``committed`` is never aliased. Conv, KV and
+        position are left untouched. ``projected`` is consumed in ``recurrent_leaves`` order."""
+        with self._serialized():
+            it = iter(projected)
+            for w_layer, c_layer in zip(working.cache.layers, committed.cache.layers):
+                w_rs = getattr(w_layer, "recurrent_states", None)
+                c_rs = getattr(c_layer, "recurrent_states", None)
+                if not w_rs or not c_rs:
+                    continue
+                for k in w_rs:
+                    d = next(it)
+                    w_rs[k] = c_rs[k] + d.to(c_rs[k].device, c_rs[k].dtype)
+
 
 def _recurrent_snapshot(cache) -> list[dict[int, torch.Tensor]] | None:
     if cache is None:
