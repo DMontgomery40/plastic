@@ -448,3 +448,19 @@ def test_accepted_metrics_on_a_plain_commit():
     assert abs(rec["accepted"]["delta_norm"] - rec["signals"]["delta_norm"]) < 1e-6  # commit keeps the proposal
     assert abs(rec["accepted"]["delta_norm"] - _delta(r.committed, zero)) < 1e-9
     assert rec["accepted"]["budget_used"] == r.budget_used
+
+
+def test_reset_keeps_the_calibrated_cusum_threshold():
+    from plastic.harness.calibrate import Calibration
+
+    cfg, lm = _lm()
+    cal = Calibration(model_signature="s", thresholds={"cusum_h": 25.0})
+    r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), calibration=cal, device=CPU)
+    assert r.cusum.h == 25.0
+    r.feed_tokens(_ids(8))
+    r.reset()
+    assert r.cusum.h == 25.0  # reset must not drop back to the default
+    # without a calibration, reset uses the configured default
+    r2 = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False, cusum_h=7.0), device=CPU)
+    r2.reset()
+    assert r2.cusum.h == 7.0

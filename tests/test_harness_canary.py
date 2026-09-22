@@ -52,3 +52,16 @@ def test_physics_suite_scores_and_gradient():
     assert scores["coherence"] == scores["coherence"] and scores["poison"] >= 0
     grads = canary_gradient(m, state, suite, device=torch.device("cpu"))
     assert grads[0].shape == state.layers[0].S.shape
+
+
+def test_score_suite_handles_ragged_poison_probes(tmp_path):
+    cfg, lm, path = _text_fixture(tmp_path)
+    suite = CanarySuite.default_text(path, vocab_size=cfg.vocab_size, n_probe=3, probe_len=16)
+    # a recorded attack payload of a different length must not break scoring
+    suite.poison.append([5, 6, 7, 8])          # length 4
+    suite.poison.append(list(range(3, 3 + 24)))  # length 24
+    state = lm.init_state(1)
+    scores = score_suite(lm, state, suite, device=torch.device("cpu"))
+    assert scores["poison"] == scores["poison"]  # finite, not NaN or a crash
+    grads = canary_gradient(lm, state, suite, device=torch.device("cpu"))
+    assert all(torch.isfinite(g).all() for g in grads)

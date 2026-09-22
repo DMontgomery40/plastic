@@ -80,16 +80,19 @@ class TransactionRunner:
         self.pending_eligible = False  # any pending token processed with learning enabled
         self._last_logits: Tensor | None = None
         self.history: dict[str, SignalHistory] = {n: SignalHistory(harness_cfg.history_window) for n in STAT_SIGNALS}
-        cusum_h = harness_cfg.cusum_h
-        if calibration is not None and "cusum_h" in calibration.thresholds:
-            cusum_h = float(calibration.thresholds["cusum_h"])
-        self.cusum = Cusum(harness_cfg.cusum_k, cusum_h)
+        self.cusum = Cusum(harness_cfg.cusum_k, self._effective_cusum_h())
         self.budget_used = 0.0
         self._exhausted = False
         self.read_only = False
         self.read_only_reason: str | None = None
         self.n_transactions = 0
         self.transactions: list[dict[str, Any]] = []
+
+    def _effective_cusum_h(self) -> float:
+        """The calibrated CUSUM threshold when one exists, else the configured default."""
+        if self.calibration is not None and "cusum_h" in self.calibration.thresholds:
+            return float(self.calibration.thresholds["cusum_h"])
+        return float(self.hcfg.cusum_h)
 
     # ------------------------------------------------------------------ feeding
     @property
@@ -451,7 +454,7 @@ class TransactionRunner:
         self.pending_eligible = False
         self._last_logits = None
         self.history = {n: SignalHistory(self.hcfg.history_window) for n in STAT_SIGNALS}
-        self.cusum = Cusum(self.hcfg.cusum_k, self.hcfg.cusum_h)
+        self.cusum = Cusum(self.hcfg.cusum_k, self._effective_cusum_h())
         self.budget_used = 0.0
         self._exhausted = False
         self.read_only = False

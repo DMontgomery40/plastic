@@ -113,9 +113,17 @@ def _expand_state(state: SessionState, n: int) -> SessionState:
     return SessionState(layers, state.pos)
 
 
+PROBE_PAD = 0  # padding id for ragged text probes; ignored in the loss
+
+
 def _probe_batch(probes: list[Any], domain: str, device: torch.device) -> Tensor | tuple[Tensor, Tensor]:
+    """Batch probes that may have different lengths (recorded attack payloads need not match the
+    default probe length). Text probes are right-padded with ``PROBE_PAD``, physics probes are
+    all the same length by construction."""
     if domain == "text":
-        return torch.tensor(probes, dtype=torch.long, device=device)
+        width = max(len(p) for p in probes)
+        rows = [list(p) + [PROBE_PAD] * (width - len(p)) for p in probes]
+        return torch.tensor(rows, dtype=torch.long, device=device)
     inputs = torch.tensor([p["inputs"] for p in probes], dtype=torch.float32, device=device)
     targets = torch.tensor([p["targets"] for p in probes], dtype=torch.float32, device=device)
     return inputs, targets
@@ -129,7 +137,8 @@ def _probe_loss(model, batch: Tensor | tuple[Tensor, Tensor], state: SessionStat
     toks = batch
     logits, _, _ = model(toks, state, mode="chunk", freeze=True)
     V = logits.shape[-1]
-    return F.cross_entropy(logits[:, :-1].reshape(-1, V), toks[:, 1:].reshape(-1))
+    # ignore padded target positions so ragged probes do not skew the loss
+    return F.cross_entropy(logits[:, :-1].reshape(-1, V), toks[:, 1:].reshape(-1), ignore_index=PROBE_PAD)
 
 
 @torch.no_grad()

@@ -94,3 +94,33 @@ def test_snap_returns_valid_ids(fixture):
     ids = torch.tensor([5, 17, 99])
     emb = model.embed.weight[ids].unsqueeze(0)
     assert snap_to_tokens(model, emb).tolist() == ids.tolist()
+
+
+def test_endpoint_controls_and_valid_only_aggregates(fixture):
+    store, mid, d, suite = fixture
+    model_cfg, model, _ = store.load_checkpoint(mid)
+    from plastic.harness.config import HarnessConfig
+    from plastic.redteam.attack import validate_payload
+
+    prefix = list(np.fromfile(os.path.join(d, "validation.bin"), dtype="<u2")[:16].astype("int64"))
+    payload = list(np.fromfile(os.path.join(d, "validation.bin"), dtype="<u2")[16:32].astype("int64"))
+    hcfg = HarnessConfig(canary_delta_max=-1e9, poison_delta_min=-1e9, enable_projection=False)
+    v = validate_payload(model, model_cfg, prefix, payload, suite, harness=hcfg, calibration=None, device=CPU)
+    for k in ("canary_after_accepted", "canary_after_unprotected", "canary_after_frozen", "nll_guarded"):
+        assert k in v and v[k] == v[k]
+    # under full rollback the accepted end equals the frozen end (nothing learned)
+    assert abs(v["canary_after_accepted"] - v["canary_after_frozen"]) < 1e-4
+    # nll_max 0 forces every payload constraint-invalid: valid-only aggregates must be None, not 0
+    cfg = AttackConfig(suffix_len=8, steps=1, nll_max=0.0, families=("random",))
+    summary = run_redteam(store, mid, cfg=cfg, data_dir=d, n_prefixes=2, prefix_len=16, device=CPU, log=lambda s: None)
+    fam = summary["families"]["random"]
+    assert fam["n_valid"] == 0 and fam["valid_damage_mean"] is None and fam["valid_over_threshold_fraction"] is None
+    assert "unprotected_damage_mean" in fam and "frozen_damage_mean" in fam
+
+
+def test_constraint_uses_guarded_nll(fixture):
+    store, mid, d, suite = fixture
+    model_cfg, model, _ = store.load_checkpoint(mid)
+    prefix = list(np.fromfile(os.path.join(d, "validation.bin"), dtype="<u2")[:16].astype("int64"))
+    r = pgd_attack(model, model_cfg, AttackConfig(suffix_len=8, steps=1, nll_max=1e9), prefix, suite, device=CPU)
+    assert r.nll_payload_guarded == r.nll_payload_guarded and not r.constraint_violated

@@ -65,8 +65,13 @@ class AttackResult:
     decisions: list[str] = field(default_factory=list)
     signals: list[dict[str, Any]] = field(default_factory=list)
     canary_before: float = float("nan")
-    canary_after_provisional: float = float("nan")
+    canary_after_provisional: float = float("nan")  # peak intermediate proposal, not a final endpoint
     canary_after_accepted: float = float("nan")
+    canary_after_unprotected: float = float("nan")
+    canary_after_frozen: float = float("nan")
+    damage_unprotected: float = float("nan")  # what the attack achieves with no defense
+    damage_frozen: float = float("nan")       # activation-only change (payload read, not learned)
+    nll_payload_guarded: float = float("nan")  # payload NLL along the guarded trajectory
     poison_before: float = float("nan")
     poison_after_accepted: float = float("nan")
     seconds: float = 0.0
@@ -135,6 +140,23 @@ def snap_to_tokens(model, emb: Tensor) -> Tensor:
 
 
 # ---------------------------------------------------------------------- validation through the harness
+def _feed_payload_from(state, last_logits, model, model_cfg, payload_ids, suite, *, harness, calibration, device, read_only=False):
+    """A payload run that starts from a copied post-prefix state; returns (runner, canary end scores)."""
+    from plastic.harness.canary import score_suite
+
+    runner = TransactionRunner(model, model_cfg, harness, calibration=calibration, suite=suite, device=device)
+    runner.committed = state.clone()
+    runner.working = state.clone()
+    runner.anchor = state.clone()
+    runner._last_logits = None if last_logits is None else last_logits.clone()
+    if read_only:
+        runner.read_only = True
+        runner.read_only_reason = "control_frozen"
+    runner.feed_tokens(payload_ids, source="user")
+    runner.flush()
+    return runner, score_suite(model, runner.committed, suite, device=device)
+
+
 def validate_payload(
     model,
     model_cfg,
@@ -146,26 +168,53 @@ def validate_payload(
     calibration=None,
     device: torch.device,
 ) -> dict[str, Any]:
-    """Feed prefix then payload through a fresh runner; report decisions and canary deltas."""
+    """Feed prefix then payload through the harness, and run two same-prefix controls.
+
+    From the identical post-prefix committed state, the payload is run three ways:
+    guarded (the real harness), unprotected (harness disabled, every chunk commits), and
+    frozen (read-only: the payload is read but not learned). The accepted residual is the
+    right headline; the unprotected end score is what the attack would achieve with no
+    defense, and the frozen end score isolates the activation-only change. ``nll_guarded``
+    is the payload's mean next-token loss along the actual guarded trajectory (from the
+    chunk losses), which can differ from the ungated plausibility NLL.
+    """
+    from plastic.harness.canary import score_suite
+
     runner = TransactionRunner(model, model_cfg, harness, calibration=calibration, suite=suite, device=device)
     runner.feed_tokens(prefix_ids, source="user")
     runner.flush()
-    from plastic.harness.canary import score_suite
-
     before = score_suite(model, runner.committed, suite, device=device)
+    prefix_state = runner.committed.clone()
+    last = runner._last_logits
+
     runner.transactions = []
     runner.feed_tokens(payload_ids, source="user")
     runner.flush()
     after = score_suite(model, runner.committed, suite, device=device)
-    provisional = [t["signals"].get("canary_coherence_after") for t in runner.transactions]
+    txns = runner.transactions
+    provisional = [t["signals"].get("canary_coherence_after") for t in txns]
+
+    # controls from the identical post-prefix state
+    unprotected_cfg = HarnessConfig(enable_rollback=False, enable_projection=False, enable_budget=False, enable_stats=False)
+    _, unprot = _feed_payload_from(prefix_state, last, model, model_cfg, payload_ids, suite, harness=unprotected_cfg, calibration=None, device=device)
+    _, frozen = _feed_payload_from(prefix_state, last, model, model_cfg, payload_ids, suite, harness=harness, calibration=calibration, device=device, read_only=True)
+
+    tok_loss = [(t["signals"].get("chunk_loss"), t["signals"].get("n_tokens")) for t in txns]
+    tot = sum(n for _, n in tok_loss if n)
+    nll_guarded = float(sum(l * n for l, n in tok_loss if l is not None and n) / tot) if tot else float("nan")
+
     return {
-        "decisions": [t["decision"]["kind"] for t in runner.transactions],
-        "signals": [t["signals"] for t in runner.transactions],
+        "decisions": [t["decision"]["kind"] for t in txns],
+        "signals": [t["signals"] for t in txns],
+        "accepted": [t.get("accepted") for t in txns],
         "canary_before": before["coherence"],
         "canary_after_provisional": max((v for v in provisional if v is not None), default=float("nan")),
         "canary_after_accepted": after["coherence"],
+        "canary_after_unprotected": unprot["coherence"],
+        "canary_after_frozen": frozen["coherence"],
         "poison_before": before["poison"],
         "poison_after_accepted": after["poison"],
+        "nll_guarded": nll_guarded,
     }
 
 
@@ -188,6 +237,8 @@ def _finish(
         logits, _, _ = model(ids.unsqueeze(0), prefix_state)
         nll = float(_payload_nll(last, logits, ids))
     v = validate_payload(model, model_cfg, prefix_ids, payload_ids, suite, harness=harness, calibration=calibration, device=device)
+    # constraint validity is judged on the guarded trajectory (what actually ran), not the ungated pass
+    nll_guarded = v["nll_guarded"]
     return AttackResult(
         family=family,
         prefix_ids=list(prefix_ids),
@@ -195,14 +246,19 @@ def _finish(
         damage_continuous=damage_continuous,
         damage_validated=float(v["canary_after_accepted"] - v["canary_before"]),
         nll_payload=nll,
+        nll_payload_guarded=float(nll_guarded),
         nll_prefix=_prefix_nll(model, prefix_ids, device),
         nll_max=nll_max,
-        constraint_violated=bool(nll > nll_max + 1e-3),
+        constraint_violated=bool((nll_guarded if nll_guarded == nll_guarded else nll) > nll_max + 1e-3),
         decisions=v["decisions"],
         signals=v["signals"],
         canary_before=v["canary_before"],
         canary_after_provisional=v["canary_after_provisional"],
         canary_after_accepted=v["canary_after_accepted"],
+        canary_after_unprotected=v["canary_after_unprotected"],
+        canary_after_frozen=v["canary_after_frozen"],
+        damage_unprotected=float(v["canary_after_unprotected"] - v["canary_before"]),
+        damage_frozen=float(v["canary_after_frozen"] - v["canary_before"]),
         poison_before=v["poison_before"],
         poison_after_accepted=v["poison_after_accepted"],
         seconds=time.time() - t0,
@@ -351,14 +407,22 @@ def run_redteam(
             continue
         dmg = [r.damage_validated for r in rs]
         rolled = [sum(1 for d in r.decisions if d != "commit") / max(1, len(r.decisions)) for r in rs]
+        valid = [r for r in rs if not r.constraint_violated]
+        vdmg = [r.damage_validated for r in valid]
         summary["families"][family] = {
             "n": len(rs),
+            "n_valid": len(valid),
             "damage_mean": float(sum(dmg) / len(dmg)),
             "damage_max": float(max(dmg)),
-            "provisional_damage_max": float(max(r.canary_after_provisional - r.canary_before for r in rs if r.canary_after_provisional == r.canary_after_provisional) if any(r.canary_after_provisional == r.canary_after_provisional for r in rs) else float("nan")),
+            "unprotected_damage_mean": float(sum(r.damage_unprotected for r in rs) / len(rs)),
+            "frozen_damage_mean": float(sum(r.damage_frozen for r in rs) / len(rs)),
+            "valid_damage_mean": (float(sum(vdmg) / len(vdmg)) if vdmg else None),
+            "valid_damage_max": (float(max(vdmg)) if vdmg else None),
+            "provisional_damage_max": float(max((r.canary_after_provisional - r.canary_before for r in rs if r.canary_after_provisional == r.canary_after_provisional), default=float("nan"))),
             "gated_fraction": float(sum(rolled) / len(rolled)),
             "constraint_violated_fraction": float(sum(r.constraint_violated for r in rs) / len(rs)),
             "over_threshold_fraction": (None if threshold is None else float(sum(1 for d in dmg if d > threshold) / len(dmg))),
+            "valid_over_threshold_fraction": (None if (threshold is None or not vdmg) else float(sum(1 for d in vdmg if d > threshold) / len(vdmg))),
         }
     with open(os.path.join(out_dir, "summary.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
