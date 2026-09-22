@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 import torch
 
 from plastic.data.mqar import mqar_accuracy, mqar_batch
@@ -116,3 +117,24 @@ def test_physics_batch_shapes_resets_and_targets():
     inside = batch.inputs[:, 1:, 6] == 0
     assert torch.allclose((obs[:, 1:] - obs[:, :-1])[inside], batch.target_delta[:, :-1][inside], atol=1e-5)
     assert (obs[:, 16] == 0).all()
+
+
+@pytest.mark.parametrize("nonlinear", [False, True])
+@pytest.mark.parametrize("episodes", [1, 2, 4])
+def test_physics_targets_match_env_at_every_step_including_episode_ends(nonlinear, episodes):
+    """Every target, including the last step of each episode and of the sequence, is the
+    transition the action actually produced; resets never leak into targets."""
+    g = torch.Generator().manual_seed(1)
+    seq_len = 24
+    batch = physics_batch(2, seq_len=seq_len, episodes_per_seq=episodes, mu_range=(0.05, 0.3), nonlinear=nonlinear, action_std=0.5, rng=g)
+    ep_len = seq_len // episodes
+    for b in range(2):
+        for e in range(episodes):
+            env = PhysicsEnv(float(batch.mu[b, e]), nonlinear=nonlinear)
+            obs = env.reset()
+            for i in range(ep_len):
+                t = e * ep_len + i
+                assert torch.allclose(batch.inputs[b, t, :4], obs, atol=1e-5), (b, e, i)
+                nxt = env.step(batch.inputs[b, t, 4:6])
+                assert torch.allclose(batch.target_delta[b, t], nxt - obs, atol=1e-5), (b, e, i)
+                obs = nxt

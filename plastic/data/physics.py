@@ -83,7 +83,8 @@ def physics_batch(
     ep_len = seq_len // episodes_per_seq
     mu = torch.empty(batch, episodes_per_seq).uniform_(mu_range[0], mu_range[1], generator=rng)
     actions = torch.randn(batch, seq_len, 2, generator=rng) * float(action_std)
-    obs = torch.zeros(batch, seq_len + 1, 4)
+    obs = torch.zeros(batch, seq_len, 4)
+    target = torch.zeros(batch, seq_len, 4)
     reset = torch.zeros(batch, seq_len)
     pos = torch.zeros(batch, 2)
     vel = torch.zeros(batch, 2)
@@ -93,12 +94,14 @@ def physics_batch(
             pos = torch.zeros(batch, 2)
             vel = torch.zeros(batch, 2)
             reset[:, t] = 1.0
-        obs[:, t] = torch.cat([pos, vel], dim=-1)
+        before = torch.cat([pos, vel], dim=-1)
+        obs[:, t] = before
         mu_t = mu[:, e : e + 1]
         mu_eff = _mu_eff(mu_t, vel, nonlinear)
         vel = (1.0 - mu_eff) * vel + actions[:, t]
         pos = pos + vel * dt
-    obs[:, seq_len] = torch.cat([pos, vel], dim=-1)
-    inputs = torch.cat([obs[:, :seq_len], actions, reset.unsqueeze(-1)], dim=-1)
-    target = obs[:, 1:] - obs[:, :seq_len]
+        # the target is the transition this action actually produced, even when the
+        # next input row is an episode reset
+        target[:, t] = torch.cat([pos, vel], dim=-1) - before
+    inputs = torch.cat([obs, actions, reset.unsqueeze(-1)], dim=-1)
     return PhysicsBatch(inputs=inputs, target_delta=target, mu=mu, reset_flag=reset)

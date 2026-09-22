@@ -107,18 +107,28 @@ def text_loss(model: PlasticLM, toks: torch.Tensor, *, beta_scale: float = 1.0) 
     return loss, signals
 
 
+def text_nll_sum(model: PlasticLM, toks: torch.Tensor, *, beta_scale: float = 1.0) -> tuple[torch.Tensor, int, list[MemorySignals]]:
+    """Summed next-token NLL over non-pad targets and the number of such targets."""
+    logits, _, signals = model(toks, beta_scale=beta_scale)
+    V = logits.shape[-1]
+    target = toks[:, 1:].reshape(-1)
+    nll = F.cross_entropy(logits[:, :-1].reshape(-1, V), target, ignore_index=PAD_ID, reduction="sum")
+    return nll, int((target != PAD_ID).sum()), signals
+
+
 @torch.no_grad()
 def evaluate_text(model: PlasticLM, cfg: TrainConfig, heldout: TokenWindows, device: torch.device) -> dict[str, Any]:
     model.eval()
-    losses, losses0, signals_all = [], [], []
+    nll_sum, nll0_sum, count, signals_all = 0.0, 0.0, 0, []
     for i, batch in enumerate(heldout.sequential(cfg.batch_size)):
         if i >= cfg.eval_batches:
             break
         toks = batch.to(device)
-        loss, signals = text_loss(model, toks)
-        loss0, _ = text_loss(model, toks, beta_scale=0.0)
-        losses.append(float(loss))
-        losses0.append(float(loss0))
+        nll, n, signals = text_nll_sum(model, toks)
+        nll0, _, _ = text_nll_sum(model, toks, beta_scale=0.0)
+        nll_sum += float(nll)
+        nll0_sum += float(nll0)
+        count += n
         signals_all.extend(signals)
     V = cfg.model.vocab_size
     g = torch.Generator().manual_seed(cfg.seed + 1)
@@ -139,12 +149,13 @@ def evaluate_text(model: PlasticLM, cfg: TrainConfig, heldout: TokenWindows, dev
         toks, mask = toks.to(device), mask.to(device)
         logits, _, _ = model(toks)
         mqar[str(pairs)] = mqar_accuracy(logits, toks, mask)
-    heldout_loss = sum(losses) / max(1, len(losses))
-    heldout_loss0 = sum(losses0) / max(1, len(losses0))
+    heldout_loss = nll_sum / max(1, count)
+    heldout_loss0 = nll0_sum / max(1, count)
     model.train()
     return {
         "heldout_loss": heldout_loss,
         "heldout_loss_beta0": heldout_loss0,
+        "heldout_tokens": count,
         "memory_value": heldout_loss0 - heldout_loss,
         "mqar_accuracy": mqar,
         "beta_hist": beta_histogram(signals_all) if signals_all else None,
@@ -155,7 +166,7 @@ def evaluate_text(model: PlasticLM, cfg: TrainConfig, heldout: TokenWindows, dev
 def evaluate_physics(model: PlasticDynamics, cfg: TrainConfig, device: torch.device) -> dict[str, Any]:
     model.eval()
     g = torch.Generator().manual_seed(cfg.seed + 7)
-    losses, losses0, signals_all = [], [], []
+    se_sum, se0_sum, count, signals_all = 0.0, 0.0, 0, []
     for _ in range(cfg.eval_batches):
         b = physics_batch(
             cfg.batch_size,
@@ -169,15 +180,17 @@ def evaluate_physics(model: PlasticDynamics, cfg: TrainConfig, device: torch.dev
         x, y = b.inputs.to(device), b.target_delta.to(device)
         pred, _, signals = model(x)
         pred0, _, _ = model(x, beta_scale=0.0)
-        losses.append(float(F.mse_loss(pred, y)))
-        losses0.append(float(F.mse_loss(pred0, y)))
+        se_sum += float((pred - y).pow(2).sum())
+        se0_sum += float((pred0 - y).pow(2).sum())
+        count += int(y.numel())
         signals_all.extend(signals)
     model.train()
-    heldout = sum(losses) / len(losses)
-    heldout0 = sum(losses0) / len(losses0)
+    heldout = se_sum / max(1, count)
+    heldout0 = se0_sum / max(1, count)
     return {
         "heldout_loss": heldout,
         "heldout_loss_beta0": heldout0,
+        "heldout_elements": count,
         "memory_value": heldout0 - heldout,
         "beta_hist": beta_histogram(signals_all),
     }

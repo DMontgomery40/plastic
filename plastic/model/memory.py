@@ -18,6 +18,12 @@ Control modes, by contract:
 - ``beta_scale`` scales the write only. For the delta rule it scales β; for the chunk
   rule it scales the complete update after orthogonalization (and the gradient's
   contribution to momentum), so ``beta_scale=0`` writes nothing while decay continues.
+
+Chunk-rule controls are chunk-level by contract: the ``beta_scale`` in effect when a
+chunk completes applies to that whole chunk (statistics are accumulated unscaled), and
+a chunk whose boundary is crossed while frozen is never applied, so its pending
+statistics are discarded. Frozen tokens inside a chunk count with neutral retention
+(α = 1). The harness only changes these controls at chunk boundaries.
 """
 
 from __future__ import annotations
@@ -135,7 +141,11 @@ class FastWeightMemory(nn.Module):
             qc, kc, vc = q[:, :, sl], k[:, :, sl], v[:, :, sl]
             outs.append(torch.einsum("bhtk,bhkv->bhtv", qc, S))  # reads at chunk-start weights
             errs.append((kc @ S - vc).norm(dim=-1))
-            if not freeze:
+            if freeze:
+                # frozen tokens contribute neutral retention so a chunk that resumes
+                # writing after a frozen stretch does not decay by a truncated average
+                alpha_sum = alpha_sum + float(take)
+            else:
                 dA, dBv = chunk_stats(kc, vc, beta[:, :, sl])
                 A, Bv = A + dA, Bv + dBv
                 alpha_sum = alpha_sum + alpha[:, :, sl].sum(dim=-1)

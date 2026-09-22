@@ -134,3 +134,24 @@ def test_domain_mismatch_is_fixed_up(tmp_path):
     cfg2, model, _ = ArtifactStore(cfg.artifacts_root).load_checkpoint(mid)
     assert cfg2.domain == "physics"
     assert isinstance(model, torch.nn.Module)
+
+
+def test_heldout_loss_is_batch_size_invariant(tmp_path):
+    from plastic.data.text import TokenWindows
+    from plastic.model.lm import PlasticLM
+    from plastic.train.loop import evaluate_text
+
+    d, tok = _text_corpus(tmp_path)
+    cfg_model = ModelConfig(d_model=32, n_heads=2, n_layers=1, chunk=16, vocab_size=tok.vocab_size)
+    torch.manual_seed(0)
+    lm = PlasticLM(cfg_model)
+    heldout = TokenWindows(f"{d}/train.bin", seq_len=32)
+    n_windows = (len(heldout) - 1) // 32
+    results = []
+    for bs in (1, 2, 5):
+        cfg = TrainConfig(domain="text", model=cfg_model, batch_size=bs, seq_len=32, eval_batches=10**6, mqar_pairs=(), device="cpu")
+        results.append(evaluate_text(lm, cfg, heldout, torch.device("cpu")))
+    assert all(r["heldout_tokens"] == n_windows * 32 for r in results)
+    for r in results[1:]:
+        assert abs(r["heldout_loss"] - results[0]["heldout_loss"]) < 1e-4
+        assert abs(r["heldout_loss_beta0"] - results[0]["heldout_loss_beta0"]) < 1e-4

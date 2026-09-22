@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from plastic.config import ModelConfig
@@ -53,3 +54,25 @@ def test_chunk_rule_freeze(device):
     assert torch.equal(S1, st.S) and torch.equal(M1, st.M)
     assert torch.equal(c1.A, torch.zeros_like(c1.A)) and c1.count == 20 % 8  # boundaries still advance
     assert sig.write_norm.abs().max() == 0 and sig.err.shape == (1, 2, 20)
+
+
+@pytest.mark.parametrize("n_frozen", [6, 20])
+def test_chunk_rule_resume_after_freeze_keeps_retention(device, n_frozen):
+    """Frozen tokens must not make the next applied chunk decay by a truncated average."""
+    cfg = ModelConfig(d_model=32, n_heads=2, chunk=8, rule="chunk")
+    mem = FastWeightMemory(cfg).to(device)
+    u = torch.randn(1, n_frozen + 2, 32, device=device)
+    st = SessionState.zeros(cfg, batch=1, device=device).layers[0]
+    st.S += torch.randn_like(st.S)
+    _, S1, M1, c1, _ = mem(u[:, :n_frozen], st.S, st.M, mode="chunk", freeze=True, chunk0=st.chunk)
+    assert torch.equal(S1, st.S)
+    # resume with writes disabled: the next boundary should only apply mean retention
+    _, S2, _, _, sig = mem(u[:, n_frozen:], S1, M1, mode="chunk", beta_scale=0.0, chunk0=c1)
+    resumed = (n_frozen + 2) % 8 == 0
+    if resumed:
+        alphas = sig.alpha.mean(dim=-1)  # only the two active tokens carry alpha < 1
+        expected = ((8 - 2) * 1.0 + 2 * alphas) / 8
+        assert torch.allclose(S2, expected[..., None, None] * S1, atol=1e-5)
+        assert float((S2.norm() / S1.norm())) > 0.95
+    else:
+        assert torch.equal(S2, S1)
