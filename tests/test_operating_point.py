@@ -1101,3 +1101,19 @@ def test_record_invocation_accumulates_atomically_and_refuses_unreadable(tmp_pat
     with _pytest.raises(RunConflict):
         _record_invocation(str(tmp_path), _prov("c"), "resume")
     assert path.read_text(encoding="utf-8") == '[{"mode": "fresh"'
+
+
+def test_resume_without_an_invocation_record_is_never_one_clean_source(tmp_path):
+    # a resumed run whose record is ABSENT (created before it existed, or lost) holds computation from
+    # unrecorded invocations; even a clean current invocation must not make it read as one clean source
+    from scripts.experiments.qwen_operating_point import _record_invocation, _run_provenance_check
+    clean = {**_prov("a" * 40), "code_dirty": False}
+    _os.makedirs(tmp_path / "old")
+    resumed = _record_invocation(str(tmp_path / "old"), clean, "resume")
+    assert [i["mode"] for i in resumed] == ["unrecorded_prior", "resume"]
+    check = _run_provenance_check(resumed)
+    assert check["ok"] is False and any("no recorded provenance" in r for r in check["reasons"])
+
+    _os.makedirs(tmp_path / "new")  # a genuinely fresh run starts its record with itself only
+    fresh = _record_invocation(str(tmp_path / "new"), clean, "fresh")
+    assert [i["mode"] for i in fresh] == ["fresh"] and _run_provenance_check(fresh)["ok"] is True

@@ -493,7 +493,10 @@ def _record_invocation(out_dir: str, provenance: dict[str, Any], mode: str) -> l
     """Append THIS invocation to the run's invocation record (``invocations.json``, rewritten atomically)
     and return every invocation recorded for the run. Calibration and eval both resume across
     invocations, so this -- not the per-session stamps alone -- is what shows whether every
-    continuation came from one pinned source (ASTRA-109). An unreadable record is refused, preserved."""
+    continuation came from one pinned source (ASTRA-109). An unreadable record is refused, preserved. A
+    RESUMED run with no record holds computation from invocations nobody recorded (created before the
+    record existed, or the record was lost): an explicit unrecorded-prior entry with no provenance is
+    written first, so such a run can never read as one clean source."""
     path = os.path.join(out_dir, "invocations.json")
     invocations: Any = []
     if os.path.exists(path):
@@ -504,6 +507,8 @@ def _record_invocation(out_dir: str, provenance: dict[str, Any], mode: str) -> l
             raise RunConflict(f"{path} is unreadable ({e}); refusing to continue without this run's invocation record.")
         if not isinstance(invocations, list):
             raise RunConflict(f"{path} is not a list of invocations; refusing to continue without this run's invocation record.")
+    elif mode != "fresh":
+        invocations = [{"t_unix": None, "mode": "unrecorded_prior", "provenance": None}]
     invocations.append({"t_unix": int(time.time()), "mode": mode, "provenance": provenance})
     _write_json(path, invocations)
     return invocations
