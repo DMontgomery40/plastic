@@ -121,6 +121,24 @@ class QwenBackend:
                 if self.device.type == "mps":
                     torch.mps.synchronize()
 
+    # ------------------------------------------------------------------ identity / signals
+    def signal_names(self) -> tuple[str, ...]:
+        """The reduced decision-signal set a Qwen session can actually produce: the chunk NLL and
+        the recurrent-state change. The gated-delta kernel exposes neither the memory's own
+        prediction error (``surprise_mean``) nor its write norm (``log_write_norm``) without
+        per-session instrumentation, and there is no Fisher estimate on Qwen's state yet, so the
+        runner carries those STAT_SIGNALS as ``None`` end-to-end rather than substituting zero or
+        NaN. (Spec §2.)"""
+        return ("chunk_loss", "log_delta_norm")
+
+    def writes_for_source(self, source: str) -> bool:
+        """Qwen's recurrent state *is* its language context, so generated tokens write to it and
+        those writes persist and must be accounted — both ``user`` and ``model`` propose a write
+        (the opposite of plastic, which freezes generation read-only). This is only the default
+        eligibility; an explicit session read-only, a spent budget, or a requested freeze still take
+        precedence in the runner — ``source`` alone cannot escape them. (Spec §3.)"""
+        return True
+
     # ------------------------------------------------------------------ loading
     @classmethod
     def load(
@@ -206,6 +224,32 @@ class QwenBackend:
         QwenState.clone() is the equivalent for single-threaded use."""
         with self._serialized():
             return QwenState(copy.deepcopy(state.cache))
+
+    def state_delta(self, a: QwenState, b: QwenState) -> list[torch.Tensor]:
+        """Per-memory-unit change ``a − b`` over the 18 gated-delta recurrent tensors — the memory
+        units the harness measures (update norm) and projects. KV and conv are activation/attention
+        history, not memory units, so they are not part of the delta (matching plastic, whose delta
+        is per-layer ``S`` only). The leaves are in a stable layer order on both states."""
+        return [la - lb for la, lb in zip(a.recurrent_leaves(), b.recurrent_leaves())]
+
+    def is_finite(self, state: QwenState) -> bool:
+        """Every persisted tensor a commit or restore would carry must be finite: the recurrent
+        memory and conv history on the linear-attention layers, and the attention KV on the
+        full-attention layers. Missing/empty fields (e.g. KV before any token) are skipped."""
+        for layer in getattr(state.cache, "layers", []):
+            tensors: list[torch.Tensor] = []
+            for attr in ("recurrent_states", "conv_states"):
+                d = getattr(layer, attr, None)
+                if d:
+                    tensors.extend(d.values())
+            for attr in ("keys", "values"):
+                t = getattr(layer, attr, None)
+                if t is not None:
+                    tensors.append(t)
+            for t in tensors:
+                if not bool(torch.isfinite(t).all()):
+                    return False
+        return True
 
     # ------------------------------------------------------------------ forward
     @torch.no_grad()

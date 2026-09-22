@@ -139,6 +139,53 @@ def test_recurrent_is_float32_under_bfloat16():
     assert conv and all(c.dtype == torch.bfloat16 for c in conv)  # conv follows the model dtype
 
 
+def test_reduced_signal_names_and_generation_writes(backend):
+    # Qwen gates on the reduced set (chunk NLL + recurrent-state change); the runner carries
+    # surprise/write_norm/fisher as None. Generation writes on Qwen, so BOTH sources are eligible.
+    assert backend.signal_names() == ("chunk_loss", "log_delta_norm")
+    assert backend.writes_for_source("user") is True and backend.writes_for_source("model") is True
+
+
+def test_state_delta_over_recurrent_leaves(backend):
+    ids = backend.encode("A sentence with enough tokens to span two distinct chunks for the delta.")
+    n = len(ids)
+    k = n // 2
+    a = backend.init_state()
+    _, a = backend.process(ids[:k], a)
+    b = backend.clone(a)
+    # a snapshot with no further advance has an exactly-zero delta across all 18 recurrent leaves
+    z = backend.state_delta(a, b)
+    assert len(z) == 18 and all(int(torch.count_nonzero(t)) == 0 for t in z)
+    # advancing one copy gives a nonzero, finite, correctly-shaped per-leaf delta (KV/conv excluded)
+    _, a = backend.process(ids[k:], a)
+    d = backend.state_delta(a, b)
+    assert len(d) == 18 and all(tuple(t.shape) == (1, 16, 128, 128) and torch.isfinite(t).all() for t in d)
+    assert any(t.abs().max().item() > 0 for t in d)
+
+
+def test_is_finite_covers_recurrent_conv_and_kv(backend):
+    ids = backend.encode("Finiteness must cover recurrent memory, conv history, and attention KV.")
+    st = backend.init_state()
+    _, st = backend.process(ids[:8], st)
+    assert backend.is_finite(st)
+    # a NaN in any persisted category is detected: recurrent, conv (linear layers), KV (attn layers)
+    st_r = backend.clone(st)
+    next(iter(st_r.cache.layers[0].recurrent_states.values()))[0, 0, 0, 0] = float("nan")
+    assert not backend.is_finite(st_r)
+    st_c = backend.clone(st)
+    next(iter(st_c.cache.layers[0].conv_states.values()))[0, 0, 0] = float("nan")
+    assert not backend.is_finite(st_c)
+    st_k = backend.clone(st)
+    injected = False
+    for layer in st_k.cache.layers:
+        kv = getattr(layer, "keys", None)
+        if kv is not None:
+            kv[0, 0, 0, 0] = float("nan")
+            injected = True
+            break
+    assert injected and not backend.is_finite(st_k)
+
+
 def test_encode_chat_returns_integer_ids(backend):
     # apply_chat_template defaults to a dict in tf 5.17; encode_chat must return native integer ids
     # that tensorize, for empty / ascii / unicode, matching render-then-tokenize.
