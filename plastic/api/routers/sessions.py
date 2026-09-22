@@ -11,6 +11,7 @@ from plastic.api.registry import SignatureMismatch
 from plastic.api.schemas import ChatRequest, CreateSessionRequest, ForkRequest, PhysicsRequest
 from plastic.api.service import (
     bad_request,
+    calibration_payload,
     conflict,
     lineage,
     not_found,
@@ -76,10 +77,15 @@ def get_session(session_id: str, request: Request) -> dict[str, Any]:
     meta = require_session_meta(store, session_id)
     with _open(request, session_id) as session:
         summary = session.summary()
+        # the calibration the session ACTUALLY loaded and verified at open (or None), NOT the model's
+        # current saved artifact -- a separate calibration process can replace that same-model, so the
+        # active policy lines/rates must come from what the runner is really using (ASTRA-096 #2)
+        calibration = calibration_payload(session.calibration) if session.calibration is not None else None
     return sanitize(
         {
             "meta": session_meta_payload(store, meta),
             "summary": summary,
+            "calibration": calibration,
             "lineage": lineage(store, session_id),
             "transactions": transactions_tail(store, session_id, 100),
             "trace": store.read_trace(session_id, limit=50),

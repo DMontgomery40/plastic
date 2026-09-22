@@ -109,6 +109,9 @@ def calibration_payload(cal: Calibration) -> dict[str, Any]:
         "reference_sizes": {k: len(v) for k, v in cal.reference.items()},
         "target_fpr": float(cal.target_fpr),
         "created_at_unix": int(cal.created_at_unix),
+        # the identity of the calibration content, so a session's loaded artifact can be told apart
+        # from a same-model artifact that a separate calibration process later saved (ASTRA-096 #2)
+        "model_signature": cal.model_signature or None,
     }
 
 

@@ -531,3 +531,37 @@ def test_state_payload_native_missing_or_failed_drift_is_null():
     assert body["units"][0]["recurrent_norm"] is None
     assert body["units"][0]["drift_from_anchor"] is None
     assert body["recurrent_norm_total"] is None
+
+
+def test_session_detail_exposes_loaded_calibration_not_replaced_artifact(api):
+    # ASTRA-096 #2: a session's active calibration is the one it verified at open, not the model's
+    # CURRENT saved artifact. A separate calibration process replacing the artifact same-model must
+    # not change what the open session (and its running policy) uses or what the UI labels active.
+    from plastic.harness.calibrate import Calibration
+
+    mid = api.text
+    api.client.post(f"/api/models/{mid}/calibrate",
+                    json={"data_dir": api.data, "chunks": 16, "fisher_chunks": 2, "fpr": 0.1})
+    model_dir = api.store.model_dir(mid)
+
+    sid = api.client.post("/api/sessions", json={"model_id": mid, "session_id": "cal_identity"}).json()["session_id"]
+    detail = api.client.get(f"/api/sessions/{sid}").json()
+    assert detail["summary"]["calibration"] == "installed"
+    assert detail["calibration"] is not None
+    loaded_thresholds = detail["calibration"]["thresholds"]
+    assert loaded_thresholds  # the session exposes its loaded calibration's thresholds
+
+    # a SEPARATE calibration process replaces the saved artifact with a valid same-signature one whose
+    # thresholds differ (bumped by 100); the model signature is unchanged so it is still "installable"
+    replacement = Calibration.load(model_dir)
+    replacement.thresholds = {k: (None if v is None else float(v) + 100.0) for k, v in replacement.thresholds.items()}
+    replacement.save(model_dir)
+
+    model_after = api.client.get(f"/api/models/{mid}").json()
+    assert model_after["calibration"]["thresholds"] != loaded_thresholds  # the model detail shows the replacement
+
+    # the OPEN session still exposes the calibration it actually loaded, not the replacement
+    detail_after = api.client.get(f"/api/sessions/{sid}").json()
+    assert detail_after["summary"]["calibration"] == "installed"
+    assert detail_after["calibration"]["thresholds"] == loaded_thresholds
+    assert detail_after["calibration"]["thresholds"] != model_after["calibration"]["thresholds"]

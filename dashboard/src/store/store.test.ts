@@ -231,6 +231,7 @@ const RUNNER: RunnerSummary = {
 const SESSION_DETAIL: SessionDetail = {
   meta: { ...SESSION_A, harness: {} as SessionDetail['meta']['harness'], model_signature: 'abc123' },
   summary: RUNNER,
+  calibration: null,
   lineage: ['s1'],
   transactions: [TRANSACTION],
   trace: [],

@@ -368,12 +368,19 @@ export function SessionTab() {
   // Gate the ACTIVE calibration display on the session's own installed state, not the model's saved
   // artifact: a rejected (different model / unsigned) or absent calibration must not draw active
   // policy threshold lines or claim active rates, even though the model still holds a saved artifact.
-  // calView folds in whether the model detail (which carries the thresholds) has loaded, so a single
-  // decision drives the tile, the signals subtitle and the rates panel -- they can never contradict.
+  // Draw active lines/rates from the calibration THIS SESSION actually loaded and verified at open
+  // (carried in the session detail), never the model's current saved artifact -- a separate process
+  // can replace that same-model. calView folds status + whether that loaded calibration is present
+  // into one decision, so the tile, signals subtitle and rates panel can never contradict.
   const calStatus = sessionDetail?.summary?.calibration;
+  const sessionCal = sessionDetail?.calibration ?? null;
   const calState = calibrationDisplay(calStatus);
-  const calView = calibrationView(calStatus, model !== null, Boolean(model?.calibration?.thresholds));
-  const thresholds = calView.drawThresholds ? (model?.calibration?.thresholds ?? null) : null;
+  const calView = calibrationView(
+    calStatus,
+    sessionCal !== null,
+    Boolean(sessionCal?.thresholds && Object.keys(sessionCal.thresholds).length > 0),
+  );
+  const thresholds = calView.drawThresholds ? (sessionCal?.thresholds ?? null) : null;
   const transactions = sessionDetail?.transactions ?? [];
 
   const signalRows = useMemo(
@@ -549,7 +556,7 @@ export function SessionTab() {
       >
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <CalibratedRates
-            calibration={calView.drawThresholds ? (model?.calibration ?? null) : null}
+            calibration={calView.drawThresholds ? sessionCal : null}
             inactive={calView.inactive}
           />
           <ObservedIntervention

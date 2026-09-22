@@ -363,6 +363,10 @@ export interface TraceRecord {
 export interface SessionDetail {
   meta: SessionMeta;
   summary: RunnerSummary;
+  // the calibration the session ACTUALLY loaded and verified at open (null if none is installed),
+  // not the model's current saved artifact -- active policy lines/rates must come from this so a
+  // same-model artifact replaced by a separate process is never shown as what the runner uses.
+  calibration: CalibrationSummary | null;
   lineage: string[];
   transactions: TransactionRecord[];
   trace: TraceRecord[];
