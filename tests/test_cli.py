@@ -32,3 +32,51 @@ def test_train_physics_via_cli(tmp_path, capsys):
     rc = main(["models", "--artifacts-root", root])
     assert rc == 0
     assert model_id in capsys.readouterr().out
+
+
+def test_calibrate_session_chat_and_physics_via_cli(tmp_path, capsys):
+    import os
+
+    from plastic.data.text import encode_documents_to_bin
+    from plastic.tokenizer.bpe import Tokenizer
+
+    root = str(tmp_path / "artifacts")
+    d = str(tmp_path / "data")
+    os.makedirs(d)
+    docs = ["alpha beta gamma delta epsilon " * 80, "one two three four five six " * 80]
+    tok = Tokenizer.train(docs, vocab_size=300)
+    tok.save(os.path.join(d, "tokenizer.json"))
+    encode_documents_to_bin(tok, docs, os.path.join(d, "train.bin"))
+    encode_documents_to_bin(tok, docs, os.path.join(d, "validation.bin"))
+    assert main(["train", "text", "--data", d, "--artifacts-root", root, "--model-id", "lm_t", "--steps", "2",
+                 "--batch-size", "2", "--seq-len", "32", "--d-model", "32", "--heads", "2", "--layers", "1", "--chunk", "8",
+                 "--eval-every", "0", "--save-every", "0", "--eval-batches", "1", "--log-every", "1", "--device", "cpu",
+                 "--warmup-steps", "1", "--mqar-frac", "0"]) == 0
+    capsys.readouterr()
+    assert main(["calibrate", "lm_t", "--artifacts-root", root, "--data", d, "--chunks", "24", "--fisher-chunks", "4", "--fpr", "0.1"]) == 0
+    out = capsys.readouterr().out
+    assert "thresholds" in out and os.path.exists(os.path.join(root, "models", "lm_t", "calibration.json"))
+    assert main(["session", "new", "--model", "lm_t", "--session-id", "s1", "--artifacts-root", root]) == 0
+    assert capsys.readouterr().out.strip() == "s1"
+    assert main(["chat", "s1", "alpha beta gamma delta epsilon alpha", "--artifacts-root", root, "--max-new-tokens", "4", "--seed", "0"]) == 0
+    capsys.readouterr()
+    assert main(["session", "fork", "s1", "s2", "--artifacts-root", root]) == 0
+    assert capsys.readouterr().out.strip() == "s2"
+    assert main(["session", "list", "--artifacts-root", root]) == 0
+    out = capsys.readouterr().out
+    assert "s1" in out and "s2" in out
+    assert main(["session", "show", "s1", "--artifacts-root", root]) == 0
+    assert "n_transactions" in capsys.readouterr().out
+    # physics
+    assert main(["train", "physics", "--artifacts-root", root, "--model-id", "ph_t", "--steps", "2", "--batch-size", "2",
+                 "--seq-len", "32", "--episodes-per-seq", "2", "--d-model", "32", "--heads", "2", "--layers", "1", "--chunk", "8",
+                 "--eval-every", "0", "--save-every", "0", "--eval-batches", "1", "--log-every", "1", "--device", "cpu",
+                 "--no-muon", "--warmup-steps", "1"]) == 0
+    capsys.readouterr()
+    assert main(["calibrate", "ph_t", "--artifacts-root", root, "--chunks", "16", "--fisher-chunks", "2", "--fpr", "0.1"]) == 0
+    capsys.readouterr()
+    assert main(["session", "new", "--model", "ph_t", "--session-id", "p1", "--artifacts-root", root]) == 0
+    capsys.readouterr()
+    assert main(["physics", "p1", "--artifacts-root", root, "--steps", "24", "--mu", "0.1"]) == 0
+    out = capsys.readouterr().out
+    assert "adaptive_mse" in out

@@ -160,3 +160,94 @@ def calibrate_from_runner(
 
 def log_only(cfg: HarnessConfig) -> HarnessConfig:
     return HarnessConfig.from_dict({**cfg.to_dict(), "log_only": True})
+
+
+# ---------------------------------------------------------------------- model-level entry point
+def calibrate_model(
+    store,
+    model_id: str,
+    *,
+    data_dir: str | None = None,
+    n_chunks: int = 256,
+    fisher_chunks: int = 64,
+    target_fpr: float = 0.01,
+    harness_cfg: HarnessConfig | None = None,
+    device: torch.device | str = "cpu",
+    seed: int = 0,
+    log=print,
+) -> Calibration:
+    """Build the canary suite (if absent), estimate the Fisher diagonal, and calibrate thresholds
+    for ``model_id`` on a benign stream: held-out windows for text (``data_dir/validation.bin``),
+    generated episodes for physics. Writes ``canary.json``, ``calibration.json``, ``fisher.pt``.
+    """
+    from plastic.data.physics import physics_batch
+    from plastic.data.text import TokenWindows
+    from plastic.harness.canary import CanarySuite
+    from plastic.harness.fisher import estimate_fisher_diag
+    from plastic.harness.transaction import TransactionRunner
+
+    device = torch.device(device)
+    cfg, model, _ = store.load_checkpoint(model_id, device)
+    model_dir = store.model_dir(model_id)
+    hcfg = log_only(harness_cfg or HarnessConfig(target_fpr=target_fpr))
+    L = cfg.chunk
+    canary_path = store.canary_path(model_id)
+    g = torch.Generator().manual_seed(int(seed))
+
+    if cfg.domain == "text":
+        if not data_dir:
+            raise ValueError("text calibration needs data_dir with validation.bin")
+        heldout_path = os.path.join(data_dir, "validation.bin")
+        if os.path.exists(canary_path):
+            suite = CanarySuite.load(canary_path)
+        else:
+            suite = CanarySuite.default_text(heldout_path, vocab_size=cfg.vocab_size, seed=seed)
+            suite.save(canary_path)
+        windows = TokenWindows(heldout_path, seq_len=L * 4)
+        canary_tokens = 3 * 128  # skip the region the coherence canaries were cut from
+
+        def stream():
+            # sessions of 4 chunks each, starting after the canary region, non-overlapping
+            start = canary_tokens
+            while True:
+                if start + L * 4 + 1 > len(windows):
+                    start = canary_tokens
+                seq = torch.from_numpy(windows.data[start : start + L * 4].astype("int64")).tolist()
+                start += L * 4
+                yield seq
+
+        def fisher_seqs():
+            for _ in range(fisher_chunks):
+                yield windows.sample(4, g)
+
+        log(f"[calibrate] {model_id}: text, {n_chunks} chunks from {heldout_path}")
+        fisher = estimate_fisher_diag(model, fisher_seqs(), chunk=L, n_chunks=fisher_chunks, device=device)
+    else:
+        if os.path.exists(canary_path):
+            suite = CanarySuite.load(canary_path)
+        else:
+            suite = CanarySuite.default_physics(seed=seed, steps=L)
+            suite.save(canary_path)
+
+        def stream():
+            while True:
+                b = physics_batch(1, seq_len=L * 4, episodes_per_seq=2, mu_range=(0.02, 0.25), nonlinear=False, action_std=0.5, rng=g)
+                yield (b.inputs[0], b.target_delta[0])
+
+        def fisher_seqs():
+            for _ in range(fisher_chunks):
+                b = physics_batch(4, seq_len=L * 4, episodes_per_seq=2, mu_range=(0.02, 0.25), nonlinear=False, action_std=0.5, rng=g)
+                yield (b.inputs, b.target_delta)
+
+        log(f"[calibrate] {model_id}: physics, {n_chunks} chunks of generated episodes")
+        fisher = estimate_fisher_diag(model, fisher_seqs(), chunk=L, n_chunks=fisher_chunks, device=device)
+
+    runner = TransactionRunner(model, cfg, hcfg, calibration=None, suite=suite, device=device)
+    cal = calibrate_from_runner(
+        runner, stream(), n_chunks=n_chunks, model_signature=store.model_signature(model_id),
+        target_fpr=target_fpr, fisher=fisher, reset_every=4,
+    )
+    cal.save(model_dir)
+    store.register_model(model_id, {"calibrated_at_unix": cal.created_at_unix, "calibration_chunks": cal.n_chunks})
+    log(f"[calibrate] thresholds: " + ", ".join(f"{k}={v:.4g}" for k, v in cal.thresholds.items()))
+    return cal

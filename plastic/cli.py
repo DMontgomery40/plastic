@@ -78,9 +78,15 @@ def cmd_train(args: argparse.Namespace) -> int:
     domain = args.domain
     vocab = None
     if domain == "text":
-        from plastic.data.text import load_corpus_meta
+        import os
 
-        vocab = load_corpus_meta(args.data).vocab_size
+        from plastic.data.text import load_corpus_meta
+        from plastic.tokenizer.bpe import Tokenizer
+
+        if os.path.exists(os.path.join(args.data, "meta.json")):
+            vocab = load_corpus_meta(args.data).vocab_size
+        else:
+            vocab = Tokenizer.load(os.path.join(args.data, "tokenizer.json")).vocab_size
     model_cfg = _model_cfg_from_args(args, domain=domain, vocab_size=vocab)
     cfg = TrainConfig(
         domain=domain,
@@ -137,6 +143,91 @@ def cmd_bench(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_calibrate(args: argparse.Namespace) -> int:
+    from plastic.harness.calibrate import calibrate_model
+    from plastic.store import ArtifactStore
+
+    store = ArtifactStore(args.artifacts_root)
+    cal = calibrate_model(
+        store, args.model_id, data_dir=args.data, n_chunks=args.chunks, fisher_chunks=args.fisher_chunks,
+        target_fpr=args.fpr, device=args.device, seed=args.seed,
+    )
+    print(json.dumps({"model_id": args.model_id, "n_chunks": cal.n_chunks, "thresholds": cal.thresholds}, indent=2))
+    return 0
+
+
+def _harness_from_args(args: argparse.Namespace):
+    from plastic.harness.config import HarnessConfig
+
+    d = json.loads(args.harness_json) if getattr(args, "harness_json", None) else {}
+    return HarnessConfig.from_dict({**HarnessConfig().to_dict(), **d})
+
+
+def cmd_session(args: argparse.Namespace) -> int:
+    from plastic.session.runner import Session
+    from plastic.store import ArtifactStore
+
+    store = ArtifactStore(args.artifacts_root)
+    if args.session_cmd == "new":
+        s = Session.create(store, model_id=args.model, harness_cfg=_harness_from_args(args), session_id=args.session_id, device=args.device)
+        print(s.session_id)
+        return 0
+    if args.session_cmd == "list":
+        for m in store.list_sessions():
+            print(
+                f"{m['session_id']:<32} {m.get('domain', '?'):<8} model={m.get('model_id')} parent={m.get('parent_session_id')} "
+                f"pos={m.get('pos', 0)} tx={m.get('n_transactions', 0)} commits={m.get('commits', 0)} rollbacks={m.get('rollbacks', 0)} "
+                f"read_only={m.get('read_only', False)}"
+            )
+        return 0
+    if args.session_cmd == "fork":
+        child = Session.open(store, args.parent, device=args.device).fork(args.child)
+        print(child)
+        return 0
+    if args.session_cmd == "reset":
+        Session.open(store, args.session_id, device=args.device).reset()
+        print(args.session_id)
+        return 0
+    if args.session_cmd == "resume":
+        Session.open(store, args.session_id, device=args.device).resume()
+        print(args.session_id)
+        return 0
+    if args.session_cmd == "show":
+        s = Session.open(store, args.session_id, device=args.device)
+        print(json.dumps(s.summary(), indent=2, default=str))
+        for t in store.read_transactions(args.session_id, limit=args.limit):
+            d = t["decision"]
+            sig = t["signals"]
+            print(f"#{t['index']:<4} {d['kind']:<9} pos {t['pos_start']}-{t['pos_end']} loss={sig['chunk_loss']:.3f} "
+                  f"delta={sig['delta_norm']:.4f} beta={sig['beta_mean']:.3f} {'; '.join(d['reasons'][:3])}")
+        return 0
+    raise ValueError(args.session_cmd)
+
+
+def cmd_chat(args: argparse.Namespace) -> int:
+    from plastic.session.runner import Session
+    from plastic.store import ArtifactStore
+
+    s = Session.open(ArtifactStore(args.artifacts_root), args.session_id, device=args.device)
+    r = s.chat(args.prompt, max_new_tokens=args.max_new_tokens, temperature=args.temperature, top_k=args.top_k, seed=args.seed)
+    print(r.completion)
+    for t in r.transactions:
+        d = t["decision"]
+        print(f"[tx #{t['index']} {d['kind']} pos {t['pos_start']}-{t['pos_end']} loss={t['signals']['chunk_loss']:.3f} "
+              f"delta={t['signals']['delta_norm']:.4f} {'; '.join(d['reasons'][:2])}]", file=sys.stderr)
+    return 0
+
+
+def cmd_physics(args: argparse.Namespace) -> int:
+    from plastic.session.runner import Session
+    from plastic.store import ArtifactStore
+
+    s = Session.open(ArtifactStore(args.artifacts_root), args.session_id, device=args.device)
+    r = s.physics_episode(steps=args.steps, mu=args.mu, seed=args.seed, nonlinear=args.nonlinear)
+    print(json.dumps({"mu": r.mu, "steps": r.steps, "means": r.means, "transactions": len(r.transactions)}, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="plastic", description="plastic: a tiny test-time-training state-space model with a transactional safety harness")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -175,6 +266,66 @@ def build_parser() -> argparse.ArgumentParser:
     bench = sub.add_parser("bench", help="throughput check")
     bench.add_argument("--device", default="auto")
     bench.set_defaults(fn=cmd_bench)
+
+    cal = sub.add_parser("calibrate", help="calibrate harness thresholds, Fisher, and canaries for a model")
+    cal.add_argument("model_id")
+    cal.add_argument("--artifacts-root", default="artifacts")
+    cal.add_argument("--data", default=None, help="text corpus dir with validation.bin")
+    cal.add_argument("--chunks", type=int, default=256)
+    cal.add_argument("--fisher-chunks", type=int, default=64)
+    cal.add_argument("--fpr", type=float, default=0.01)
+    cal.add_argument("--device", default="cpu")
+    cal.add_argument("--seed", type=int, default=0)
+    cal.set_defaults(fn=cmd_calibrate)
+
+    sess = sub.add_parser("session", help="create, list, fork, reset, show sessions").add_subparsers(dest="session_cmd", required=True)
+    new_ = sess.add_parser("new")
+    new_.add_argument("--model", required=True)
+    new_.add_argument("--session-id", default=None)
+    new_.add_argument("--harness-json", default=None, help="JSON object of HarnessConfig overrides")
+    for sp_ in (new_,):
+        sp_.add_argument("--artifacts-root", default="artifacts")
+        sp_.add_argument("--device", default="cpu")
+    sp_.set_defaults(fn=cmd_session)
+    ls = sess.add_parser("list")
+    ls.add_argument("--artifacts-root", default="artifacts")
+    ls.add_argument("--device", default="cpu")
+    ls.set_defaults(fn=cmd_session)
+    fk = sess.add_parser("fork")
+    fk.add_argument("parent")
+    fk.add_argument("child", nargs="?", default=None)
+    fk.add_argument("--artifacts-root", default="artifacts")
+    fk.add_argument("--device", default="cpu")
+    fk.set_defaults(fn=cmd_session)
+    for name in ("reset", "resume", "show"):
+        sp2 = sess.add_parser(name)
+        sp2.add_argument("session_id")
+        sp2.add_argument("--artifacts-root", default="artifacts")
+        sp2.add_argument("--device", default="cpu")
+        if name == "show":
+            sp2.add_argument("--limit", type=int, default=20)
+        sp2.set_defaults(fn=cmd_session)
+
+    chat = sub.add_parser("chat", help="chat in a text session (prompt tokens are learned through transactions)")
+    chat.add_argument("session_id")
+    chat.add_argument("prompt")
+    chat.add_argument("--artifacts-root", default="artifacts")
+    chat.add_argument("--device", default="cpu")
+    chat.add_argument("--max-new-tokens", type=int, default=128)
+    chat.add_argument("--temperature", type=float, default=0.9)
+    chat.add_argument("--top-k", type=int, default=50)
+    chat.add_argument("--seed", type=int, default=None)
+    chat.set_defaults(fn=cmd_chat)
+
+    phys = sub.add_parser("physics", help="run a hidden-mu episode in a physics session")
+    phys.add_argument("session_id")
+    phys.add_argument("--artifacts-root", default="artifacts")
+    phys.add_argument("--device", default="cpu")
+    phys.add_argument("--steps", type=int, default=256)
+    phys.add_argument("--mu", type=float, default=0.12)
+    phys.add_argument("--seed", type=int, default=0)
+    phys.add_argument("--nonlinear", action="store_true")
+    phys.set_defaults(fn=cmd_physics)
     return p
 
 
