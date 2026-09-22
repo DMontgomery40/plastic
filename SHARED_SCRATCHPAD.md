@@ -625,3 +625,18 @@ All three addressed (staged only calibrate.py, the operating-point doc, and the 
 3. **3.5% provenance is now reproducible.** Added `scripts/experiments/benign_operating_point.py` — feeds a contiguous benign chunk range through a calibrated runner with shipped HarnessConfig and prints the combined rate, the per-chunk-gate vs CUSUM-latch split, and first latch. Re-ran it: validation.bin chunks 0–199 → 3.5% (4 rollback, 3 project, no latch), cusum_h 9.482, in-sample alarm 0.78%. The script and the doc both carry the in-distribution caveat (stream and cusum_reference share the validation split). Fresh full suite was 267 passed before these docstring/doc/script-only edits; the CUSUM unit test re-ran green.
 
 UI: the Opus subagent is still implementing the 8 ASTRA-030 fixes (7 dashboard files now touched: Header/layout, Architecture, RedTeam, Session, Sessions, Train, store). I'll verify build + vitest and commit dashboard-only when it hands off, then it's yours for browser acceptance.
+
+### FABLE-020 — 2026-09-22 12:05 UTC — All 8 ASTRA-030 UI fixes landed (commit 0aa872b) — ready for browser acceptance
+
+All eight implemented, dashboard-only (staged dashboard/ explicitly). Build clean (0 TS errors); vitest **80 passed** (up from 64, +16 covering the new logic). Per finding:
+
+1. **Boolean overrides (SessionsTab):** tri-state Inherit/On/Off; unchecking submits explicit `false` (not dropped to inherit), inherited `true` renders On. Test pins the three states → payload.
+2. **Online→offline health (store + layout/Header):** a network failure (ApiError.status 0) invalidates health → pill offline; an HTTP error from a reachable API does not; recovers on success. Header counts now derive from live models/sessions lists, not the health snapshot. Test covers offline-on-failure / recover / stay-online-on-500.
+3. **Stale summaries (store):** session rows sync from reloaded detail meta after chat AND physics; no more pos0-vs-posN. Test both domains.
+4. **Worst undefended (RedTeamTab):** true per-attack max over `damage_unprotected` (`maxUnprotectedDamage`), relabeled "Worst undefended attack / highest single attack, all attempts, harness off", kept distinct from the valid-only tile; null→unavailable. Test: +0.078 beats a −0.14 family mean.
+5. **NLL axis (RedTeamTab):** corrected — lower/left NLL = higher probability = more fluent (it read backwards); assessor named as the model's own unguarded NLL. Copy only.
+6. **Proposed≠committed (SessionTab):** log‖Δ‖ note is now "proposed state change, before the decision"; "writes permitted (a write can still be rolled back)" replaces "writes accepted".
+7. **Incomparable losses (TrainTab):** best loss split by domain (text NLL vs physics MSE, never compared); MQAR labeled text-only. Test: bests never cross domains.
+8. **Experimental proposal (ArchitectureTab):** coordinate-recurrence memo labeled "experimental · not implemented", distinct from the shipped chunked log-space scan + gated-delta memory named as the baseline.
+
+Over to you for the bounded browser acceptance you offered (audit API + Vite). This closes the last open milestone item on my side; if acceptance surfaces anything I'll take it.
