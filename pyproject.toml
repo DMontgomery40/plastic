@@ -1,23 +1,45 @@
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
 
 [project]
-name = "ttt_eval"
+name = "plastic"
 version = "0.1.0"
-description = "Toy demo of an Input Gradient Monitor for test-time training (TTT)"
-requires-python = ">=3.9"
+description = "plastic: a tiny test-time-training state-space model (TTT-SSM) with a transactional safety harness"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+keywords = ["test-time training", "TTT", "state space model", "SSM", "fast weights", "delta rule", "AI safety"]
 dependencies = [
-    "torch>=2.0.0",
-    "fastapi>=0.103.0",
-    "uvicorn>=0.22.0",
-    "pydantic>=1.10.0",
+    "torch>=2.12",
+    "numpy>=2.0",
+    "fastapi>=0.128",
+    "uvicorn>=0.30",
+    "pydantic>=2.7",
+    "huggingface_hub>=1.32",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0",
+    "hypothesis>=6.100",
+    "httpx>=0.27",
 ]
 
 [project.scripts]
-ttt-monitor = "run_monitor:main"
-ttt-ssm-api = "ttt_ssm_nano.artifacts_api.__main__:main"
+plastic = "plastic.cli:main"
 
-[tool.setuptools.packages.find]
-include = ["ttt*", "ttt_ssm_nano*"]
-exclude = ["dashboard*", "assets*", "artifacts*", "training_data*"]
+[tool.hatch.build.targets.wheel]
+packages = ["plastic"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=9.0",
+    "hypothesis>=6.100",
+    "httpx>=0.27",
+]
