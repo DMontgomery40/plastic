@@ -334,26 +334,38 @@ def _check_criterion(report: dict[str, Any], *, elig_max: float = 0.10, readonly
     return out
 
 
-def _screen_verdict(*, fit_complete: bool, report: dict[str, Any], followups: dict[str, Any], verdict: dict[str, Any]) -> dict[str, Any]:
+def _screen_verdict(*, fit_complete: bool, report: dict[str, Any], followups: dict[str, Any], verdict: dict[str, Any],
+                    run_provenance: dict[str, Any]) -> dict[str, Any]:
     """Separate COMPLETION (did all requested work run?) from PASS (the eval criterion plus the
     follow-up smoke). The follow-up ``all_ok`` is a quality result, not a completeness measure: a
     fully-run screen whose follow-ups flagged read-only turns is COMPLETE but not a pass — a distinct
     statement from a screen that did not finish. ``complete`` requires the fit, both eval regimes AND
-    the follow-ups to have RUN (not skipped, not deadline-cut); ``pass`` additionally requires the
-    criterion (``verdict['pass']`` already folds in validity and eval-completeness) and follow-up
-    ``all_ok``. Follow-ups skipped for a missing fixture leaves ``followups_ok`` null, never False."""
+    the DECLARED follow-ups to have RUN (not skipped, not deadline-cut, and the executed fixture bytes
+    are the ones pinned when the run was created); ``pass`` additionally requires the criterion
+    (``verdict['pass']`` already folds in validity and eval-completeness) and follow-up ``all_ok``.
+    Follow-ups skipped for a missing fixture, or run from a different fixture than the declared one,
+    leave ``followups_ok`` null -- never implying the predeclared fixture passed (ASTRA-109).
+    ``run_provenance`` (``_run_provenance_check``) gates VALIDITY: a screen whose invocations do not
+    share one clean, identified source is kept as evidence but is not a valid fixed screen and cannot
+    pass; completion is unaffected (the work did run)."""
     eval_complete = bool(report["fresh"]["complete"] and report["carried"]["complete"])
     skipped = bool(followups.get("skipped"))
-    followups_ran = (not skipped) and (not followups.get("incomplete"))
-    followups_ok = None if skipped else bool(followups.get("all_ok"))
+    declared = followups.get("fixture_is_declared") is True
+    followups_ran = (not skipped) and (not followups.get("incomplete")) and declared
+    followups_ok = None if (skipped or not declared) else bool(followups.get("all_ok"))
+    provenance_ok = run_provenance.get("ok") is True
     complete = bool(fit_complete and eval_complete and followups_ran)
-    passed = bool(verdict.get("pass") and complete and (followups_ok is True))
+    passed = bool(verdict.get("pass") and complete and (followups_ok is True) and provenance_ok)
     return {
         "fit_complete": bool(fit_complete),
         "eval_complete": {"fresh": bool(report["fresh"]["complete"]), "carried": bool(report["carried"]["complete"])},
         "followups_ran": followups_ran,
         "followups_ok": followups_ok,
-        "valid": bool(verdict.get("valid")),
+        "followups_fixture_sha256": followups.get("fixture_sha256"),
+        "followups_fixture_is_declared": declared,
+        "provenance_ok": provenance_ok,
+        "provenance_reasons": list(run_provenance.get("reasons") or []),
+        "valid": bool(verdict.get("valid")) and provenance_ok,
         "pass": passed,
         "complete": complete,
     }
@@ -379,7 +391,7 @@ def _settings_identity(args: Any, checkpoint_digest: str, revision: str, exclusi
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
 
-def _write_json(path: str, obj: dict[str, Any]) -> None:
+def _write_json(path: str, obj: Any) -> None:
     tmp = f"{path}.tmp.{os.getpid()}"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(obj, f, indent=2)
@@ -392,8 +404,9 @@ _CODE_PATHS = ("plastic", "scripts", "pyproject.toml", "uv.lock")
 
 
 def _invocation_provenance(device: str) -> dict[str, Any]:
-    """What produced the sessions THIS invocation appends: the code commit, whether the tracked source
-    under ``_CODE_PATHS`` differs from it, the torch/transformers versions and the device. It is
+    """What produced the sessions THIS invocation appends: the code commit, whether the source under
+    ``_CODE_PATHS`` differs from it (modified or untracked, not ignored), the torch/transformers
+    versions and the device. It is
     RECORDED per session and warned about on resume, not bound into the eval identity: the identity
     already binds the content/config/calibration/policy (and the settings identity binds the device),
     while a multi-invocation eval may legitimately span a commit that only touched unrelated files --
@@ -407,7 +420,7 @@ def _invocation_provenance(device: str) -> dict[str, Any]:
         except Exception:
             return None
 
-    status = _git("status", "--porcelain", "--untracked-files=no", "--", *_CODE_PATHS)
+    status = _git("status", "--porcelain", "--untracked-files=all", "--", *_CODE_PATHS)
     versions: dict[str, str | None] = {}
     for mod in ("torch", "transformers"):
         try:
@@ -435,6 +448,61 @@ def _eval_provenances(report: dict[str, Any]) -> list[dict[str, Any]]:
                 out.append({"provenance": p, "sessions": {"fresh": 0, "carried": 0}})
             out[index[key]]["sessions"][regime] += 1
     return out
+
+
+def _record_invocation(out_dir: str, provenance: dict[str, Any], mode: str) -> list[dict[str, Any]]:
+    """Append THIS invocation to the run's invocation record (``invocations.json``, rewritten atomically)
+    and return every invocation recorded for the run. Calibration and eval both resume across
+    invocations, so this -- not the per-session stamps alone -- is what shows whether every
+    continuation came from one pinned source (ASTRA-109). An unreadable record is refused, preserved."""
+    path = os.path.join(out_dir, "invocations.json")
+    invocations: Any = []
+    if os.path.exists(path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                invocations = json.load(f)
+        except Exception as e:
+            raise RunConflict(f"{path} is unreadable ({e}); refusing to continue without this run's invocation record.")
+        if not isinstance(invocations, list):
+            raise RunConflict(f"{path} is not a list of invocations; refusing to continue without this run's invocation record.")
+    invocations.append({"t_unix": int(time.time()), "mode": mode, "provenance": provenance})
+    _write_json(path, invocations)
+    return invocations
+
+
+def _run_provenance_check(invocations: list[dict[str, Any]]) -> dict[str, Any]:
+    """Whether a run's invocations share ONE clean, identified source, as a fixed screen requires for
+    every continuation (ASTRA-109). More than one distinct provenance, a modified or untracked code
+    path (a dirty flag is not a content identity), an unknown commit, or a missing provenance makes the
+    result NOT a valid fixed screen: its evidence is kept and marked incompatible pending a reviewed
+    migration, never silently pooled. Returns ``{"ok", "reasons", "distinct"}``."""
+    distinct: list[Any] = []
+    for inv in invocations:
+        p = inv.get("provenance") if isinstance(inv, dict) else None
+        if p not in distinct:
+            distinct.append(p)
+    reasons: list[str] = []
+    if not distinct:
+        reasons.append("no invocation recorded")
+    if len(distinct) > 1:
+        reasons.append(f"{len(distinct)} distinct invocation provenances (mixed source or runtime)")
+    for p in distinct:
+        if not isinstance(p, dict):
+            reasons.append("an invocation has no recorded provenance")
+            continue
+        if p.get("code_commit") in (None, "unknown"):
+            reasons.append("an invocation's code commit is unknown")
+        if p.get("code_dirty") is not False:
+            reasons.append(f"source at {p.get('code_commit')} was not clean (code_dirty={p.get('code_dirty')}); "
+                           f"a dirty flag is not a content identity")
+    return {"ok": not reasons, "reasons": reasons, "distinct": distinct}
+
+
+def _file_sha256(path: str) -> str | None:
+    if not path or not os.path.exists(path):
+        return None
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
 
 
 def _split_identity(split: dict[str, list[dict[str, Any]]]) -> str:
@@ -669,25 +737,28 @@ def _load_eval_progress(path: str, identity: str, *, log=print,
     return restore
 
 
-def _run_followups(backend, cfg, calibration, gen, seed0, fixture_path, hcfg, deadline, *, _runner=None, _drive=None, _fixture=None):
+def _run_followups(backend, cfg, calibration, gen, seed0, fixture_path, hcfg, deadline, *, declared_sha256=None,
+                   _runner=None, _drive=None, _fixture=None):
     """Run the predeclared multi-turn follow-up sessions (never fit/tuned on). Each turn must complete
     without exception or nonfinite state and must not be entirely read-only; saved answers are for
     textual review, reported separately from any rate. Returns per-session outcomes + an all_ok flag,
     and the fixture path, the SHA-256 of the fixture bytes actually read (of its canonical JSON when
     injected) and the seed base, so the rerun-wholesale follow-up result names exactly what it ran
-    (ASTRA-106 condition 1). ``_runner``/``_drive``/``_fixture`` allow a fake runner/drive/fixture for tests."""
+    (ASTRA-106 condition 1); ``fixture_is_declared`` says whether those bytes are the fixture pinned
+    when the run was created (``declared_sha256``), and requested/completed session and turn counts
+    are kept (ASTRA-109). ``_runner``/``_drive``/``_fixture`` allow a fake runner/drive/fixture for tests."""
     import torch
 
     from plastic.harness.calibrate import summarize_operating_point
 
     if _drive is None:
         from plastic.session.runner import drive_chat_turn as _drive
-    ident = {"fixture_path": fixture_path, "seed0": int(seed0)}
+    ident: dict[str, Any] = {"fixture_path": fixture_path, "seed0": int(seed0), "declared_fixture_sha256": declared_sha256}
     if _fixture is not None:
         fixture = _fixture
         ident["fixture_sha256"] = hashlib.sha256(json.dumps(_fixture, sort_keys=True).encode("utf-8")).hexdigest()
     elif not os.path.exists(fixture_path):
-        return {"skipped": "fixture missing", "path": fixture_path, **ident, "fixture_sha256": None}
+        return {"skipped": "fixture missing", "path": fixture_path, **ident, "fixture_sha256": None, "fixture_is_declared": False}
     else:
         with open(fixture_path, "rb") as f:
             raw = f.read()
@@ -702,7 +773,11 @@ def _run_followups(backend, cfg, calibration, gen, seed0, fixture_path, hcfg, de
         tok = None
     runner, drive_chat_turn = _runner, _drive
 
-    out = {"purpose": fixture.get("purpose", ""), **ident, "sessions": []}
+    ident["fixture_is_declared"] = declared_sha256 is not None and ident["fixture_sha256"] == declared_sha256
+    requested = fixture.get("sessions", [])
+    out = {"purpose": fixture.get("purpose", ""), **ident,
+           "n_sessions_requested": len(requested), "n_turns_requested": sum(len(x["turns"]) for x in requested),
+           "sessions": []}
     salt = 0
     for sess in fixture.get("sessions", []):
         if time.time() > deadline:
@@ -729,6 +804,8 @@ def _run_followups(backend, cfg, calibration, gen, seed0, fixture_path, hcfg, de
                           "all_readonly": all_readonly, "finite": finite, "ok": turn_ok})
             salt += 1
         out["sessions"].append({"id": sess.get("id"), "ok": session_ok, "turns": turns})
+    out["n_sessions_completed"] = len(out["sessions"])
+    out["n_turns_completed"] = sum(len(x["turns"]) for x in out["sessions"])
     out["all_ok"] = bool(out["sessions"]) and all(s["ok"] for s in out["sessions"]) and not out.get("incomplete")
     return out
 
@@ -788,7 +865,10 @@ def main() -> None:
     provenance = _invocation_provenance(args.device)
     manifest.update({"dataset": "databricks/databricks-dolly-15k", "revision": revision,
                      "checkpoint_digest": _checkpoint_digest(args.checkpoint), "smoke": args.smoke,
-                     "code_commit": provenance["code_commit"], "settings": vars(args), "exclusions": exclusion_report})
+                     "code_commit": provenance["code_commit"], "settings": vars(args), "exclusions": exclusion_report,
+                     # the follow-up fixture bytes DECLARED when the run is created; a later different file
+                     # is a different follow-up attempt and never counts as the declared one (ASTRA-109)
+                     "followups_fixture": {"path": args.followups, "sha256": _file_sha256(args.followups)}})
     del be_for_tok
     # reuse an existing run's model id + immutable manifest when the configuration matches, and refuse
     # (never overwrite) when it differs, BEFORE any run-artifact write (ASTRA-092 manifest preservation)
@@ -798,6 +878,7 @@ def main() -> None:
         # on resume this restores the exact ordered split from the pinned manifest (not the rebuild),
         # so completed fit prompts can never enter a resumed evaluation
         mode, mid, manifest, split = _reconcile_run(args.out, manifest, split, settings_identity, lambda: store.new_model_id("qwen"))
+        invocations = _record_invocation(args.out, provenance, mode)
     except RunConflict as err:
         print(f"[oppoint] run conflict: {err}")
         return
@@ -874,20 +955,23 @@ def main() -> None:
         return
 
     # predeclared follow-up smoke (separate from Dolly; never fit/tuned on)
-    followups = _run_followups(eval_backend, eval_cfg, cal, gen, seed + 4000, args.followups, eval_hcfg, deadline)
+    followups = _run_followups(eval_backend, eval_cfg, cal, gen, seed + 4000, args.followups, eval_hcfg, deadline,
+                               declared_sha256=(manifest.get("followups_fixture") or {}).get("sha256"))
     followups["provenance"] = provenance  # follow-ups rerun wholesale, so one invocation produced them all
     _write_json(os.path.join(args.out, "followups-result.json"), followups)
 
     verdict = _check_criterion(report)
-    v = _screen_verdict(fit_complete=bool(fit_meta["calibration_fit_complete"]), report=report, followups=followups, verdict=verdict)
+    run_provenance = _run_provenance_check(invocations)
+    v = _screen_verdict(fit_complete=bool(fit_meta["calibration_fit_complete"]), report=report, followups=followups,
+                        verdict=verdict, run_provenance=run_provenance)
     eval_provenances = _eval_provenances(report)
     result = {"thresholds": cal.thresholds, "criterion": verdict, "settings": vars(args), "seeds_base": seed, **v,
               "dev_split": "unused (reserved for pre-freeze changes only)",
-              "provenance": {"this_invocation": provenance, "eval_sessions": eval_provenances,
+              "provenance": {"this_invocation": provenance, "run": run_provenance, "eval_sessions": eval_provenances,
                              "eval_spans_multiple": len(eval_provenances) > 1}}
     _write_json(os.path.join(args.out, "screen-result.json"), result)
-    if len(eval_provenances) > 1:
-        print(f"[oppoint] NOTE: the eval sessions span {len(eval_provenances)} invocation provenances; see screen-result.json")
+    if not run_provenance["ok"]:
+        print(f"[oppoint] NOT a valid fixed screen (kept as evidence): {'; '.join(run_provenance['reasons'])}")
     print(f"[oppoint] pass={v['pass']} valid={v['valid']} complete={v['complete']} "
           f"(fit={v['fit_complete']}, eval={v['eval_complete']}, followups_ran={v['followups_ran']}, followups_ok={v['followups_ok']})")
     print(f"[oppoint] artifacts in {args.out}")

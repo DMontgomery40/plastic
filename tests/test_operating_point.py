@@ -235,6 +235,14 @@ def _rep(fresh, carried):
     return {"fresh": {"complete": fresh}, "carried": {"complete": carried}}
 
 
+_PROV_OK = {"ok": True, "reasons": [], "distinct": []}
+
+
+def _fu(**kw):
+    """Follow-up output that ran the DECLARED fixture unless overridden."""
+    return {"fixture_is_declared": True, "fixture_sha256": "fx", **kw}
+
+
 def test_screen_verdict_separates_completion_from_pass():
     # ASTRA-092: `complete` means all requested work RAN (fit + both eval regimes + follow-ups, not
     # skipped/deadline-cut); the follow-up all_ok is a quality result folded into PASS, not completion.
@@ -242,33 +250,60 @@ def test_screen_verdict_separates_completion_from_pass():
 
     ok_v = {"valid": True, "pass": True}
 
+    def sv(**kw):
+        return _screen_verdict(**{"fit_complete": True, "report": _rep(True, True), "verdict": ok_v, "run_provenance": _PROV_OK, **kw})
+
     # everything ran and passed
-    v = _screen_verdict(fit_complete=True, report=_rep(True, True), followups={"all_ok": True}, verdict=ok_v)
-    assert v["complete"] is True and v["pass"] is True and v["followups_ok"] is True
+    v = sv(followups=_fu(all_ok=True))
+    assert v["complete"] is True and v["pass"] is True and v["followups_ok"] is True and v["valid"] is True
 
     # KEY separation: fully RAN but follow-ups flagged read-only turns -> complete, NOT pass
-    v = _screen_verdict(fit_complete=True, report=_rep(True, True), followups={"all_ok": False}, verdict=ok_v)
+    v = sv(followups=_fu(all_ok=False))
     assert v["complete"] is True and v["followups_ran"] is True and v["followups_ok"] is False and v["pass"] is False
 
     # follow-ups skipped (missing fixture): followups_ok null (never False), not complete
-    v = _screen_verdict(fit_complete=True, report=_rep(True, True), followups={"skipped": "fixture missing"}, verdict=ok_v)
+    v = sv(followups={"skipped": "fixture missing", "fixture_is_declared": False})
     assert v["followups_ok"] is None and v["followups_ran"] is False and v["complete"] is False and v["pass"] is False
 
     # follow-ups deadline-cut: ran but incomplete -> not complete
-    v = _screen_verdict(fit_complete=True, report=_rep(True, True), followups={"all_ok": False, "incomplete": True}, verdict=ok_v)
+    v = sv(followups=_fu(all_ok=False, incomplete=True))
     assert v["followups_ran"] is False and v["complete"] is False and v["pass"] is False
 
     # an incomplete eval regime -> not complete regardless of follow-ups
-    v = _screen_verdict(fit_complete=True, report=_rep(True, False), followups={"all_ok": True}, verdict=ok_v)
+    v = sv(report=_rep(True, False), followups=_fu(all_ok=True))
     assert v["complete"] is False and v["pass"] is False
 
     # everything ran but the criterion failed -> complete, not pass
-    v = _screen_verdict(fit_complete=True, report=_rep(True, True), followups={"all_ok": True}, verdict={"valid": True, "pass": False})
+    v = sv(followups=_fu(all_ok=True), verdict={"valid": True, "pass": False})
     assert v["complete"] is True and v["pass"] is False
 
     # fit incomplete -> not complete
-    v = _screen_verdict(fit_complete=False, report=_rep(True, True), followups={"all_ok": True}, verdict=ok_v)
+    v = sv(fit_complete=False, followups=_fu(all_ok=True))
     assert v["complete"] is False
+
+
+def test_screen_verdict_never_credits_an_undeclared_fixture_or_mixed_provenance():
+    # ASTRA-109: a DIFFERENT fixture than the one declared at run creation is a different follow-up
+    # attempt -- its all_ok never reads as the declared fixture passing; and a run whose invocations do
+    # not share one clean identified source is kept (complete) but is not a VALID fixed screen
+    from scripts.experiments.qwen_operating_point import _screen_verdict
+    ok_v = {"valid": True, "pass": True}
+
+    v = _screen_verdict(fit_complete=True, report=_rep(True, True), verdict=ok_v, run_provenance=_PROV_OK,
+                        followups=_fu(all_ok=True, fixture_is_declared=False, fixture_sha256="other"))
+    assert v["followups_ok"] is None and v["followups_ran"] is False
+    assert v["complete"] is False and v["pass"] is False
+    assert (v["followups_fixture_sha256"], v["followups_fixture_is_declared"]) == ("other", False)
+    # a follow-up output missing the declaration flag is never assumed declared
+    v = _screen_verdict(fit_complete=True, report=_rep(True, True), verdict=ok_v, run_provenance=_PROV_OK,
+                        followups={"all_ok": True})
+    assert v["followups_ok"] is None and v["pass"] is False
+
+    bad = {"ok": False, "reasons": ["2 distinct invocation provenances (mixed source or runtime)"], "distinct": []}
+    v = _screen_verdict(fit_complete=True, report=_rep(True, True), verdict=ok_v, run_provenance=bad, followups=_fu(all_ok=True))
+    assert v["complete"] is True                    # the work ran ...
+    assert v["valid"] is False and v["pass"] is False and v["provenance_ok"] is False  # ... but is not a valid fixed screen
+    assert v["provenance_reasons"] == bad["reasons"]
 
 
 def _fake_args(**over):
@@ -841,24 +876,79 @@ def test_invocation_provenance_records_code_dependencies_and_device():
 
 
 def test_followups_record_fixture_identity_and_seed(tmp_path):
-    # ASTRA-106 condition 1: the wholesale-rerun follow-up result names the exact fixture BYTES it ran
-    # (path + sha256) and its seed base; a missing fixture is skipped yet still names path and seed
-    from scripts.experiments.qwen_operating_point import _run_followups
-    fixture = {"purpose": "p", "sessions": [{"id": "s0", "turns": ["a"]}]}
+    # ASTRA-106 condition 1 / ASTRA-109: the wholesale-rerun follow-up result names the exact fixture
+    # BYTES it ran (path + sha256), its seed base, whether those bytes are the fixture DECLARED at run
+    # creation, and requested/completed session+turn counts; a missing fixture is skipped yet still
+    # names path and seed and is never the declared fixture
+    from scripts.experiments.qwen_operating_point import _file_sha256, _run_followups
+    fixture = {"purpose": "p", "sessions": [{"id": "s0", "turns": ["a", "b"]}, {"id": "s1", "turns": ["c"]}]}
     fp = tmp_path / "followups.json"
     raw = _json.dumps(fixture).encode("utf-8")
     fp.write_bytes(raw)
+    declared = _file_sha256(str(fp))
+    assert declared == _hashlib.sha256(raw).hexdigest() and _file_sha256(str(tmp_path / "absent.json")) is None
 
-    def run(path):
+    def run(path, **kw):
         return _run_followups(None, None, None, _gen_settings(), 4242, str(path), None, deadline=1e18,
-                              _runner=_FakeRunner(["commit"] * 4), _drive=_fake_drive)
+                              _runner=_FakeRunner(["commit"] * 8), _drive=_fake_drive, **kw)
 
-    out = run(fp)
+    out = run(fp, declared_sha256=declared)
     assert (out["fixture_path"], out["seed0"], out["all_ok"]) == (str(fp), 4242, True)
-    assert out["fixture_sha256"] == _hashlib.sha256(raw).hexdigest()
-    fp.write_bytes(_json.dumps({**fixture, "purpose": "edited"}).encode("utf-8"))
-    assert run(fp)["fixture_sha256"] != out["fixture_sha256"]  # an edited fixture is a different run
+    assert out["fixture_sha256"] == declared and out["fixture_is_declared"] is True
+    assert (out["n_sessions_requested"], out["n_sessions_completed"], out["n_turns_requested"], out["n_turns_completed"]) == (2, 2, 3, 3)
+    assert run(fp)["fixture_is_declared"] is False  # nothing declared at run creation -> never "the declared one"
 
-    miss = run(tmp_path / "absent.json")
-    assert miss["skipped"] and miss["fixture_sha256"] is None
+    fp.write_bytes(_json.dumps({**fixture, "purpose": "edited"}).encode("utf-8"))
+    edited = run(fp, declared_sha256=declared)
+    assert edited["fixture_sha256"] != declared and edited["fixture_is_declared"] is False  # a different attempt
+
+    miss = run(tmp_path / "absent.json", declared_sha256=declared)
+    assert miss["skipped"] and miss["fixture_sha256"] is None and miss["fixture_is_declared"] is False
     assert (miss["fixture_path"], miss["seed0"]) == (str(tmp_path / "absent.json"), 4242)
+
+
+def test_followups_deadline_keeps_requested_vs_completed_accounting():
+    from scripts.experiments.qwen_operating_point import _run_followups
+    fixture = {"sessions": [{"id": f"s{i}", "turns": ["a", "b"]} for i in range(3)]}
+    out = _run_followups(None, None, None, _gen_settings(), 0, "unused", None, deadline=-1.0,
+                         _runner=_FakeRunner(["commit"] * 8), _drive=_fake_drive, _fixture=fixture)
+    assert out["incomplete"] is True and out["all_ok"] is False
+    assert (out["n_sessions_requested"], out["n_sessions_completed"], out["n_turns_requested"], out["n_turns_completed"]) == (3, 0, 6, 0)
+
+
+def _inv(commit="a" * 40, dirty=False, **extra):
+    return {"t_unix": 0, "mode": "resume", "provenance": {**_prov(commit), "code_dirty": dirty, **extra}}
+
+
+@_pytest.mark.parametrize("invocations, ok, reason", [
+    ([_inv()], True, None),
+    ([_inv(), _inv()], True, None),                                   # continuations from ONE clean source
+    ([_inv(), _inv(commit="b" * 40)], False, "distinct invocation provenances"),
+    ([_inv(), _inv(torch="other")], False, "distinct invocation provenances"),  # runtime change
+    ([_inv(dirty=True)], False, "not a content identity"),
+    ([_inv(dirty=None)], False, "not a content identity"),           # unknown tree state is not clean
+    ([_inv(commit="unknown")], False, "commit is unknown"),
+    ([{"t_unix": 0, "mode": "fresh", "provenance": None}], False, "no recorded provenance"),
+    ([], False, "no invocation recorded"),
+])
+def test_run_provenance_check_requires_one_clean_identified_source(invocations, ok, reason):
+    from scripts.experiments.qwen_operating_point import _run_provenance_check
+    out = _run_provenance_check(invocations)
+    assert out["ok"] is ok
+    if reason is not None:
+        assert any(reason in r for r in out["reasons"]), out["reasons"]
+
+
+def test_record_invocation_accumulates_atomically_and_refuses_unreadable(tmp_path):
+    from scripts.experiments.qwen_operating_point import RunConflict, _record_invocation
+    first = _record_invocation(str(tmp_path), _prov("a"), "fresh")
+    both = _record_invocation(str(tmp_path), _prov("b"), "resume")
+    assert [i["mode"] for i in first] == ["fresh"]
+    assert [(i["mode"], i["provenance"]["code_commit"]) for i in both] == [("fresh", "a"), ("resume", "b")]
+    assert sorted(_os.listdir(tmp_path)) == ["invocations.json"]  # atomic rewrite leaves no temp behind
+
+    path = tmp_path / "invocations.json"
+    path.write_text('[{"mode": "fresh"', encoding="utf-8")  # damaged: refused, preserved
+    with _pytest.raises(RunConflict):
+        _record_invocation(str(tmp_path), _prov("c"), "resume")
+    assert path.read_text(encoding="utf-8") == '[{"mode": "fresh"'
