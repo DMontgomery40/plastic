@@ -88,45 +88,23 @@ describe('calibrationView', () => {
 });
 
 describe('generationLearningCopy', () => {
-  it('write-eligible generation is described as eligible/attempted, not guaranteed learning', () => {
-    // ASTRA-101: the EFFECTIVE write policy -- Qwen generation is write-eligible even with
-    // learn_from_generation off -- and eligibility is not retained learning.
-    const on = generationLearningCopy(true, false);
-    expect(on).toMatch(/generated tokens/i);
-    expect(on).toMatch(/write-eligible/i);
-    expect(on).toMatch(/closure/i);
-    expect(on).toMatch(/rolled back|not guaranteed retained/i); // eligible != retained learning
-    expect(on).not.toMatch(/read-only by default/i);
-    expect(on).not.toMatch(/\blearned\b(?! )/i); // avoid claiming plain "learned"
+  it.each([true, false, null, undefined])('read-only overrides capability %s', (capability) => {
+    expect(generationLearningCopy(capability, true)).toBe('Read-only session: no memory writes.');
   });
 
-  it('generation that is not write-eligible reads read-only, not learned', () => {
-    const off = generationLearningCopy(false, false);
-    expect(off).toMatch(/read-only/i);
-    expect(off).toMatch(/not write-eligible/i);
-    expect(off).not.toMatch(/read-only by default/i);
+  it.each([null, undefined])('does not infer a missing capability %s', (capability) => {
+    expect(generationLearningCopy(capability, false)).toBe('Write policy unavailable.');
   });
 
-  it('a read-only session says no chunk writes', () => {
-    const ro = generationLearningCopy(true, true);
-    expect(ro).toMatch(/read-only/i);
-    expect(ro).toMatch(/no chunk writes/i);
+  it('distinguishes generated-token write eligibility', () => {
+    expect(generationLearningCopy(true, false)).toBe('Memory writes enabled for prompts and generated tokens.');
+    expect(generationLearningCopy(false, false)).toBe('Memory writes enabled for prompts; generated tokens are read-only.');
   });
 
-  it('an unknown/loading effective policy is not asserted, and never affirms eligibility', () => {
-    for (const v of [undefined, null]) {
-      const copy = generationLearningCopy(v, false);
-      expect(copy).toMatch(/not available yet/i);
-      expect(copy).not.toMatch(/not write-eligible/i); // do not claim a policy we do not have
-      expect(copy).not.toMatch(/write-eligible/i); // and do not affirm prompt eligibility either
+  it.each([true, false, null, undefined])('does not promise intervention or retained learning for capability %s', (capability) => {
+    for (const readOnly of [true, false]) {
+      expect(generationLearningCopy(capability, readOnly)).not.toMatch(/rolled back|scaled|guaranteed|learned/i);
     }
-  });
-
-  it('a KNOWN read-only latch wins over an unknown capability (ASTRA-104)', () => {
-    // missing capability + read_only=True must honor the latch, not affirm write-eligibility
-    const copy = generationLearningCopy(undefined, true);
-    expect(copy).toMatch(/read-only/i);
-    expect(copy).not.toMatch(/write-eligible/i);
   });
 });
 

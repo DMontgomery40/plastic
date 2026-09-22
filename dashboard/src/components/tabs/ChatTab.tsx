@@ -25,8 +25,7 @@ export function ChatTab() {
     return (
       <Empty
         title="No text session."
-        detail="Chat runs the prompt through the harness one chunk at a time, so it needs a session on a text model."
-        command={'uv run plastic train text --data artifacts/data/wikitext --steps 3000 --device mps\nuv run plastic session new --model <model_id>'}
+        detail="Choose or create a text session to start chatting."
       />
     );
   }
@@ -71,7 +70,7 @@ export function ChatTab() {
             id="chat-prompt"
             className="h-28 w-full rounded border border-edge bg-surface-overlay px-3 py-2 text-base text-ink-primary placeholder:text-ink-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             value={prompt}
-            placeholder="Type a prompt. Every chunk boundary inside it produces one transaction."
+            placeholder="Type a message."
             onChange={(e) => setPrompt(e.target.value)}
           />
           <div className="mt-3 flex items-center gap-3">
@@ -110,10 +109,7 @@ export function ChatTab() {
                       },
                     ]}
                   />
-                  <p className="mt-1 text-sm text-ink-secondary">
-                    Intervention rates use the eligible denominator per source. A read-only or ineligible chunk is not an
-                    intervention and not evidence of a damaging update.
-                  </p>
+
                 </div>
               ) : null}
               {chatResult.transactions.length === 0 ? (
@@ -165,8 +161,7 @@ export function ChatTab() {
         ) : (
           <Empty
             title="No turn in this view yet."
-            detail="Send a prompt above, or replay one from the command line."
-            command={`uv run plastic chat ${currentSessionId ?? '<session_id>'} "a first prompt"`}
+            detail="Send a message to start."
           />
         )}
       </div>
@@ -177,7 +172,7 @@ export function ChatTab() {
             <KeyValue
               rows={[
                 { label: 'Backend', value: backend },
-                { label: 'Calibration', value: cal.label, note: cal.detail },
+                { label: 'Calibration', value: cal.label },
               ]}
             />
           </Panel>

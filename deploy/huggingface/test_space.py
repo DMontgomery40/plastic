@@ -141,9 +141,9 @@ def test_public_notice_survives_real_dashboard_body_attributes(tmp_path, body_ta
         assert 'public and shared' in page.text
         assert 'Do not enter private information' in page.text
         assert 'Qwen3.5-0.8B' in page.text
-        assert 'abliterated research model' in page.text
-        assert 'not the original aligned checkpoint' in page.text
-        assert 'observational guard: no rollback protection' in page.text
+        assert 'abliterated · observational mode' in page.text
+        assert 'No automatic rollback.' in page.text
+        assert 'Project documentation' in page.text
         assert page.text.index('public and shared') < page.text.index('id="root"')
 
 

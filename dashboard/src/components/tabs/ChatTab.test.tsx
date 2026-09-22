@@ -39,7 +39,7 @@ describe('ChatTab generation-write subtitle', () => {
   it('a native write-eligible session reads write-eligible, not "not learned"', () => {
     seed(true);
     render(<ChatTab />);
-    expect(screen.getByText(/generated tokens .*are also write-eligible/i)).toBeTruthy();
+    expect(screen.getByText(/Memory writes enabled for prompts and generated tokens/i)).toBeTruthy();
     expect(screen.queryByText(/not learned/i)).toBeNull();
     expect(screen.queryByText(/read-only by default/i)).toBeNull();
   });
@@ -47,20 +47,20 @@ describe('ChatTab generation-write subtitle', () => {
   it('a session whose generation is not write-eligible reads read-only, not learned', () => {
     seed(false);
     render(<ChatTab />);
-    expect(screen.getByText(/generated tokens are read-only in this session/i)).toBeTruthy();
+    expect(screen.getByText(/generated tokens are read-only/i)).toBeTruthy();
   });
 
-  it('an unknown effective policy reads "not available yet", not a false claim', () => {
+  it('an unknown effective policy stays unavailable, not a false claim', () => {
     seed(undefined);
     render(<ChatTab />);
-    expect(screen.getByText(/not available yet/i)).toBeTruthy();
+    expect(screen.getByText(/Write policy unavailable/i)).toBeTruthy();
     expect(screen.queryByText(/write-eligible/i)).toBeNull();
   });
 
   it('a known read-only latch wins over an unknown capability (ASTRA-104)', () => {
     seed(undefined, true);
     render(<ChatTab />);
-    expect(screen.getByText(/read-only, so no chunk writes/i)).toBeTruthy();
+    expect(screen.getByText(/Read-only session: no memory writes/i)).toBeTruthy();
     expect(screen.queryByText(/write-eligible/i)).toBeNull();
   });
 });

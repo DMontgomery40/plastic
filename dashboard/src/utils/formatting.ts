@@ -281,16 +281,15 @@ export function generationLearningCopy(generationWriteEligible: boolean | null |
   // a KNOWN read-only latch wins over an unknown capability: report the latch, do not affirm any
   // eligibility while the whole effective policy is unavailable (ASTRA-104)
   if (readOnly) {
-    return 'The session is currently read-only, so no chunk writes: every chunk transacts as read-only.';
+    return 'Read-only session: no memory writes.';
   }
   if (generationWriteEligible == null) {
-    return 'The effective write policy for this session is not available yet.';
+    return 'Write policy unavailable.';
   }
-  const prompt = 'Prompt tokens are write-eligible';
   if (generationWriteEligible) {
-    return `${prompt}, and generated tokens (including turn-closure tokens) are also write-eligible — each chunk is subject to the harness decision and a write can still be rolled back or scaled, not guaranteed retained.`;
+    return 'Memory writes enabled for prompts and generated tokens.';
   }
-  return `${prompt}; generated tokens are read-only in this session (not write-eligible).`;
+  return 'Memory writes enabled for prompts; generated tokens are read-only.';
 }
 
 export interface SourceBucket {

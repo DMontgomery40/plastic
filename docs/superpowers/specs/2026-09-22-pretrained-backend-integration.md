@@ -1,8 +1,9 @@
 # Pretrained-backend integration: driving the harness on Qwen3.5
 
-**Status:** design, pre-implementation. Foundation (`plastic/backends/qwen.py`) is built and
-verified (parity, genuine freeze, snapshot, frozen canary). This spec is the plan for
-generalizing the transaction harness to drive it, for Astra + user review before the refactor.
+**Status:** historical integration design; the native backend and harness integration
+are implemented. This document records the original contract and proposed scope,
+not a request to restart the refactor or enable unsupported controls. Follow the
+[current research status](../../research/current-status.md) for ongoing experiments.
 
 **Goal:** run the transactional safety harness (commit / rollback / scale / project / read-only,
 calibration, canaries) on a *pretrained* model — Qwen3.5-0.8B, whose layers are mostly Gated

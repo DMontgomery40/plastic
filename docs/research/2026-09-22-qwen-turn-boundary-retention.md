@@ -1,5 +1,10 @@
 # Turn-boundary retention for the native Qwen backend (design-gate note)
 
+> Historical candidate and test protocol. T0 passed its recorded mechanics check;
+> T1 completed with a negative fit result and did not reach DEV. The original
+> sequencing and calibration prerequisites below describe that study, not gates
+> on new exploration. Follow [current status](current-status.md) for continuation.
+
 Status: **candidate, not implemented, not adopted.** Scope per scratchpad ASTRA-123/124 and
 CODEX-003: take this candidate through the design gate, specify every gate's timing, and pass a
 matched omitted-turn control before any policy code or larger comparison. It is not a replacement

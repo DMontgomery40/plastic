@@ -5,14 +5,23 @@ claim-checking protocol, not a new survey or a certification that every linked
 statement remains correct. Initial index: 22 September 2026. Read the repository
 [AGENTS.md](../../AGENTS.md) for the mandatory readiness and verification gates.
 
+## Current work
+
+Read [current research status](current-status.md) first. Dated notes below preserve
+their original experiments and proposals; their schedules, approval requests and
+next-step instructions do not override current direction. Update current status
+and affected active documents when decisions change. The scratchpad is a private
+history, not a public dependency.
+
 ## The question to preserve
 
 The research objective is more than implementing a known fast-memory layer: investigate
 a coupling of genuinely gradient-updated, end-to-end meta-trained fast learning and
 a selective activation recurrence, with an external non-differentiable transactional
 harness. The target is one shared block stack for text and hidden-friction physics,
-roughly 1–10M parameters, plain PyTorch usable on MPS, and a one-hour L4/A10G training
-budget. That budget is a target to measure, not an established property.
+originally roughly 1–10M parameters, plain PyTorch usable on MPS, and a one-hour
+L4/A10G training target. These describe the original architecture study, not a
+restriction on current pretrained-Qwen experiments or authorized compute.
 
 The implemented linear delta-memory stack is the baseline. The nonlinear coordinate
 proposal is an unintegrated experimental candidate. Do not confuse delivering a useful
@@ -40,7 +49,7 @@ document the evidence and revise the claim; do not treat this briefing as dogma.
 ## Required reading by task
 
 Every session: read this file, the current [project overview](../../README.md), and
-the latest [shared scratchpad](../../SHARED_SCRATCHPAD.md), including corrections to
+the latest private `SHARED_SCRATCHPAD.md`, including corrections to
 any source you rely on. Then read the relevant documents below before the decision.
 
 | Task | Required local material |

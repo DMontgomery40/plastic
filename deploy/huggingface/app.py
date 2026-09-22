@@ -115,17 +115,10 @@ class PublicDemoGate:
 
 
 NOTICE = '''<aside class="bg-surface-overlay text-ink-primary border-b border-edge text-sm px-5 py-3">
-<strong>Huihui Qwen3.5-0.8B · abliterated research model · free CPU</strong><br>
-Open <strong>Chat</strong> with <strong>demo_text</strong> to explore prompts and inspect context changes.
-This is Huihui's refusal-ablated derivative of Qwen, not the original aligned checkpoint.
-Text uses native context updates with an <strong>observational guard: no rollback protection</strong>.
-The turn-boundary retention policy is experimental and is not enabled here.
-The optional <strong>demo_physics</strong> session keeps the Plastic research model.<br>
-These two sessions are <strong>public and shared</strong>; prompts and outputs are visible to other visitors. Do not enter private information.
-Runs are limited to 128 generated tokens or 256 physics steps. Reset a session to start fresh; restart clears all demo activity.
-Training, calibration, red-team jobs, and creating/forking/deleting sessions are local-only features.<br>
-<a class="text-accent" href="https://huggingface.co/dmontgomery40/plastic" target="_blank" rel="noreferrer">Project, code &amp; checkpoints</a>
- · <a class="text-accent" href="https://github.com/DMontgomery40/plastic" target="_blank" rel="noreferrer">GitHub</a>
+<strong>Huihui Qwen3.5-0.8B · abliterated · observational mode</strong>
+<span class="ml-2">No automatic rollback.</span><br>
+Sessions are <strong>public and shared</strong>. Do not enter private information.
+<a class="ml-2 text-accent" href="https://github.com/DMontgomery40/plastic" target="_blank" rel="noreferrer">Project documentation</a>
 </aside>'''
 
 

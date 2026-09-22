@@ -51,6 +51,19 @@ require their own task-specific readiness note before accepting their output.
 
 ## Start here and coordinate
 
+- Keep one current continuation brief. When direction changes, update active
+  handoffs, rules and documentation in place; remove superseded instructions rather
+  than stacking override banners above contradictory bodies. Keep dated findings
+  as evidence, clearly separated from current work. Every agent owns this upkeep.
+- Fable and Astra are co-leads; reuse the existing Sol session for connected-browser
+  validation. Record current file ownership and session identities in the private
+  brief/scratchpad. Prefer one bounded review per artifact set; repeat only for new
+  evidence or changes that invalidate the earlier check.
+- Explore and compare early. Preregistration, demonstrated signal separation,
+  calibration and positive controls are not prerequisites for exploratory runs.
+  Label uncalibrated guards honestly; require appropriate evidence for efficacy
+  claims. Resolve methodological choices through concrete experiments, not repeated
+  permission or review loops.
 - Read `README.md`, `plastic/config.py`, and the code/tests for the affected surface.
 - Before concurrent work, read the latest `SHARED_SCRATCHPAD.md` entries. Respect
   the recorded ownership and agree on overlapping edits there. The user's current
@@ -181,6 +194,11 @@ the source record, derivation, ablations, and review are the auditable evidence.
   updates, offline/recovery behavior, keyboard use, and narrow layouts when affected.
   Preserve the dashboard floor: no emoji, no text below 11px, color tokens throughout,
   and no opacity-based text de-emphasis.
+- Do not load the UI with developer notes, implementation details, provenance
+  dumps, research caveats or disclaimer banners. Put those in documentation.
+  Keep only concise information that helps someone use the product or interpret
+  a displayed result. Honest mode/status labels do not require an explanatory
+  essay. This rule applies to every new or revised public UI surface.
 
 ## GitHub and Hugging Face are one maintained project
 
@@ -222,9 +240,15 @@ the source record, derivation, ablations, and review are the auditable evidence.
   private state private. An active user-owned session is not an orphan.
 - Generated `artifacts/` and `training_data/` contents are generally ignored; a Git
   push does not back up checkpoints or datasets. Some historical files are tracked.
-  Preserve original experiment artifacts and use disposable stores for destructive
-  test operations.
-- Cloud jobs require user authorization. The HF launcher exports committed HEAD,
+  Retain compact evidence supporting reported results, including useful negative
+  results. Disposable failed attempts, duplicate caches and obsolete worktree
+  archives need not accumulate. Move useful inactive bulk artifacts to private HF
+  storage, verify retrieval/checksums before removing local copies, and leave a
+  small manifest. Do not remove inputs needed by active work or unique source.
+  Use disposable stores for destructive test operations.
+- The user has authorized GPU compute for the current research. State the flavor
+  and estimated cost before launching; do not ask again for each ordinary run.
+  The HF launcher exports committed HEAD,
   not dirty source, and uses account-specific bucket/export settings. Inspect them
   before launching; paid training is not a routine verification step.
 - Check Git status before editing or committing. Stage explicit paths when another
