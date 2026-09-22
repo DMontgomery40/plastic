@@ -1,15 +1,25 @@
 # Plastic
 
+- **[Try the live Hugging Face playground](https://huggingface.co/spaces/dmontgomery40/plastic)** —
+  generate text continuations, inspect proposed and accepted memory updates and
+  transaction decisions, or compare adaptive and frozen predictions in the optional
+  physics demo. Runs on free CPU; the small text model produces rough continuations.
+- **[Get the models and complete project on Hugging Face](https://huggingface.co/dmontgomery40/plastic/tree/main)** —
+  download trained weights, configurations, saved evaluations, and the frontend and
+  backend source to run the playground locally or build your own experiments.
+- **[Trace the full project history on GitHub](https://github.com/DMontgomery40/plastic/commits/main/)** —
+  follow development since January 2026, from the original TTT/SSM experiments to
+  Plastic. Explore the [earlier implementation](https://github.com/DMontgomery40/plastic/tree/master),
+  [current source](https://github.com/DMontgomery40/plastic), and
+  [research notes](https://github.com/DMontgomery40/plastic/tree/main/docs/research)
+  alongside the complete recorded commit history.
+
 **Watch a small model learn from a sequence—and inspect what it keeps.**
 
 Plastic is a research workbench for models with memory that changes during inference.
 It combines a selective state-space recurrence, gradient-updated fast memory, and an
 external harness that can accept, scale, project, or roll back a proposed memory update.
 The same model core handles text prediction and a 2D physics task with hidden friction.
-
-**[Open the live dashboard](https://huggingface.co/spaces/dmontgomery40/plastic)** ·
-**[Browse all files on Hugging Face](https://huggingface.co/dmontgomery40/plastic/tree/main)** ·
-**[Develop on GitHub](https://github.com/DMontgomery40/plastic)**
 
 ![Plastic physics dashboard: prediction errors and accepted memory updates](assets/public-demo-physics.png)
 
