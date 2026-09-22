@@ -37,6 +37,10 @@ class _QwenTextIO:
     def __init__(self, backend: Any) -> None:
         self._backend = backend
         self.eos_id = int(backend.tokenizer.eos_token_id)
+        # the native assistant turn terminator + separator (chat_template: content + '<|im_end|>\n').
+        # Fed into state after generation so the next user turn follows a correctly-closed assistant
+        # turn; kept out of the displayed completion. eos IS <|im_end|> for Qwen.
+        self.assistant_close_ids = list(backend.tokenizer.encode("<|im_end|>\n", add_special_tokens=False))
 
     def encode(self, text: str, add_bos: bool = False) -> list[int]:
         return self._backend.encode_chat(text)
@@ -208,6 +212,14 @@ class Session:
                 break
             out_ids.append(nxt)
             logits = self.runner.feed_tokens([nxt], source="model")
+        # Close the assistant turn in the carried state exactly once — for EOS, the length cap, or
+        # zero generation alike — so the next user turn follows a correctly-terminated turn. The
+        # closure tokens (native template separator, backend-specific; empty for the plastic BPE
+        # path) are governed model-source writes subject to read-only/budget precedence, and are NOT
+        # part of the displayed completion or the generated-token count.
+        close_ids = list(getattr(tok, "assistant_close_ids", []) or [])
+        if close_ids:
+            self.runner.feed_tokens(close_ids, source="model")
         self.runner.flush()
         transactions = list(self.runner.transactions)
         completion = tok.decode(out_ids)

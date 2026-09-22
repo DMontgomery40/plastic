@@ -622,21 +622,28 @@ def test_qwen_session_chat_end_to_end(tmp_path):
 
     sess = Session.create(store, model_id=mid, harness_cfg=HarnessConfig(enable_projection=False), device="cpu")
     assert sess.backend_kind == "qwen"
+    close_len = len(sess.tokenizer.assistant_close_ids)
+    assert close_len == 2  # native <|im_end|> + newline
+
     res = sess.chat("Hello", max_new_tokens=6, seed=0)
     assert isinstance(res.completion, str) and res.n_tokens_in > 0
     assert res.summary["domain"] == "text" and "recurrent_norm_total" in res.summary["state_norms"]
     assert res.transactions  # the prompt transacted through the harness
+    # multi-turn framing: the assistant turn is closed in the carried state (pos counts the prompt,
+    # the generated tokens, AND the turn terminator), and the terminator is not shown to the user
+    assert "<|im_end|>" not in res.completion
     pos_after = sess.runner.pos
-    assert pos_after >= res.n_tokens_in  # prompt (and any generation) advanced the state
+    assert pos_after == res.n_tokens_in + res.n_tokens_out + close_len
     sid = sess.session_id
     del sess
     gc.collect()
 
-    # reopen the persisted session: the Qwen runner state (native cache included) is restored
+    # reopen the persisted session (native cache restored) and take a second turn; framing holds
     sess2 = Session.open(store, sid, device="cpu")
     assert sess2.backend_kind == "qwen" and sess2.runner.pos == pos_after
     res2 = sess2.chat("Thanks", max_new_tokens=4, seed=1)
-    assert isinstance(res2.completion, str) and sess2.runner.pos > pos_after
+    assert isinstance(res2.completion, str) and "<|im_end|>" not in res2.completion
+    assert sess2.runner.pos == pos_after + res2.n_tokens_in + res2.n_tokens_out + close_len
 
 
 def test_encode_chat_returns_integer_ids(backend):
