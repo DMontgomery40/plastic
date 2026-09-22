@@ -3,8 +3,12 @@
 **Model:** `lm_wikitext_l4` — 4 layers, d_model 256, 4 heads, chunk 64, vocab 8192, ~6.85M
 parameters. Trained on `wikitext-103-raw-v1` for 6000 steps on an L4 (98.4M tokens, 3574s).
 **Held-out:** loss 3.470 with the fast-weight memory active, 5.015 with it disabled
-(`memory_value` +1.545 nats). Associative recall (MQAR) 100% at 4 and 8 key–value pairs,
-97.7% at 16. The memory is doing real work.
+(`memory_value` +1.545 nats). As **bits-per-byte** — the vocab-independent metric that *is*
+comparable across models, unlike token perplexity at this 8k vocab — that is **1.24 BPB** with
+memory, 1.79 without (a +0.55 bits/byte contribution from the memory). Associative recall (MQAR)
+100% at 4 and 8 key–value pairs, 97.7% at 16. The memory is doing real work. (Do not compare the
+token-level perplexity of 32 against standard WikiText numbers; a small vocab makes it
+mechanically low — BPB is the honest comparison.)
 
 This is the honest operating-point measurement the harness was built to support. Everything
 below is measured on the trained checkpoint through the real token path, not on a smoke model.
