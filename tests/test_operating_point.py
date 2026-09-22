@@ -316,14 +316,14 @@ def _fake_args(**over):
 
 def test_settings_identity_changes_with_each_determining_setting():
     from scripts.experiments.qwen_operating_point import _settings_identity
-    base = _settings_identity(_fake_args(), "digestX", "rev1")
-    assert base == _settings_identity(_fake_args(), "digestX", "rev1")           # stable
-    assert base != _settings_identity(_fake_args(max_new_tokens=16), "digestX", "rev1")  # decoding changed
-    assert base != _settings_identity(_fake_args(n_fit=16), "digestX", "rev1")   # counts changed
-    assert base != _settings_identity(_fake_args(), "digestY", "rev1")           # checkpoint changed
-    assert base != _settings_identity(_fake_args(), "digestX", "rev2")           # dataset revision changed
-    assert base != _settings_identity(_fake_args(), "digestX", "rev1", "excl_v2")  # exclusion CONTENT bound
-    assert base != _settings_identity(_fake_args(device="mps"), "digestX", "rev1")  # device bound (FABLE-085 #1)
+    base = _settings_identity(_fake_args(), "digestX", "rev1", protocol=_proto())
+    assert base == _settings_identity(_fake_args(), "digestX", "rev1", protocol=_proto())           # stable
+    assert base != _settings_identity(_fake_args(max_new_tokens=16), "digestX", "rev1", protocol=_proto())  # decoding changed
+    assert base != _settings_identity(_fake_args(n_fit=16), "digestX", "rev1", protocol=_proto())   # counts changed
+    assert base != _settings_identity(_fake_args(), "digestY", "rev1", protocol=_proto())           # checkpoint changed
+    assert base != _settings_identity(_fake_args(), "digestX", "rev2", protocol=_proto())           # dataset revision changed
+    assert base != _settings_identity(_fake_args(), "digestX", "rev1", "excl_v2", protocol=_proto())  # exclusion CONTENT bound
+    assert base != _settings_identity(_fake_args(device="mps"), "digestX", "rev1", protocol=_proto())  # device bound (FABLE-085 #1)
 
 
 def _split_of(ids_per):
@@ -529,14 +529,14 @@ def test_eval_progress_round_trips_and_rejects_mismatched_identity(tmp_path):
     assert _load_eval_progress(path, "idA") is None  # absent -> fresh start
 
     _init_eval_progress(path, "idA")
-    _append_eval_progress(path, "fresh", {"ids": [0]}, [{"decision": {"kind": "commit"}}])
-    _append_eval_progress(path, "carried", {"ids": [1, 2]}, [{"x": 1}, {"x": 2}])
-    _append_eval_progress(path, "fresh", {"ids": [3]}, [{"y": 1}])
+    _append_eval_progress(path, "fresh", _wrec([0], "fresh"), [_wtx()])
+    _append_eval_progress(path, "carried", _wrec([1, 2], "carried"), [_wtx(), _wtx("rollback")])
+    _append_eval_progress(path, "fresh", _wrec([3], "fresh"), [_wtx()])
 
     restore = _load_eval_progress(path, "idA")
     assert [s["record"]["ids"] for s in restore["fresh"]] == [[0], [3]]       # order preserved per regime
     assert [s["record"]["ids"] for s in restore["carried"]] == [[1, 2]]
-    assert restore["carried"][0]["txns"] == [{"x": 1}, {"x": 2}]
+    assert restore["carried"][0]["txns"] == [_wtx(), _wtx("rollback")]
 
     with pytest.raises(RunConflict):  # a different identity is refused, the log preserved
         _load_eval_progress(path, "idB")
@@ -547,7 +547,7 @@ def test_eval_progress_skips_a_malformed_trailing_line(tmp_path):
     from scripts.experiments.qwen_operating_point import _append_eval_progress, _init_eval_progress, _load_eval_progress
     path = str(tmp_path / "eval-progress.jsonl")
     _init_eval_progress(path, "idA")
-    _append_eval_progress(path, "fresh", {"ids": [0]}, [])
+    _append_eval_progress(path, "fresh", _wrec([0], "fresh"), [])
     with open(path, "a", encoding="utf-8") as f:
         f.write('{"regime": "fresh", "record": {"ids": [1]')  # a crash mid-append: truncated JSON
     restore = _load_eval_progress(path, "idA")
@@ -642,14 +642,14 @@ def test_eval_progress_valid_final_record_without_newline_survives_append(tmp_pa
     from scripts.experiments.qwen_operating_point import _append_eval_progress, _init_eval_progress, _load_eval_progress
     path = str(tmp_path / "p.jsonl")
     _init_eval_progress(path, "idA")
-    _append_eval_progress(path, "fresh", {"ids": [0]}, [])
-    _append_eval_progress(path, "fresh", {"ids": [1]}, [])
+    _append_eval_progress(path, "fresh", _wrec([0], "fresh"), [])
+    _append_eval_progress(path, "fresh", _wrec([1], "fresh"), [])
     with open(path, "rb+") as f:  # simulate a crash before the final newline
         data = f.read()
         assert data.endswith(b"\n")
         f.seek(0); f.truncate(); f.write(data[:-1])
     assert [s["record"]["ids"] for s in _load_eval_progress(path, "idA")["fresh"]] == [[0], [1]]  # both restored
-    _append_eval_progress(path, "fresh", {"ids": [2]}, [])  # repairs the delimiter, no concatenation
+    _append_eval_progress(path, "fresh", _wrec([2], "fresh"), [])  # repairs the delimiter, no concatenation
     assert [s["record"]["ids"] for s in _load_eval_progress(path, "idA")["fresh"]] == [[0], [1], [2]]
 
 
@@ -657,12 +657,12 @@ def test_eval_progress_truncated_final_fragment_dropped_on_append(tmp_path):
     from scripts.experiments.qwen_operating_point import _append_eval_progress, _init_eval_progress, _load_eval_progress
     path = str(tmp_path / "p.jsonl")
     _init_eval_progress(path, "idA")
-    _append_eval_progress(path, "fresh", {"ids": [0]}, [])
+    _append_eval_progress(path, "fresh", _wrec([0], "fresh"), [])
     with open(path, "a", encoding="utf-8") as f:
         f.write('{"regime": "fresh", "record": {"ids": [1')  # truncated fragment, no newline
     assert [s["record"]["ids"] for s in _load_eval_progress(path, "idA")["fresh"]] == [[0]]  # quarantined
-    _append_eval_progress(path, "fresh", {"ids": [1]}, [])  # rerun: repair drops the fragment
-    _append_eval_progress(path, "fresh", {"ids": [2]}, [])
+    _append_eval_progress(path, "fresh", _wrec([1], "fresh"), [])  # rerun: repair drops the fragment
+    _append_eval_progress(path, "fresh", _wrec([2], "fresh"), [])
     assert [s["record"]["ids"] for s in _load_eval_progress(path, "idA")["fresh"]] == [[0], [1], [2]]
 
 
@@ -671,13 +671,13 @@ def test_eval_progress_repeated_recover_append_reload(tmp_path):
     path = str(tmp_path / "p.jsonl")
     _init_eval_progress(path, "idA")
     for i in range(4):
-        _append_eval_progress(path, "fresh", {"ids": [i]}, [])
+        _append_eval_progress(path, "fresh", _wrec([i], "fresh"), [])
         with open(path, "rb+") as f:  # crash before the newline each round
             data = f.read()
             if data.endswith(b"\n"):
                 f.seek(0); f.truncate(); f.write(data[:-1])
         assert [s["record"]["ids"] for s in _load_eval_progress(path, "idA")["fresh"]] == [[j] for j in range(i + 1)]
-    _append_eval_progress(path, "fresh", {"ids": [9]}, [])
+    _append_eval_progress(path, "fresh", _wrec([9], "fresh"), [])
     assert [s["record"]["ids"] for s in _load_eval_progress(path, "idA")["fresh"]] == [[0], [1], [2], [3], [9]]
 
 
@@ -687,8 +687,8 @@ def test_eval_progress_interior_corruption_is_refused(tmp_path):
     from scripts.experiments.qwen_operating_point import RunConflict, _append_eval_progress, _init_eval_progress, _load_eval_progress
     path = str(tmp_path / "p.jsonl")
     _init_eval_progress(path, "idA")
-    _append_eval_progress(path, "fresh", {"ids": [0]}, [])
-    _append_eval_progress(path, "fresh", {"ids": [1]}, [])
+    _append_eval_progress(path, "fresh", _wrec([0], "fresh"), [])
+    _append_eval_progress(path, "fresh", _wrec([1], "fresh"), [])
     lines = open(path, encoding="utf-8").read().splitlines()
     lines[1] = "{bad interior json"  # corrupt the FIRST session record (interior: another follows)
     open(path, "w", encoding="utf-8").write("\n".join(lines) + "\n")
@@ -705,9 +705,31 @@ import re as _re
 
 import pytest as _pytest
 
-_FRAGMENT = '{"regime": "fresh", "record": {"ids": [1'            # a kill mid-append: truncated JSON
-_VALID_1 = '{"regime": "fresh", "record": {"ids": [1]}, "txns": []}'
-_VALID_2 = '{"regime": "fresh", "record": {"ids": [2]}, "txns": []}'
+def _wrec(ids, regime="fresh"):
+    """A completed-session record in the exact shape ``_eval_sessions`` writes (a writer-shaped fixture;
+    the loader validates this shape, so minimal stand-ins would be refused as corruption)."""
+    return {"ids": list(ids), "regime": regime, "read_only": False, "read_only_reason": None,
+            "eligible_by_source": {"prompt": 1, "generation": 1}, "accepted_by_source": {"prompt": 1, "generation": 1},
+            "retained_both": True,
+            "anomalies": {"mixed_source": 0, "missing_source": 0, "unknown_kind": 0, "nonfinite_accepted": 0},
+            "turns": [{"id": i, "seed": 100 + i, "completion": f"c{i}", "n_in": 3, "n_out": 2, "outcome": "eos",
+                       "seconds": 0.1} for i in ids],
+            "incomplete": False}
+
+
+def _wtx(kind="commit"):
+    """A transaction in the shape TransactionRunner records (the fields aggregation reads, and more)."""
+    return {"index": 0, "decision": {"kind": kind, "reasons": [], "scale": 1.0}, "sources": {"user": 8, "model": 0},
+            "eligible": True, "accepted": {"delta_norm": 1.0}, "read_only": False, "read_only_reason": None}
+
+
+def _line(ids, regime="fresh"):
+    return _json.dumps({"regime": regime, "record": _wrec(ids, regime), "txns": [_wtx()]})
+
+
+_FRAGMENT = _line([1])[:40]            # a kill mid-append: a truncated JSON object never parses
+_VALID_1 = _line([1])
+_VALID_2 = _line([2])
 
 
 def _progress_with(tmp_path, tail):
@@ -715,7 +737,7 @@ def _progress_with(tmp_path, tail):
     from scripts.experiments.qwen_operating_point import _append_eval_progress, _init_eval_progress
     path = str(tmp_path / "eval-progress.jsonl")
     _init_eval_progress(path, "idA")
-    _append_eval_progress(path, "fresh", {"ids": [0]}, [])
+    _append_eval_progress(path, "fresh", _wrec([0], "fresh"), [])
     with open(path, "a", encoding="utf-8") as f:
         f.write(tail)
     return path
@@ -746,31 +768,158 @@ def test_eval_progress_final_line_recovery_matrix(tmp_path, tail, expect):
         assert open(path, "rb").read() == before
         return
     assert _fresh_ids(path) == expect
-    _append_eval_progress(path, "fresh", {"ids": [7]}, [])  # the next append lands on a clean boundary
+    _append_eval_progress(path, "fresh", _wrec([7], "fresh"), [])  # the next append lands on a clean boundary
     assert _fresh_ids(path) == expect + [[7]]
 
 
-@_pytest.mark.parametrize("bad, why", [
-    ("[1, 2]", "not a JSON object"),
-    ('{"regime": "stale", "record": {"ids": [1]}, "txns": []}', "unknown regime"),
-    ('{"regime": "fresh", "txns": []}', "missing session record"),
-    ('{"regime": "fresh", "record": [1], "txns": []}', "missing session record"),
-    ('{"regime": "fresh", "record": {"seed": 1}, "txns": []}', "no ids list"),
-    ('{"regime": "fresh", "record": {"ids": [1], "regime": "carried"}, "txns": []}', "differs from the line regime"),
-    ('{"regime": "fresh", "record": {"ids": [1], "incomplete": true}, "txns": []}', "incomplete session was persisted"),
-    ('{"regime": "fresh", "record": {"ids": [1]}}', "missing transactions list"),
-    ('{"regime": "fresh", "record": {"ids": [1]}, "txns": {}}', "missing transactions list"),
-])
+def _mut(fn):
+    line = {"regime": "fresh", "record": _wrec([1]), "txns": [_wtx()]}
+    fn(line)
+    return _json.dumps(line)
+
+
+def _set(path, value):
+    def fn(line):
+        *head, last = path
+        d = line
+        for k in head:
+            d = d[k]
+        d[last] = value
+    return fn
+
+
+def _del(path):
+    def fn(line):
+        *head, last = path
+        d = line
+        for k in head:
+            d = d[k]
+        del d[last]
+    return fn
+
+
+_SCHEMA_CASES = {
+    "list-line": ("[1, 2]", "not a JSON object"),
+    "unknown-regime": (_mut(_set(["regime"], "stale")), "unknown regime"),
+    "no-record": (_mut(_del(["record"])), "missing session record"),
+    "record-not-object": (_mut(_set(["record"], [1])), "missing session record"),
+    "no-ids": (_mut(_del(["record", "ids"])), "nonempty integer ids"),
+    "bool-ids": (_mut(_set(["record", "ids"], [True])), "nonempty integer ids"),     # True == 1 in Python
+    "float-ids": (_mut(_set(["record", "ids"], [1.0])), "nonempty integer ids"),
+    "empty-ids": (_mut(_set(["record", "ids"], [])), "nonempty integer ids"),
+    "record-regime-differs": (_mut(_set(["record", "regime"], "carried")), "differs from the line regime"),
+    "record-regime-missing": (_mut(_del(["record", "regime"])), "differs from the line regime"),
+    "persisted-incomplete": (_mut(_set(["record", "incomplete"], True)), "incomplete session was persisted"),
+    "no-incomplete-flag": (_mut(_del(["record", "incomplete"])), "no incomplete=false"),
+    "no-retained_both": (_mut(_del(["record", "retained_both"])), "boolean retained_both"),
+    "int-retained_both": (_mut(_set(["record", "retained_both"], 1)), "boolean retained_both"),
+    "no-read_only": (_mut(_del(["record", "read_only"])), "boolean read_only"),
+    "bad-read_only_reason": (_mut(_set(["record", "read_only_reason"], 3)), "non-string read_only_reason"),
+    "partial-eligible": (_mut(_set(["record", "eligible_by_source"], {"prompt": 1})), "eligible_by_source is not"),
+    "bool-accepted": (_mut(_set(["record", "accepted_by_source", "generation"], True)), "accepted_by_source is not"),
+    "no-anomalies": (_mut(_del(["record", "anomalies"])), "anomalies map"),
+    "bad-provenance": (_mut(_set(["record", "provenance"], "x")), "provenance is not an object"),
+    "no-turns": (_mut(_del(["record", "turns"])), "turns do not match"),
+    "short-turns": (_mut(_set(["record", "turns"], [])), "turns do not match"),
+    "turn-id-differs": (_mut(_set(["record", "turns", 0, "id"], 99)), "does not carry the session's id"),
+    "turn-no-seed": (_mut(_del(["record", "turns", 0, "seed"])), "missing a writer field"),
+    "turn-bad-outcome": (_mut(_set(["record", "turns", 0, "outcome"], "weird")), "missing a writer field"),
+    "no-txns": (_mut(_del(["txns"])), "missing transactions list"),
+    "txns-not-list": (_mut(_set(["txns"], {})), "missing transactions list"),
+    "txn-not-object": (_mut(_set(["txns"], [1])), "transaction 0 is not an object"),
+    "txn-no-decision": (_mut(_del(["txns", 0, "decision"])), "no decision kind"),
+    "txn-bool-sources": (_mut(_set(["txns", 0, "sources"], {"user": True, "model": 0})), "source counts"),
+    "txn-no-eligible": (_mut(_del(["txns", 0, "eligible"])), "boolean eligibility"),
+    "txn-no-accepted": (_mut(_del(["txns", 0, "accepted"])), "accepted delta_norm"),
+    "txn-str-delta": (_mut(_set(["txns", 0, "accepted", "delta_norm"], "x")), "accepted delta_norm"),
+}
+
+
+@_pytest.mark.parametrize("case", sorted(_SCHEMA_CASES))
 @_pytest.mark.parametrize("position", ["interior", "final_terminated", "final_unterminated"])
-def test_eval_progress_schema_invalid_record_is_refused(tmp_path, bad, why, position):
-    # FABLE-085 #2b: a PARSEABLE line that is not a completed-session record the writer could produce is
-    # corruption wherever it sits (a truncated JSON object never parses) -- refused with RunConflict,
-    # never silently ignored (unknown regime) nor surfaced as a bare KeyError (missing keys)
+def test_eval_progress_schema_invalid_record_is_refused(tmp_path, case, position):
+    # FABLE-085 #2b / CODEX-001 #1: a PARSEABLE line that is not a completed-session record the writer
+    # could produce -- down to integer (never boolean) ids, every field the criterion/aggregation reads,
+    # turns consistent with ids and transaction structure -- is corruption wherever it sits (a truncated
+    # JSON object never parses): refused with RunConflict, never ignored nor a later bare KeyError
     from scripts.experiments.qwen_operating_point import RunConflict, _load_eval_progress
+    bad, why = _SCHEMA_CASES[case]
     tail = {"interior": bad + "\n" + _VALID_2 + "\n", "final_terminated": bad + "\n", "final_unterminated": bad}[position]
     path = _progress_with(tmp_path, tail)
     with _pytest.raises(RunConflict, match=_re.escape(why)):
         _load_eval_progress(path, "idA")
+
+
+def test_real_writer_records_pass_the_progress_schema():
+    # the validator and the writer agree: every session _eval_sessions actually emits -- fresh and
+    # carried, committing and read-only -- passes, so the strict schema never refuses real progress
+    from scripts.experiments.qwen_operating_point import _eval_sessions, _progress_record_problem
+    prompts = [{"id": i, "prompt": f"p{i}"} for i in range(5)]
+    for kinds, drive in ((["commit"] * 40, _seed_drive), (["readonly", "commit"] * 20, _fake_drive)):
+        emitted = []
+        _eval_sessions(None, None, None, prompts, hcfg=None, gen=_gen_settings(), seed_base=0, chains=2, deadline=1e18,
+                       on_progress=lambda regime, rec, txns, ng: emitted.append((regime, rec, txns)),
+                       provenance=_prov("a"), _runner=_FakeRunner(kinds), _drive=drive)
+        assert len(emitted) == 7  # 5 fresh + 2 carried chains
+        for regime, rec, txns in emitted:
+            line = _json.loads(_json.dumps({"regime": regime, "record": rec, "txns": txns}))  # through JSON
+            assert _progress_record_problem(line) is None, (regime, rec["ids"])
+
+
+def _proto(**gen_over):
+    from scripts.experiments.qwen_operating_point import _protocol
+    base = _protocol(8, fit_harness={"log_only": True}, eval_harness={"freeze_on_alarm": True})
+    base["gen"].update(gen_over)
+    return base
+
+
+def test_settings_identity_binds_the_effective_sampling_and_harness_protocol():
+    # CODEX-001 #2: temperature/top-k, the seed schedule and the effective fit/eval harness configs are
+    # not CLI settings, so they must be bound explicitly or a changed sampler pools under one identity
+    from scripts.experiments.qwen_operating_point import _settings_identity
+    base = _settings_identity(_fake_args(), "d", "r", protocol=_proto())
+    assert base == _settings_identity(_fake_args(), "d", "r", protocol=_proto())
+    assert base != _settings_identity(_fake_args(), "d", "r", protocol=_proto(temperature=0.5))
+    assert base != _settings_identity(_fake_args(), "d", "r", protocol=_proto(top_k=10))
+    for key, value in (("seed", 1), ("seed_offsets", {"eval": 1, "followups": 2}), ("chunk", 16),
+                       ("target_fpr", 0.05), ("fit_harness", {"log_only": False}), ("eval_harness", {"freeze_on_alarm": False})):
+        assert base != _settings_identity(_fake_args(), "d", "r", protocol={**_proto(), key: value}), key
+
+
+def test_changed_sampler_is_refused_on_resume_before_any_reuse(tmp_path):
+    # CODEX-001 #2 across resume: the run created under one sampler is refused (and preserved) when
+    # resumed under another, so neither its completed calibration nor its eval progress can be reused
+    from scripts.experiments.qwen_operating_point import RunConflict, _reconcile_run, _settings_identity
+    split = _split_of({"fit": [1, 2], "cusum": [3], "dev": [4], "eval": [5, 6]})
+    manifest = _manifest_of("corpusA", split)
+    ident_a = _settings_identity(_fake_args(), "d", "r", protocol=_proto())
+    mode, mid, _, _ = _reconcile_run(str(tmp_path), manifest, split, ident_a, lambda: "m1")
+    assert mode == "fresh"
+    before = {n: (tmp_path / n).read_bytes() for n in ("run-record.json", "split-manifest.json")}
+    for over in ({"temperature": 0.5}, {"top_k": 10}):
+        with _pytest.raises(RunConflict):
+            _reconcile_run(str(tmp_path), manifest, split, _settings_identity(_fake_args(), "d", "r", protocol=_proto(**over)),
+                           lambda: "m2")
+    assert {n: (tmp_path / n).read_bytes() for n in before} == before
+    assert _reconcile_run(str(tmp_path), manifest, split, ident_a, lambda: "m3")[:2] == ("resume", "m1")
+
+
+@_pytest.mark.parametrize("meta, ok", [
+    ({}, True),                                                                  # nothing yet: will record owner
+    ({"calibration_settings_identity": "S"}, True),                              # in progress, same owner
+    ({"calibration_settings_identity": "S", "calibration_fit_complete": True, "calibration_cusum_complete": True}, True),
+    ({"calibration_settings_identity": "T"}, False),                             # in progress under another identity
+    ({"calibration_settings_identity": "T", "calibration_fit_complete": True, "calibration_cusum_complete": True}, False),
+    ({"calibration_fit_complete": True, "calibration_cusum_complete": True}, False),  # completed, owner unknown
+])
+def test_completed_or_partial_calibration_is_reused_only_by_its_owner(meta, ok):
+    # CODEX-001 #2 on the completed-calibration reuse path itself (defense in depth behind reconcile)
+    from scripts.experiments.qwen_operating_point import RunConflict, _check_calibration_owner
+    if ok:
+        _check_calibration_owner(meta, "S")
+    else:
+        with _pytest.raises(RunConflict):
+            _check_calibration_owner(meta, "S")
 
 
 def test_eval_progress_header_is_atomic_and_never_overwritten(tmp_path):
@@ -780,7 +929,7 @@ def test_eval_progress_header_is_atomic_and_never_overwritten(tmp_path):
     _init_eval_progress(path, "idA", prov)
     assert _json.loads(open(path, encoding="utf-8").read().splitlines()[0]) == {"identity": "idA", "provenance": prov}
     assert sorted(_os.listdir(tmp_path)) == ["eval-progress.jsonl"]  # temp + replace leaves no temp behind
-    _append_eval_progress(path, "fresh", {"ids": [0]}, [])
+    _append_eval_progress(path, "fresh", _wrec([0], "fresh"), [])
     with _pytest.raises(RunConflict):
         _init_eval_progress(path, "idA", prov)  # an existing log (holding a session) is never clobbered
     assert _fresh_ids(path) == [[0]]
@@ -792,7 +941,7 @@ def test_eval_progress_missing_or_damaged_header_is_refused_never_truncated(tmp_
     from scripts.experiments.qwen_operating_point import RunConflict, _append_eval_progress, _load_eval_progress
     path = str(tmp_path / "eval-progress.jsonl")
     with _pytest.raises(RunConflict):  # missing: an append never creates a headerless log
-        _append_eval_progress(path, "fresh", {"ids": [0]}, [])
+        _append_eval_progress(path, "fresh", _wrec([0], "fresh"), [])
     assert not _os.path.exists(path)
 
     open(path, "w").close()  # empty
@@ -800,7 +949,7 @@ def test_eval_progress_missing_or_damaged_header_is_refused_never_truncated(tmp_
         _load_eval_progress(path, "idA")
     assert "calibration" in str(exc.value) and "unaffected" in str(exc.value)
     with _pytest.raises(RunConflict):
-        _append_eval_progress(path, "fresh", {"ids": [0]}, [])
+        _append_eval_progress(path, "fresh", _wrec([0], "fresh"), [])
     assert _os.path.getsize(path) == 0
 
     damaged = '{"identity": "id'  # a damaged header and no newline anywhere
@@ -809,7 +958,7 @@ def test_eval_progress_missing_or_damaged_header_is_refused_never_truncated(tmp_
     with _pytest.raises(RunConflict, match="unreadable identity header"):
         _load_eval_progress(path, "idA")
     with _pytest.raises(RunConflict, match="no complete identity header"):
-        _append_eval_progress(path, "fresh", {"ids": [0]}, [])
+        _append_eval_progress(path, "fresh", _wrec([0], "fresh"), [])
     assert open(path, encoding="utf-8").read() == damaged  # preserved, not truncated to empty
 
 

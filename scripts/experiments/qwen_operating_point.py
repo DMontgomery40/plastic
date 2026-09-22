@@ -34,6 +34,27 @@ from typing import Any
 
 WS = re.compile(r"\s+")
 
+# The fixed operating point (ASTRA-083), defined ONCE: main() runs exactly these values and the run
+# settings identity binds them (``_protocol``), so a changed sampler, seed schedule or harness policy is
+# refused on resume instead of being pooled into the same run or reusing its calibration (CODEX-001).
+SEED = 20260922
+EVAL_SEED_OFFSET, FOLLOWUP_SEED_OFFSET = 3000, 4000
+TEMPERATURE, TOP_K = 0.9, 50
+CHUNK = 8
+TARGET_FPR = 0.01
+
+
+def _gen(max_new_tokens: int) -> dict[str, Any]:
+    return {"max_new_tokens": int(max_new_tokens), "temperature": TEMPERATURE, "top_k": TOP_K}
+
+
+def _protocol(max_new_tokens: int, *, fit_harness: dict[str, Any], eval_harness: dict[str, Any]) -> dict[str, Any]:
+    """The full effective generation/seed/harness protocol of a run: decoding, seed base and per-phase
+    offsets, chunking, target FPR, and the EFFECTIVE fit (log-only) and eval harness configs."""
+    return {"gen": _gen(max_new_tokens), "seed": SEED,
+            "seed_offsets": {"eval": EVAL_SEED_OFFSET, "followups": FOLLOWUP_SEED_OFFSET},
+            "chunk": CHUNK, "target_fpr": TARGET_FPR, "fit_harness": fit_harness, "eval_harness": eval_harness}
+
 
 def _norm(s: str) -> str:
     return WS.sub(" ", (s or "").strip()).lower()
@@ -377,12 +398,15 @@ class RunConflict(Exception):
     must use a fresh ``--out``."""
 
 
-def _settings_identity(args: Any, checkpoint_digest: str, revision: str, exclusions_digest: str | None = None) -> str:
+def _settings_identity(args: Any, checkpoint_digest: str, revision: str, exclusions_digest: str | None = None, *,
+                       protocol: dict[str, Any]) -> str:
     """A stable digest of the settings that determine the corpus and the calibration, so a
     re-invocation with different settings is refused rather than silently overwriting a run. The
     compute device is bound too: a CPU invocation and an MPS invocation must never pool calibration or
-    eval sessions under one identity (ASTRA-083 fixes the CPU float32 protocol; FABLE-085 #1)."""
-    payload = {
+    eval sessions under one identity (ASTRA-083 fixes the CPU float32 protocol; FABLE-085 #1). So is the
+    full effective ``protocol`` (``_protocol``): temperature/top-k, seeds and the fit/eval harness
+    configs, which are not CLI settings and would otherwise change silently between invocations."""
+    payload = {"protocol": protocol,
         "counts": {"fit": args.n_fit, "cusum": args.n_cusum, "dev": args.n_dev, "eval": args.n_eval},
         "max_prompt_tokens": args.max_prompt_tokens, "max_new_tokens": args.max_new_tokens,
         "eval_chains": args.eval_chains, "smoke": args.smoke, "exclusions": exclusions_digest,
@@ -448,6 +472,21 @@ def _eval_provenances(report: dict[str, Any]) -> list[dict[str, Any]]:
                 out.append({"provenance": p, "sessions": {"fresh": 0, "carried": 0}})
             out[index[key]]["sessions"][regime] += 1
     return out
+
+
+def _check_calibration_owner(fit_meta: dict[str, Any], settings_identity: str) -> None:
+    """A calibration -- complete, or in progress -- belongs to the settings identity recorded when it
+    STARTED (written before calibrate_qwen runs, so no crash window leaves it unowned). Reusing a
+    completed calibration, or extending one, under any other identity is refused; a completed
+    calibration with no recorded owner is never assumed to match (CODEX-001)."""
+    owner = fit_meta.get("calibration_settings_identity")
+    complete = bool(fit_meta.get("calibration_fit_complete") and fit_meta.get("calibration_cusum_complete"))
+    if owner is None and complete:
+        raise RunConflict("the completed calibration in this run records no settings identity; refusing to reuse it. "
+                          "Use a fresh --out.")
+    if owner is not None and owner != settings_identity:
+        raise RunConflict("the calibration in this run was produced under a different settings/protocol identity; "
+                          "refusing to reuse or extend it. Use a fresh --out.")
 
 
 def _record_invocation(out_dir: str, provenance: dict[str, Any], mode: str) -> list[dict[str, Any]]:
@@ -653,10 +692,45 @@ def _append_eval_progress(path: str, regime: str, record: dict[str, Any], txns: 
         f.write(json.dumps({"regime": regime, "record": record, "txns": txns}) + "\n")
 
 
+def _is_int(x: Any) -> bool:
+    return isinstance(x, int) and not isinstance(x, bool)  # JSON true == 1 in Python; never an id or count
+
+
+def _is_num(x: Any) -> bool:
+    return isinstance(x, (int, float)) and not isinstance(x, bool)
+
+
+def _by_source_problem(d: Any, name: str) -> str | None:
+    if not isinstance(d, dict) or not all(_is_int(d.get(k)) and d[k] >= 0 for k in ("prompt", "generation")):
+        return f"{name} is not a nonnegative integer count per source (prompt, generation)"
+    return None
+
+
+def _txn_problem(t: Any, j: int) -> str | None:
+    """The transaction fields the operating-point aggregation reads, in the shape TransactionRunner writes."""
+    if not isinstance(t, dict):
+        return f"transaction {j} is not an object"
+    if not isinstance(t.get("decision"), dict) or not isinstance(t["decision"].get("kind"), str):
+        return f"transaction {j} has no decision kind"
+    src = t.get("sources")
+    if not isinstance(src, dict) or not all(_is_int(src.get(k)) and src[k] >= 0 for k in ("user", "model")):
+        return f"transaction {j} has no nonnegative integer user/model source counts"
+    if not isinstance(t.get("eligible"), bool):
+        return f"transaction {j} has no boolean eligibility"
+    if not isinstance(t.get("accepted"), dict) or not _is_num(t["accepted"].get("delta_norm")):
+        return f"transaction {j} has no numeric accepted delta_norm"
+    if not (t.get("read_only_reason") is None or isinstance(t.get("read_only_reason"), str)):
+        return f"transaction {j} has a non-string read_only_reason"
+    return None
+
+
 def _progress_record_problem(rec: Any) -> str | None:
     """Why a parsed progress line is not a completed-session record the writer could have produced, or
     None. A parseable but schema-invalid line is corruption, not a crash fragment (a truncated JSON
-    object never parses), so the loader refuses it rather than ignoring it or raising a bare KeyError."""
+    object never parses), so the loader refuses it rather than ignoring it or raising a bare KeyError.
+    The check is writer-shaped all the way down (``_eval_sessions._session_record`` and the runner's
+    transaction record): integer (never boolean) ids that the restored-prefix comparison relies on,
+    every field the criterion and aggregation read, and turns consistent with the ids (CODEX-001)."""
     if not isinstance(rec, dict):
         return "not a JSON object"
     regime = rec.get("regime")
@@ -665,14 +739,44 @@ def _progress_record_problem(rec: Any) -> str | None:
     r = rec.get("record")
     if not isinstance(r, dict):
         return "missing session record"
-    if not isinstance(r.get("ids"), list):
-        return "session record has no ids list"
-    if "regime" in r and r["regime"] != regime:
-        return f"session record regime {r['regime']!r} differs from the line regime {regime!r}"
-    if r.get("incomplete") is True:
-        return "an incomplete session was persisted"
-    if not isinstance(rec.get("txns"), list):
+    ids = r.get("ids")
+    if not isinstance(ids, list) or not ids or not all(_is_int(i) for i in ids):
+        return "session record has no nonempty integer ids list"
+    if r.get("regime") != regime:
+        return f"session record regime {r.get('regime')!r} differs from the line regime {regime!r}"
+    if r.get("incomplete") is not False:
+        return "an incomplete session was persisted" if r.get("incomplete") is True else "session record has no incomplete=false"
+    if not isinstance(r.get("retained_both"), bool):
+        return "session record has no boolean retained_both"
+    if not isinstance(r.get("read_only"), bool):
+        return "session record has no boolean read_only"
+    if not (r.get("read_only_reason") is None or isinstance(r.get("read_only_reason"), str)):
+        return "session record has a non-string read_only_reason"
+    for name in ("eligible_by_source", "accepted_by_source"):
+        problem = _by_source_problem(r.get(name), name)
+        if problem:
+            return problem
+    if not isinstance(r.get("anomalies"), dict):
+        return "session record has no anomalies map"
+    if "provenance" in r and not isinstance(r["provenance"], dict):
+        return "session record provenance is not an object"
+    turns = r.get("turns")
+    if not isinstance(turns, list) or len(turns) != len(ids):
+        return "session record turns do not match its ids"
+    for j, turn in enumerate(turns):
+        if not isinstance(turn, dict) or turn.get("id") != ids[j] or not _is_int(turn.get("id")):
+            return f"turn {j} does not carry the session's id {ids[j]!r}"
+        if not (_is_int(turn.get("seed")) and _is_int(turn.get("n_in")) and _is_int(turn.get("n_out"))
+                and isinstance(turn.get("completion"), str) and turn.get("outcome") in ("cap", "empty", "eos")
+                and _is_num(turn.get("seconds"))):
+            return f"turn {j} is missing a writer field (seed, completion, n_in, n_out, outcome, seconds)"
+    txns = rec.get("txns")
+    if not isinstance(txns, list):
         return "missing transactions list"
+    for j, t in enumerate(txns):
+        problem = _txn_problem(t, j)
+        if problem:
+            return problem
     return None
 
 
@@ -836,13 +940,20 @@ def main() -> None:
     import torch  # noqa
 
     from plastic.backends.qwen import QwenBackend, _checkpoint_digest
-    from plastic.harness.calibrate import Calibration, CalibrationCheckpointError, CalibrationIncomplete, calibrate_qwen
+    from plastic.harness.calibrate import (
+        Calibration, CalibrationCheckpointError, CalibrationIncomplete, calibrate_qwen, log_only,
+    )
     from plastic.harness.config import HarnessConfig
     from plastic.store import ArtifactStore
 
     os.makedirs(args.out, exist_ok=True)
     deadline = time.time() + args.minutes * 60
-    seed = 20260922
+    seed = SEED
+    # the fixed harness policies, built up front so the run identity binds the EFFECTIVE configs
+    fit_hcfg = HarnessConfig(target_fpr=TARGET_FPR)  # calibrate_qwen runs it log-only
+    eval_hcfg = HarnessConfig(target_fpr=TARGET_FPR, enable_stats=True, enable_rollback=True, log_only=False,
+                              learn_from_generation=True, freeze_on_alarm=True, alarm_cooldown=0)
+    protocol = _protocol(args.max_new_tokens, fit_harness=log_only(fit_hcfg).to_dict(), eval_harness=eval_hcfg.to_dict())
 
     # corpus + split + manifest (saved before any generation)
     rows, revision = load_dolly_prompts(max_rows=20000)
@@ -872,7 +983,7 @@ def main() -> None:
     del be_for_tok
     # reuse an existing run's model id + immutable manifest when the configuration matches, and refuse
     # (never overwrite) when it differs, BEFORE any run-artifact write (ASTRA-092 manifest preservation)
-    settings_identity = _settings_identity(args, manifest["checkpoint_digest"], revision, exclusions_digest)
+    settings_identity = _settings_identity(args, manifest["checkpoint_digest"], revision, exclusions_digest, protocol=protocol)
     store = ArtifactStore(os.path.join(args.out, "store"))
     try:
         # on resume this restores the exact ordered split from the pinned manifest (not the rebuild),
@@ -882,12 +993,17 @@ def main() -> None:
     except RunConflict as err:
         print(f"[oppoint] run conflict: {err}")
         return
-    store.register_model(mid, {"backend": "qwen", "checkpoint_dir": args.checkpoint, "domain": "text", "chunk": 8, "status": "completed"})
+    store.register_model(mid, {"backend": "qwen", "checkpoint_dir": args.checkpoint, "domain": "text", "chunk": CHUNK, "status": "completed"})
     print(f"[oppoint] corpus split {mode}: {manifest['actual_counts']} (excluded_over_cap={manifest['excluded_over_cap']}, corpus_hash={manifest['corpus_hash'][:12]}, model={mid})")
 
-    gen = {"max_new_tokens": args.max_new_tokens, "temperature": 0.9, "top_k": 50}
+    gen = protocol["gen"]
     ckpt_path = os.path.join(args.out, "calibration.ckpt")
     fit_meta = store.load_model_record(mid)
+    try:
+        _check_calibration_owner(fit_meta, settings_identity)
+    except RunConflict as err:
+        print(f"[oppoint] calibration conflict: {err}")
+        return
     if fit_meta.get("calibration_fit_complete") and fit_meta.get("calibration_cusum_complete"):
         # a completed calibration is reused, not re-fit under a new model id: calibrate_qwen deleted its
         # progress checkpoint on completion, but the calibration artifact is durable in the model dir,
@@ -899,9 +1015,11 @@ def main() -> None:
         # A durable checkpoint (bound to the model/corpus/config) lets a deadline persist progress and
         # resume rather than re-fit; on an incomplete calibration we stop BEFORE eval so a conformant run
         # never evaluates on partial thresholds. Re-running the same command resumes from the checkpoint.
+        store.register_model(mid, {"calibration_settings_identity": settings_identity})  # owner, BEFORE any fit work
         try:
             cal = calibrate_qwen(store, mid, [r["prompt"] for r in split["fit"]], cusum_prompts=[r["prompt"] for r in split["cusum"]],
-                                 target_fpr=0.01, max_new_tokens=args.max_new_tokens, seed=seed, device=args.device,
+                                 target_fpr=TARGET_FPR, max_new_tokens=gen["max_new_tokens"], temperature=gen["temperature"],
+                                 top_k=gen["top_k"], harness_cfg=fit_hcfg, seed=seed, device=args.device,
                                  deadline=deadline, checkpoint_path=ckpt_path, corpus_hash=manifest["corpus_hash"])
         except CalibrationCheckpointError as err:
             # an existing checkpoint is for a different config/corpus or is corrupt: it is preserved, not
@@ -922,9 +1040,7 @@ def main() -> None:
     # frozen evaluation harness: stats + rollback on, generation learning on, alarm latch, no budget
     from plastic.config import ModelConfig
 
-    eval_cfg = ModelConfig(domain="text", chunk=8)
-    eval_hcfg = HarnessConfig(enable_stats=True, enable_rollback=True, log_only=False,
-                              learn_from_generation=True, freeze_on_alarm=True, alarm_cooldown=0)
+    eval_cfg = ModelConfig(domain="text", chunk=CHUNK)
     eval_backend = QwenBackend.load(args.checkpoint, device=args.device)
     # durable eval progress bound to the exact split/settings/calibration-content/policy: complete
     # sessions are appended and restored on re-invocation, so a bounded run resumes rather than re-evals
@@ -940,7 +1056,7 @@ def main() -> None:
         return
     try:
         report = _eval_sessions(eval_backend, eval_cfg, cal, split["eval"],
-                                hcfg=eval_hcfg, gen=gen, seed_base=seed + 3000, chains=args.eval_chains, deadline=deadline,
+                                hcfg=eval_hcfg, gen=gen, seed_base=seed + EVAL_SEED_OFFSET, chains=args.eval_chains, deadline=deadline,
                                 restore=restore, provenance=provenance,
                                 on_progress=lambda regime, rec, txns, ng: _append_eval_progress(eval_progress_path, regime, rec, txns))
     except RunConflict as err:
@@ -955,7 +1071,7 @@ def main() -> None:
         return
 
     # predeclared follow-up smoke (separate from Dolly; never fit/tuned on)
-    followups = _run_followups(eval_backend, eval_cfg, cal, gen, seed + 4000, args.followups, eval_hcfg, deadline,
+    followups = _run_followups(eval_backend, eval_cfg, cal, gen, seed + FOLLOWUP_SEED_OFFSET, args.followups, eval_hcfg, deadline,
                                declared_sha256=(manifest.get("followups_fixture") or {}).get("sha256"))
     followups["provenance"] = provenance  # follow-ups rerun wholesale, so one invocation produced them all
     _write_json(os.path.join(args.out, "followups-result.json"), followups)
