@@ -178,7 +178,7 @@ export function SessionsTab() {
 
         <Panel
           title="All sessions"
-          subtitle="Counts come from the session's own transaction log. Intervened is the fraction of chunks not committed, observed on that session's own traffic."
+          subtitle="Counts come from the session's own transaction log. Rejected is the fraction of eligible updates the harness rejected or altered (rollback, scale, project), observed on that session's own traffic; read-only observations proposed no write and are excluded."
           actions={
             currentSessionId ? (
               <Button size="sm" onClick={() => setActiveTab('session')}>
@@ -202,7 +202,7 @@ export function SessionsTab() {
                 'Scale',
                 'Project',
                 'Read-only',
-                'Intervened',
+                'Rejected',
                 'Budget used',
                 'Updated',
                 '',
@@ -237,7 +237,7 @@ export function SessionsTab() {
                   <td className="px-2 py-1.5 font-mono text-status-readonly">{fmtInt(s.readonly)}</td>
                   <td
                     className="px-2 py-1.5 font-mono text-ink-secondary"
-                    title="Fraction of chunks not committed. An observed rate on this session's own traffic, not a false-positive rate."
+                    title="Rollback, scale, or project as a fraction of the chunks that proposed a write. Read-only observations are excluded; unavailable means none proposed a write. An observed rate on this session's own traffic, not a false-positive rate."
                   >
                     {rateSummaryText(countsFromSession(s))}
                   </td>

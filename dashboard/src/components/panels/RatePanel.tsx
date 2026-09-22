@@ -8,9 +8,13 @@ import { Empty, KeyValue } from './index';
  *   1. target_fpr        what the calibration ASKED for. A request, not a guarantee.
  *   2. achievable_fpr    what the calibration SAMPLE can support, per signal.
  *                        This is the honest number; a small sample cannot reach the target.
- *   3. intervention rate what a session actually DID: the fraction of chunks that were
- *                        not committed. It is measured against live traffic, not a
- *                        labelled benign stream, so it is NOT a false-positive rate.
+ *   3. rejection rate    what a session actually DID: of the chunks that proposed a
+ *                        write (eligible updates, i.e. NOT read-only observations),
+ *                        the fraction the harness rejected or altered (rollback,
+ *                        scale, project). A read-only chunk proposed no write and is
+ *                        committed as its frozen observation, so it is never an
+ *                        intervention. Measured against live traffic, not a labelled
+ *                        benign stream, so it is NOT a false-positive rate.
  *
  * They are rendered in three separately titled blocks so no reader can read one
  * as evidence for another.
@@ -25,11 +29,36 @@ export interface InterventionCounts {
   readonly: number;
 }
 
+/**
+ * Interventions are the chunks where the harness rejected or altered a proposed
+ * write: rollback, scale, or project. A read-only chunk proposed NO write and is
+ * committed as its frozen observation, so readonly is never an intervention.
+ */
+export function interventionCount(c: InterventionCounts): number {
+  return (c.rollbacks ?? 0) + (c.scales ?? 0) + (c.projects ?? 0);
+}
+
+/** Chunks that were eligible for a write: every chunk minus the read-only observations. */
+export function eligibleUpdateCount(c: InterventionCounts): number {
+  return Math.max(0, (c.n_transactions ?? 0) - (c.readonly ?? 0));
+}
+
+/** Fraction of ALL chunks that were an actual intervention. Readonly never counts. */
 export function interventionRate(c: InterventionCounts): number | null {
   const total = c.n_transactions;
   if (!isNum(total) || total <= 0) return null;
-  const nonCommit = (c.rollbacks ?? 0) + (c.scales ?? 0) + (c.projects ?? 0) + (c.readonly ?? 0);
-  return nonCommit / total;
+  return interventionCount(c) / total;
+}
+
+/**
+ * Of the chunks that proposed a write, the fraction the harness rejected or
+ * altered. Null when there were no eligible updates (a pure-observation session
+ * has no rejection rate to report): render as unavailable, never as 0%.
+ */
+export function eligibleRejectionRate(c: InterventionCounts): number | null {
+  const eligible = eligibleUpdateCount(c);
+  if (eligible <= 0) return null;
+  return interventionCount(c) / eligible;
 }
 
 export function countsFromSession(s: SessionSummary): InterventionCounts {
@@ -93,19 +122,27 @@ export function CalibratedRates({ calibration }: { calibration: CalibrationSumma
 
 /** What a session actually did. Deliberately not called a false-positive rate. */
 export function ObservedIntervention({ counts, label }: { counts: InterventionCounts; label: string }) {
-  const rate = interventionRate(counts);
-  const nonCommit = counts.rollbacks + counts.scales + counts.projects + counts.readonly;
+  const rate = eligibleRejectionRate(counts);
+  const interventions = interventionCount(counts);
+  const eligible = eligibleUpdateCount(counts);
+  const readonly = counts.readonly ?? 0;
   return (
     <div className="rounded border border-edge-strong bg-surface-overlay px-3 py-2.5">
-      <p className="text-label font-semibold uppercase tracking-wide text-ink-muted">3. Observed intervention rate</p>
+      <p className="text-label font-semibold uppercase tracking-wide text-ink-muted">3. Observed rejection rate, eligible updates only</p>
       <p className="mt-1 font-mono text-lg text-ink-primary">{rate === null ? UNAVAILABLE : fmtPercent(rate, 2)}</p>
       <p className="mt-1 text-micro text-ink-secondary">
-        {label}: {fmtInt(nonCommit)} of {fmtInt(counts.n_transactions)} chunks were not committed
-        {counts.n_transactions > 0
-          ? ` (${fmtInt(counts.rollbacks)} rollback, ${fmtInt(counts.scales)} scale, ${fmtInt(counts.projects)} project, ${fmtInt(counts.readonly)} read-only)`
+        {label}: {fmtInt(interventions)} of {fmtInt(eligible)} eligible update{eligible === 1 ? '' : 's'} rejected or altered
+        {eligible > 0
+          ? ` (${fmtInt(counts.rollbacks)} rollback, ${fmtInt(counts.scales)} scale, ${fmtInt(counts.projects)} project)`
           : ''}
         .
       </p>
+      {readonly > 0 ? (
+        <p className="mt-1 text-micro text-ink-secondary">
+          {fmtInt(readonly)} read-only observation{readonly === 1 ? '' : 's'} (no write proposed) committed as frozen
+          state; these are not interventions and are excluded from the rate above.
+        </p>
+      ) : null}
       <p className="mt-1.5 text-micro text-ink-muted">
         This is not a false-positive rate. It is measured on whatever this session was fed, not on a labelled benign
         stream, so it says nothing about how many of these interventions were warranted.
@@ -114,8 +151,12 @@ export function ObservedIntervention({ counts, label }: { counts: InterventionCo
   );
 }
 
-/** Compact variant for a table cell or a tile hint. */
+/**
+ * Compact variant for a table cell or a tile hint: the eligible-update rejection
+ * rate. "unavailable" when no chunk proposed a write, so a pure-observation
+ * session is never labelled as intervened.
+ */
 export function rateSummaryText(counts: InterventionCounts): string {
-  const rate = interventionRate(counts);
-  return rate === null ? UNAVAILABLE : `${fmtPercent(rate, 1)} intervened`;
+  const rate = eligibleRejectionRate(counts);
+  return rate === null ? UNAVAILABLE : `${fmtPercent(rate, 1)} rejected`;
 }
