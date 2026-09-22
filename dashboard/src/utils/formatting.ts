@@ -277,7 +277,10 @@ export function fmtValidOnlyPercent(v: number | null | undefined, decimals = 0):
  * eligible means each chunk transacts and may be rolled back or scaled -- it is NOT guaranteed
  * retained learning. A read-only latch suppresses all writes, so the caller passes that through.
  */
-export function generationLearningCopy(generationWriteEligible: boolean, readOnly: boolean): string {
+export function generationLearningCopy(generationWriteEligible: boolean | null | undefined, readOnly: boolean): string {
+  if (generationWriteEligible == null) {
+    return 'Prompt tokens are write-eligible; the effective write policy for generated tokens is not available yet.';
+  }
   if (readOnly) {
     return 'The session is currently read-only, so no chunk writes: every chunk transacts as read-only.';
   }

@@ -55,7 +55,7 @@ export function ChatTab() {
   // EFFECTIVE generation-write policy from the backend (Qwen generation is write-eligible even with
   // learn_from_generation off), not the raw flag, and not a blanket "read-only by default"
   const summary = sessionDetail?.summary;
-  const promptSubtitle = generationLearningCopy(summary?.writes_generation ?? false, summary?.read_only ?? false);
+  const promptSubtitle = generationLearningCopy(summary?.writes_generation, summary?.read_only ?? false);
   const backend = summary?.backend ?? 'plastic';
   const cal = calibrationDisplay(summary?.calibration);
   const accounting = chatResult ? sourceAccounting(chatResult.transactions) : null;

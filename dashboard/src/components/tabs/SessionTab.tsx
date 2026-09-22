@@ -420,6 +420,16 @@ export function SessionTab() {
 
   const summary = sessionDetail.summary;
   const meta = sessionDetail.meta;
+  // the upper-summary state norm is backend-shaped: a pretrained backend reports a recurrent-memory
+  // total, the toy Plastic model reports per-layer S/h totals -- do not show Plastic-only fields as
+  // "unavailable" on a native session (ASTRA-102)
+  const stateNormRows =
+    summary.backend === 'qwen' || summary.state_norms.recurrent_norm_total !== undefined
+      ? [{ label: 'Recurrent memory ‖M‖ total', value: fmt(summary.state_norms.recurrent_norm_total, 3) }]
+      : [
+          { label: 'State ‖S‖ total', value: fmt(summary.state_norms.s_norm_total, 3) },
+          { label: 'State ‖h‖ total', value: fmt(summary.state_norms.h_norm_total, 3) },
+        ];
   const selectedTx = transactions.find((t) => t.index === selected) ?? null;
   const counts = transactions.reduce<Record<string, number>>((acc, tx) => {
     acc[tx.decision.kind] = (acc[tx.decision.kind] ?? 0) + 1;
@@ -582,8 +592,7 @@ export function SessionTab() {
                 { label: 'CUSUM s_hi', value: fmt(summary.cusum.s_hi, 3), note: `h ${fmt(summary.cusum.h, 2)}` },
                 { label: 'CUSUM s_lo', value: fmt(summary.cusum.s_lo, 3), note: `k ${fmt(summary.cusum.k, 2)}` },
                 { label: 'Alarms', value: fmtInt(summary.cusum.alarms) },
-                { label: 'State ‖S‖ total', value: fmt(summary.state_norms.s_norm_total, 3) },
-                { label: 'State ‖h‖ total', value: fmt(summary.state_norms.h_norm_total, 3) },
+                ...stateNormRows,
                 { label: 'Lineage', value: sessionDetail.lineage.join(' → ') || meta.session_id },
               ]}
             />

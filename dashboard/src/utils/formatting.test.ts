@@ -112,6 +112,14 @@ describe('generationLearningCopy', () => {
     expect(ro).toMatch(/read-only/i);
     expect(ro).toMatch(/no chunk writes/i);
   });
+
+  it('an unknown/loading effective policy is not asserted as read-only or learned', () => {
+    for (const v of [undefined, null]) {
+      const copy = generationLearningCopy(v, false);
+      expect(copy).toMatch(/not available yet/i);
+      expect(copy).not.toMatch(/not write-eligible/i); // do not claim a policy we do not have
+    }
+  });
 });
 
 describe('sourceAccounting', () => {

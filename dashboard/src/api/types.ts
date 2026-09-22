@@ -286,11 +286,15 @@ export interface CusumState {
   alarms: number;
 }
 
+// Plastic reports per-layer S/h norms; a pretrained backend (Qwen) reports per-memory-unit recurrent
+// norms instead. All optional so a summary carries whichever shape its backend produced.
 export interface StateNorms {
-  s_norm: number[];
-  h_norm: number[];
-  s_norm_total: number;
-  h_norm_total: number;
+  s_norm?: number[];
+  h_norm?: number[];
+  s_norm_total?: number;
+  h_norm_total?: number;
+  recurrent_norm?: number[];
+  recurrent_norm_total?: number;
 }
 
 // The session's ACTUAL calibration state as reported by Session.summary(), distinct from whether the
