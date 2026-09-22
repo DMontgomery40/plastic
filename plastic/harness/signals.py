@@ -35,11 +35,13 @@ class ChunkSignals:
     pos_end: int
     n_tokens: int
     chunk_loss: float
-    surprise_mean: float
-    surprise_max: float
-    beta_mean: float
-    alpha_mean: float
-    write_norm_sum: float
+    # the memory-derived signals are None on a backend whose kernel does not expose them (Qwen has no
+    # per-token surprise/write-norm/decay); they are carried as None end-to-end, never zero or NaN.
+    surprise_mean: float | None
+    surprise_max: float | None
+    beta_mean: float | None
+    alpha_mean: float | None
+    write_norm_sum: float | None
     delta_norm: float
     delta_norm_per_layer: list[float] = field(default_factory=list)
     fisher_update: float | None = None
@@ -62,8 +64,8 @@ class ChunkSignals:
         return log_safe(self.delta_norm)
 
     @property
-    def log_write_norm(self) -> float:
-        return log_safe(self.write_norm_sum)
+    def log_write_norm(self) -> float | None:
+        return None if self.write_norm_sum is None else log_safe(self.write_norm_sum)
 
     def value(self, name: str) -> float | None:
         return getattr(self, name)

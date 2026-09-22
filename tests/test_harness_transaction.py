@@ -257,6 +257,42 @@ def test_projection_budget_recheck_float_rounding():
                 assert r.budget_used <= cap * (1 + 1e-6), ctx
 
 
+def test_reduced_signal_backend_carries_none_end_to_end():
+    # A backend whose kernel exposes no per-token memory signals (like Qwen) must have
+    # surprise/write-norm/decay carried as None end-to-end — never zero or NaN — while chunk_loss and
+    # log_delta_norm stay real and a valid decision is still made. Driven with a reduced-signal
+    # wrapper over PlasticBackend so it runs in the plain suite (no Qwen checkpoint needed).
+    class _Reduced:
+        def __init__(self, inner):
+            self._inner = inner
+
+        def signal_names(self):
+            return ("chunk_loss", "log_delta_norm")
+
+        def forward(self, items, state, *, freeze, beta_scale):
+            out, new_state, _ = self._inner.forward(items, state, freeze=freeze, beta_scale=beta_scale)
+            return out, new_state, []  # no per-token memory signals
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+    cfg, lm = _lm()
+    r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)
+    r.backend = _Reduced(r.backend)
+    r.feed_tokens(_ids(8))
+    rec = r.transactions[0]
+    s = rec["signals"]
+    for k in ("surprise_mean", "surprise_max", "beta_mean", "alpha_mean", "write_norm_sum", "log_write_norm"):
+        assert s[k] is None, (k, s[k])  # unavailable memory signals are None, not 0.0 / NaN
+    assert isinstance(s["chunk_loss"], float) and s["chunk_loss"] == s["chunk_loss"]  # real, not NaN
+    assert isinstance(s["log_delta_norm"], float)
+    # z is None for every unavailable signal (a None value yields a None z)
+    assert s["z"]["surprise_mean"] is None and s["z"]["log_write_norm"] is None and s["z"]["fisher_update"] is None
+    assert rec["decision"]["kind"] in ("commit", "rollback", "scale", "project", "readonly")
+    # persistence round-trips a chunk that carried no memory signals
+    r.load_state_dict(r.state_dict())
+
+
 def test_nonfinite_candidate_is_rejected():
     cfg, lm = _lm()
     r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)

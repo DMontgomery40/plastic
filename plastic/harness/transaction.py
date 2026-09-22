@@ -194,7 +194,13 @@ class TransactionRunner:
         n = len(self.pending)
         losses = [x for x in self.pending_loss if x is not None]
         chunk_loss = float(sum(losses) / len(losses)) if losses else float("nan")
-        mem = summarize_memory_signals([s for group in self.pending_signals for s in group])
+        # A backend whose kernel exposes no per-token memory signals (Qwen) returns empty signal
+        # groups; those memory-derived signals are carried as None (never summarized to zero/NaN).
+        mem_signals = [s for group in self.pending_signals for s in group]
+        mem = summarize_memory_signals(mem_signals) if mem_signals else {
+            "surprise_mean": None, "surprise_max": None, "beta_mean": None,
+            "alpha_mean": None, "write_norm_sum": None,
+        }
         deltas = self.backend.state_delta(self.working, self.committed)
         dnorm, per_layer = delta_norms(deltas)
         fisher_update = fisher_norm(deltas, self.fisher) if self.fisher is not None else None
