@@ -1,312 +1,408 @@
+// One store for the whole dashboard. Components read slices from it and call
+// its actions; nothing else talks to the API.
+
 import { create } from 'zustand';
-import type { SessionData, TabId, UpdateEvent, SessionIndex, SessionTreeNode, RunData } from '../types';
-import { mockSession, mockSessions, mockSessionIndex, mockSessionTree } from '../data/mockData';
-import { buildSessionTree, getSessionLineage } from '../utils/sessionTree';
-import { fetchSessionIndex, fetchSessions, forkSession as forkSessionApi } from '../api/nanoApi';
+import * as api from '../api/client';
+import { ApiError } from '../api/client';
+import type {
+  CalibrateRequest,
+  ChatRequest,
+  ChatResult,
+  CreateSessionRequest,
+  DataDir,
+  EpisodeResult,
+  Health,
+  ModelDetail,
+  ModelSummary,
+  PhysicsRequest,
+  RedteamDetail,
+  RedteamRequest,
+  RedteamSummary,
+  SessionDetail,
+  SessionState,
+  SessionSummary,
+  TrainJob,
+  TrainRequest,
+  TrainStatus,
+} from '../api/types';
 
-interface DashboardState {
-  // Current session
-  currentSession: SessionData;
-  sessions: SessionData[];
+export const TAB_KEYS = ['sessions', 'session', 'chat', 'physics', 'train', 'redteam', 'architecture'] as const;
+export type TabKey = (typeof TAB_KEYS)[number];
 
-  // Phase 1: Session index and tree
-  sessionIndex: SessionIndex;
-  sessionTree: SessionTreeNode[];
+export const TAB_LABELS: Record<TabKey, string> = {
+  sessions: 'Sessions',
+  session: 'Session',
+  chat: 'Chat',
+  physics: 'Physics',
+  train: 'Train',
+  redteam: 'Red team',
+  architecture: 'Architecture',
+};
 
-  // Data source
-  dataSource: 'mock' | 'api';
-  isLoading: boolean;
-  loadError: string | null;
-  hasInitialized: boolean;
-  initialize: () => Promise<void>;
-  refreshFromApi: () => Promise<void>;
+/** Which loading flag a given request owns. Kept explicit so the UI never guesses. */
+export type LoadingKey =
+  | 'health'
+  | 'models'
+  | 'model'
+  | 'sessions'
+  | 'session'
+  | 'sessionState'
+  | 'jobs'
+  | 'redteam'
+  | 'redteamRun'
+  | 'data'
+  | 'chat'
+  | 'physics'
+  | 'calibrate'
+  | 'mutation';
 
-  // Navigation
-  activeTab: TabId;
-  setActiveTab: (tab: TabId) => void;
+export interface PlasticState {
+  // data
+  health: Health | null;
+  models: ModelSummary[];
+  modelDetail: ModelDetail | null;
+  sessions: SessionSummary[];
+  currentSessionId: string | null;
+  sessionDetail: SessionDetail | null;
+  sessionState: SessionState | null;
+  selectedTransaction: number | null;
+  chatResult: ChatResult | null;
+  episodeResult: EpisodeResult | null;
+  jobs: TrainJob[];
+  trainStatus: Record<string, TrainStatus>;
+  redteamRuns: RedteamSummary[];
+  redteamDetail: RedteamDetail | null;
+  dataDirs: DataDir[];
 
-  // Time control
-  currentTime: number;
-  isPlaying: boolean;
-  playbackSpeed: number;
-  setCurrentTime: (t: number) => void;
-  setIsPlaying: (playing: boolean) => void;
-  setPlaybackSpeed: (speed: number) => void;
+  // ui
+  activeTab: TabKey;
+  loading: Record<LoadingKey, boolean>;
+  error: string | null;
 
-  // Selection
-  selectedUpdateEvent: UpdateEvent | null;
-  setSelectedUpdateEvent: (event: UpdateEvent | null) => void;
+  // actions
+  setActiveTab: (tab: TabKey) => void;
+  setCurrentSession: (sessionId: string | null) => void;
+  setSelectedTransaction: (index: number | null) => void;
+  clearError: () => void;
 
-  // Phase 1: Run selection
-  selectedRunId: string | null;
-  setSelectedRunId: (runId: string | null) => void;
-  getCurrentRun: () => RunData | null;
+  refreshHealth: () => Promise<void>;
+  refreshModels: () => Promise<void>;
+  refreshSessions: () => Promise<void>;
+  refreshDataDirs: () => Promise<void>;
+  refreshJobs: () => Promise<void>;
+  refreshRedteam: () => Promise<void>;
+  bootstrap: () => Promise<void>;
 
-  // View options
-  logScale: boolean;
-  smoothing: boolean;
-  smoothingWindow: number;
-  setLogScale: (log: boolean) => void;
-  setSmoothing: (smooth: boolean) => void;
-  setSmoothingWindow: (window: number) => void;
+  loadModel: (modelId: string) => Promise<void>;
+  calibrate: (modelId: string, body?: CalibrateRequest) => Promise<void>;
 
-  // Phase 1: Weight comparison mode
-  weightCompareMode: 'none' | 'parent' | 'base';
-  setWeightCompareMode: (mode: 'none' | 'parent' | 'base') => void;
+  loadSession: (sessionId: string) => Promise<void>;
+  loadSessionState: (sessionId: string) => Promise<void>;
+  createSession: (body: CreateSessionRequest) => Promise<SessionSummary | null>;
+  forkSession: (sessionId: string, childSessionId?: string) => Promise<SessionSummary | null>;
+  resetSession: (sessionId: string) => Promise<void>;
+  resumeSession: (sessionId: string) => Promise<void>;
+  deleteSession: (sessionId: string) => Promise<void>;
 
-  // Session management
-  selectedSessionIds: string[];
-  toggleSessionSelection: (id: string) => void;
-  setCurrentSession: (session: SessionData) => void;
+  sendChat: (body: ChatRequest) => Promise<void>;
+  runEpisode: (body: PhysicsRequest) => Promise<void>;
 
-  // Phase 1: Session lineage
-  getSessionLineage: () => string[];
+  startTraining: (body: TrainRequest) => Promise<void>;
+  cancelTraining: (modelId: string) => Promise<void>;
 
-  // Phase 1: Fork session (mock or API)
-  forkSession: (parentSessionId: string, newSessionId: string) => void;
+  loadRedteamRun: (runId: string) => Promise<void>;
+  runRedteam: (body: RedteamRequest) => Promise<void>;
 }
 
-function pickDefaultSession(sessions: SessionData[], index: SessionIndex): SessionData | null {
-  if (sessions.length === 0) return null;
+const NO_LOADING: Record<LoadingKey, boolean> = {
+  health: false,
+  models: false,
+  model: false,
+  sessions: false,
+  session: false,
+  sessionState: false,
+  jobs: false,
+  redteam: false,
+  redteamRun: false,
+  data: false,
+  chat: false,
+  physics: false,
+  calibrate: false,
+  mutation: false,
+};
 
-  let best: SessionData | null = null;
-  let bestTs = -1;
+export const initialState = {
+  health: null,
+  models: [],
+  modelDetail: null,
+  sessions: [],
+  currentSessionId: null,
+  sessionDetail: null,
+  sessionState: null,
+  selectedTransaction: null,
+  chatResult: null,
+  episodeResult: null,
+  jobs: [],
+  trainStatus: {},
+  redteamRuns: [],
+  redteamDetail: null,
+  dataDirs: [],
+  activeTab: 'sessions' as TabKey,
+  loading: NO_LOADING,
+  error: null,
+};
 
-  for (const s of sessions) {
-    const summary = index.sessions[s.meta.session_id];
-    const ts = (summary?.last_run_at_unix ?? summary?.created_at_unix ?? 0) as number;
-    if (ts > bestTs) {
-      best = s;
-      bestTs = ts;
+export function describeError(err: unknown): string {
+  if (err instanceof ApiError) return err.status ? `${err.message} (HTTP ${err.status})` : err.message;
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
+export const useStore = create<PlasticState>()((set, get) => {
+  /** Run a request with its loading flag set, recording any failure in `error`. */
+  const withLoading = async <T,>(key: LoadingKey, run: () => Promise<T>): Promise<T | null> => {
+    set((s) => ({ loading: { ...s.loading, [key]: true }, error: null }));
+    try {
+      return await run();
+    } catch (err) {
+      set({ error: describeError(err) });
+      return null;
+    } finally {
+      set((s) => ({ loading: { ...s.loading, [key]: false } }));
     }
-  }
-
-  return best || sessions[0];
-}
-
-function normalizeSessionForLatestRun(session: SessionData): SessionData {
-  if (!session.runs || session.runs.length === 0) return session;
-  const latestRun = [...session.runs].sort((a, b) => b.created_at_unix - a.created_at_unix)[0];
-  if (!latestRun) return session;
+  };
 
   return {
-    ...session,
-    metrics: latestRun.metrics,
-    perStep: latestRun.perStep,
-    updateEvents: latestRun.updateEvents,
-    trajectory: latestRun.trajectory ?? session.trajectory,
-  };
-}
+    ...initialState,
 
-export const useDashboardStore = create<DashboardState>((set, get) => ({
-  // Initial state
-  currentSession: mockSession,
-  sessions: mockSessions,
-  sessionIndex: mockSessionIndex,
-  sessionTree: mockSessionTree,
-  dataSource: 'mock',
-  isLoading: false,
-  loadError: null,
-  hasInitialized: false,
-  activeTab: 'session-tree',  // Phase 1: Start on session tree
-  currentTime: 0,
-  isPlaying: false,
-  playbackSpeed: 1,
-  selectedUpdateEvent: null,
-  selectedRunId: null,
-  logScale: false,
-  smoothing: false,
-  smoothingWindow: 10,
-  weightCompareMode: 'none',
-  selectedSessionIds: [],
+    setActiveTab: (tab) => set({ activeTab: tab }),
 
-  // Actions
-  setActiveTab: (tab) => set({ activeTab: tab }),
-
-  setCurrentTime: (t) => set({ currentTime: t }),
-  setIsPlaying: (playing) => set({ isPlaying: playing }),
-  setPlaybackSpeed: (speed) => set({ playbackSpeed: speed }),
-
-  setSelectedUpdateEvent: (event) => set({ selectedUpdateEvent: event }),
-
-  setSelectedRunId: (runId) => set((state) => {
-    const chosen = runId
-      ? state.currentSession.runs.find(r => r.run_id === runId)
-      : [...state.currentSession.runs].sort((a, b) => b.created_at_unix - a.created_at_unix)[0];
-
-    if (!chosen) return { selectedRunId: runId };
-
-    return {
-      selectedRunId: runId,
-      currentSession: {
-        ...state.currentSession,
-        metrics: chosen.metrics,
-        perStep: chosen.perStep,
-        updateEvents: chosen.updateEvents,
-        trajectory: chosen.trajectory ?? state.currentSession.trajectory,
-      }
-    };
-  }),
-
-  getCurrentRun: () => {
-    const state = get();
-    const runId = state.selectedRunId;
-    if (!runId) return state.currentSession.runs[state.currentSession.runs.length - 1] || null;
-    return state.currentSession.runs.find(r => r.run_id === runId) || null;
-  },
-
-  setLogScale: (log) => set({ logScale: log }),
-  setSmoothing: (smooth) => set({ smoothing: smooth }),
-  setSmoothingWindow: (window) => set({ smoothingWindow: window }),
-
-  setWeightCompareMode: (mode) => set({ weightCompareMode: mode }),
-
-  toggleSessionSelection: (id) =>
-    set((state) => ({
-      selectedSessionIds: state.selectedSessionIds.includes(id)
-        ? state.selectedSessionIds.filter((i) => i !== id)
-        : [...state.selectedSessionIds, id]
-    })),
-
-  setCurrentSession: (session) => set({
-    currentSession: normalizeSessionForLatestRun(session),
-    selectedRunId: null,  // Reset run selection when switching sessions
-    selectedUpdateEvent: null
-  }),
-
-  getSessionLineage: () => {
-    const state = get();
-    return getSessionLineage(state.currentSession.meta.session_id, state.sessionIndex);
-  },
-
-  forkSession: (parentSessionId, newSessionId) => {
-    const state = get();
-
-    // Mock mode: local-only fork for UI prototyping
-    if (state.dataSource === 'mock') {
-      set((s) => {
-        const parentSession = s.sessionIndex.sessions[parentSessionId];
-        if (!parentSession) return s;
-
-        const newSummary = {
-          session_id: newSessionId,
-          parent_session_id: parentSessionId,
-          root_session_id: parentSession.root_session_id,
-          created_at_unix: Math.floor(Date.now() / 1000),
-          last_run_at_unix: null,
-          env_mode: parentSession.env_mode,
-          mu: parentSession.mu,
-          model_signature: parentSession.model_signature,
-          total_runs: 0,
-          total_updates_committed: 0,
-          total_updates_rolled_back: 0
-        };
-
-        const nextIndex: SessionIndex = {
-          ...s.sessionIndex,
-          sessions: {
-            ...s.sessionIndex.sessions,
-            [newSessionId]: newSummary
-          }
-        };
-
-        return {
-          sessionIndex: nextIndex,
-          sessionTree: buildSessionTree(nextIndex)
-        };
+    setCurrentSession: (sessionId) => {
+      set({
+        currentSessionId: sessionId,
+        sessionDetail: null,
+        sessionState: null,
+        selectedTransaction: null,
+        chatResult: null,
+        episodeResult: null,
       });
-      return;
-    }
+      if (sessionId) void get().loadSession(sessionId);
+    },
 
-    // API mode: request a real fork and refresh index.
-    void (async () => {
-      try {
-        set({ isLoading: true, loadError: null });
-        const newSession = await forkSessionApi(parentSessionId, newSessionId);
-        const index = await fetchSessionIndex();
-        const tree = buildSessionTree(index);
+    setSelectedTransaction: (index) => set({ selectedTransaction: index }),
 
-        set((s) => ({
-          dataSource: 'api',
-          sessionIndex: index,
-          sessionTree: tree,
-          sessions: [
-            ...s.sessions.filter(x => x.meta.session_id !== newSession.meta.session_id),
-            newSession
-          ].map(normalizeSessionForLatestRun),
-          currentSession: normalizeSessionForLatestRun(newSession),
-          selectedRunId: null,
-          selectedUpdateEvent: null,
-          isLoading: false,
-          loadError: null,
-        }));
-      } catch (e: any) {
-        set({ isLoading: false, loadError: e?.message || String(e) });
+    clearError: () => set({ error: null }),
+
+    refreshHealth: async () => {
+      const health = await withLoading('health', api.getHealth);
+      if (health) set({ health });
+    },
+
+    refreshModels: async () => {
+      const models = await withLoading('models', api.getModels);
+      if (models) set({ models });
+    },
+
+    refreshSessions: async () => {
+      const sessions = await withLoading('sessions', api.getSessions);
+      if (!sessions) return;
+      const current = get().currentSessionId;
+      const stillThere = current !== null && sessions.some((s) => s.session_id === current);
+      set({ sessions, currentSessionId: stillThere ? current : (sessions[0]?.session_id ?? null) });
+    },
+
+    refreshDataDirs: async () => {
+      const dataDirs = await withLoading('data', api.getDataDirs);
+      if (dataDirs) set({ dataDirs });
+    },
+
+    refreshJobs: async () => {
+      const jobs = await withLoading('jobs', api.getTrainJobs);
+      if (!jobs) return;
+      set({ jobs });
+      const statuses = await Promise.all(
+        jobs.map(async (job) => {
+          try {
+            return await api.getTrainStatus(job.model_id);
+          } catch {
+            return null;
+          }
+        }),
+      );
+      const next: Record<string, TrainStatus> = { ...get().trainStatus };
+      statuses.forEach((status) => {
+        if (status) next[status.model_id] = status;
+      });
+      set({ trainStatus: next });
+    },
+
+    refreshRedteam: async () => {
+      const redteamRuns = await withLoading('redteam', api.getRedteamRuns);
+      if (redteamRuns) set({ redteamRuns });
+    },
+
+    bootstrap: async () => {
+      await Promise.all([
+        get().refreshHealth(),
+        get().refreshModels(),
+        get().refreshSessions(),
+        get().refreshDataDirs(),
+        get().refreshJobs(),
+        get().refreshRedteam(),
+      ]);
+      const sessionId = get().currentSessionId;
+      if (sessionId) await get().loadSession(sessionId);
+    },
+
+    loadModel: async (modelId) => {
+      const detail = await withLoading('model', () => api.getModel(modelId));
+      if (detail) set({ modelDetail: detail });
+    },
+
+    calibrate: async (modelId, body = {}) => {
+      const result = await withLoading('calibrate', () => api.calibrateModel(modelId, body));
+      if (!result) return;
+      await get().refreshModels();
+      await get().loadModel(modelId);
+    },
+
+    loadSession: async (sessionId) => {
+      const detail = await withLoading('session', () => api.getSession(sessionId));
+      if (!detail) return;
+      set({ sessionDetail: detail, currentSessionId: sessionId });
+      await get().loadSessionState(sessionId);
+    },
+
+    loadSessionState: async (sessionId) => {
+      const state = await withLoading('sessionState', () => api.getSessionState(sessionId));
+      set({ sessionState: state });
+    },
+
+    createSession: async (body) => {
+      const created = await withLoading('mutation', () => api.createSession(body));
+      if (!created) return null;
+      await get().refreshSessions();
+      await get().loadSession(created.session_id);
+      return created;
+    },
+
+    forkSession: async (sessionId, childSessionId) => {
+      const child = await withLoading('mutation', () => api.forkSession(sessionId, childSessionId));
+      if (!child) return null;
+      await get().refreshSessions();
+      await get().loadSession(child.session_id);
+      return child;
+    },
+
+    resetSession: async (sessionId) => {
+      const done = await withLoading('mutation', () => api.resetSession(sessionId));
+      if (!done) return;
+      await get().refreshSessions();
+      await get().loadSession(sessionId);
+    },
+
+    resumeSession: async (sessionId) => {
+      const done = await withLoading('mutation', () => api.resumeSession(sessionId));
+      if (!done) return;
+      await get().refreshSessions();
+      await get().loadSession(sessionId);
+    },
+
+    deleteSession: async (sessionId) => {
+      const done = await withLoading('mutation', () => api.deleteSession(sessionId));
+      if (!done) return;
+      if (get().currentSessionId === sessionId) {
+        set({ currentSessionId: null, sessionDetail: null, sessionState: null, selectedTransaction: null });
       }
-    })();
-  },
+      await get().refreshSessions();
+    },
 
-  initialize: async () => {
-    const state = get();
-    if (state.hasInitialized) return;
-    set({ hasInitialized: true });
-
-    try {
-      set({ isLoading: true, loadError: null });
-      const [index, sessions] = await Promise.all([fetchSessionIndex(), fetchSessions()]);
-      if (!sessions.length) {
-        set({
-          isLoading: false,
-          loadError: 'No sessions found in artifacts. Run phase1_branching_muon.py to create sessions.',
-        });
+    sendChat: async (body) => {
+      const sessionId = get().currentSessionId;
+      if (!sessionId) {
+        set({ error: 'no session selected' });
         return;
       }
-      const tree = buildSessionTree(index);
-      const normalizedSessions = sessions.map(normalizeSessionForLatestRun);
-      const defaultSession = pickDefaultSession(normalizedSessions, index) || normalizedSessions[0];
+      const result = await withLoading('chat', () => api.chat(sessionId, body));
+      if (!result) return;
+      set({ chatResult: result });
+      await get().loadSession(sessionId);
+    },
 
-      set({
-        dataSource: 'api',
-        sessionIndex: index,
-        sessionTree: tree,
-        sessions: normalizedSessions,
-        currentSession: defaultSession,
-        selectedRunId: null,
-        selectedUpdateEvent: null,
-        isLoading: false,
-        loadError: null,
-      });
-    } catch (e: any) {
-      // API unavailable: keep mock data, but surface error for debugging.
-      set({ isLoading: false, loadError: e?.message || String(e) });
+    runEpisode: async (body) => {
+      const sessionId = get().currentSessionId;
+      if (!sessionId) {
+        set({ error: 'no session selected' });
+        return;
+      }
+      const result = await withLoading('physics', () => api.runPhysics(sessionId, body));
+      if (!result) return;
+      set({ episodeResult: result });
+      await get().loadSession(sessionId);
+    },
+
+    startTraining: async (body) => {
+      const started = await withLoading('mutation', () => api.startTraining(body));
+      if (!started) return;
+      await get().refreshJobs();
+      await get().refreshModels();
+    },
+
+    cancelTraining: async (modelId) => {
+      const done = await withLoading('mutation', () => api.cancelTraining(modelId));
+      if (!done) return;
+      await get().refreshJobs();
+    },
+
+    loadRedteamRun: async (runId) => {
+      const detail = await withLoading('redteamRun', () => api.getRedteamRun(runId));
+      if (detail) set({ redteamDetail: detail });
+    },
+
+    runRedteam: async (body) => {
+      const summary = await withLoading('redteam', () => api.runRedteam(body));
+      if (!summary) return;
+      await get().refreshRedteam();
+      await get().loadRedteamRun(summary.run_id);
+    },
+  };
+});
+
+// ------------------------------------------------------------------- polling
+// Running training jobs are polled every 2 s. The interval only exists while at
+// least one job is running, and is torn down as soon as none is.
+
+const POLL_MS = 2000;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+export function hasRunningJob(jobs: TrainJob[]): boolean {
+  return jobs.some((job) => job.status === 'running');
+}
+
+export function startJobPolling(): void {
+  if (pollTimer !== null) return;
+  pollTimer = setInterval(() => {
+    const { jobs, refreshJobs } = useStore.getState();
+    if (!hasRunningJob(jobs)) {
+      stopJobPolling();
+      return;
     }
-  },
+    void refreshJobs();
+  }, POLL_MS);
+}
 
-  refreshFromApi: async () => {
-    try {
-      set({ isLoading: true, loadError: null });
-      const [index, sessions] = await Promise.all([fetchSessionIndex(), fetchSessions()]);
-      const tree = buildSessionTree(index);
-      const normalizedSessions = sessions.map(normalizeSessionForLatestRun);
+export function stopJobPolling(): void {
+  if (pollTimer === null) return;
+  clearInterval(pollTimer);
+  pollTimer = null;
+}
 
-      const currentId = get().currentSession.meta.session_id;
-      const nextCurrent = normalizedSessions.find(s => s.meta.session_id === currentId)
-        || pickDefaultSession(normalizedSessions, index)
-        || normalizedSessions[0];
+export function isPolling(): boolean {
+  return pollTimer !== null;
+}
 
-      set({
-        dataSource: 'api',
-        sessionIndex: index,
-        sessionTree: tree,
-        sessions: normalizedSessions,
-        currentSession: normalizeSessionForLatestRun(nextCurrent),
-        selectedRunId: null,
-        selectedUpdateEvent: null,
-        isLoading: false,
-        loadError: null,
-      });
-    } catch (e: any) {
-      set({ isLoading: false, loadError: e?.message || String(e) });
-    }
-  },
-}));
+/** Keep the poll loop in step with the job list. Called whenever jobs change. */
+export function syncJobPolling(jobs: TrainJob[]): void {
+  if (hasRunningJob(jobs)) startJobPolling();
+  else stopJobPolling();
+}

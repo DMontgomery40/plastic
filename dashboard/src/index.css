@@ -2,10 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Custom scrollbar */
+/*
+  Legibility floor (~/.claude/rules/design-legibility.md):
+  - body is 14px; nothing in the app renders below 11px
+  - font smoothing only on 2x displays; at dpr 1 it thins glyphs
+  - no grain, no dot grids, no page-level transforms
+*/
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  font-family: 'Archivo', Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 21px;
+  background-color: #0d1117;
+  color: #e9eff5;
+}
+
+@media (min-resolution: 2dppx) {
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
@@ -13,93 +39,44 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #30363d;
-  border-radius: 4px;
+  background: #3d4a59;
+  border-radius: 5px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #484f58;
+  background: #4d5c6d;
 }
 
-/* Base styles */
-body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/* Custom utility classes */
-@layer utilities {
-  .text-glow {
-    text-shadow: 0 0 10px currentColor;
-  }
-
-  .border-glow {
-    box-shadow: 0 0 15px rgba(88, 166, 255, 0.3);
-  }
-
-  .gradient-text {
-    background: linear-gradient(135deg, #58a6ff 0%, #39d353 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-}
-
-/* Recharts customization */
-.recharts-cartesian-grid-horizontal line,
-.recharts-cartesian-grid-vertical line {
-  stroke: #21262d;
-}
-
+/* Recharts: no global stroke overrides. Every chart passes its own grid and
+   tick colors from the tokens so the two can never drift apart. */
 .recharts-tooltip-wrapper {
   outline: none;
 }
 
-/* Tab transitions */
-.tab-content {
-  animation: fadeIn 0.2s ease-in-out;
+.recharts-surface {
+  overflow: visible;
 }
 
-@keyframes fadeIn {
+/* Opacity-only fade. Never transform a container that carries text. */
+.tab-enter {
+  animation: fade-in 140ms ease-out;
+}
+
+@keyframes fade-in {
   from {
-    opacity: 0;
-    transform: translateY(4px);
+    opacity: 0.55;
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
-/* Heatmap cell hover effect */
-.heatmap-cell:hover {
-  outline: 2px solid #58a6ff;
-  outline-offset: -1px;
-  z-index: 10;
+@media (prefers-reduced-motion: reduce) {
+  .tab-enter {
+    animation: none;
+  }
 }
 
-/* Card hover effects */
-.metric-card {
-  transition: all 0.2s ease;
-}
-
-.metric-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-}
-
-/* Timeline node effects */
-.timeline-node {
-  transition: transform 0.15s ease;
-}
-
-.timeline-node:hover {
-  transform: scale(1.3);
-}
-
-/* Selection highlight */
-.selected-row {
-  background: rgba(88, 166, 255, 0.1);
-  border-left: 3px solid #58a6ff;
+input[type='range'] {
+  accent-color: #58a6ff;
 }

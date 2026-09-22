@@ -1,49 +1,87 @@
 /** @type {import('tailwindcss').Config} */
+//
+// Token rules (see ~/.claude/rules/design-legibility.md):
+//   - Every color used anywhere in src/ is defined here. No ad-hoc hex in components.
+//   - Contrast is measured against surface.DEFAULT (#0d1117), the page ground.
+//     text.primary 17.5:1, text.secondary 10.7:1, text.muted 7.4:1 (all clear the 7:1
+//     body floor, so the muted tier is still safe for real text and nothing needs
+//     opacity to de-emphasize).
+//   - status.* are the bright, readable tier used for text and chart strokes;
+//     statusFill.* are the deeper companions used only for filled marks and bars.
+//   - Smallest defined type is 11px (`text-micro`); body is 14px (`text-base`).
 export default {
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        // Dark mode first color scheme
         surface: {
-          DEFAULT: '#0d1117',
-          50: '#161b22',
-          100: '#21262d',
-          200: '#30363d',
-          300: '#484f58',
+          DEFAULT: '#0d1117', // page ground
+          raised: '#151b23', // cards and panels
+          overlay: '#1c242e', // inputs, hovered rows, chips
+          inset: '#090d12', // code blocks, wells
+        },
+        edge: {
+          DEFAULT: '#2c3642', // default 1px borders and chart grid
+          strong: '#3d4a59', // emphasized dividers, focus rings
+        },
+        ink: {
+          primary: '#e9eff5', // body text, 17.5:1
+          secondary: '#b8c4d0', // supporting text, 10.7:1
+          muted: '#94a3b4', // labels and axis ticks, 7.4:1
+          inverse: '#080c11', // text on a saturated fill
         },
         accent: {
-          blue: '#58a6ff',
-          green: '#238636',
-          red: '#da3633',
-          orange: '#d29922',
-          purple: '#a371f7',
-          cyan: '#39d353',
+          DEFAULT: '#58a6ff', // interactive: links, selection, focus
+          hover: '#79b8ff',
+          soft: '#1d3352', // selected-row wash (a solid color, not an alpha)
         },
-        text: {
-          primary: '#e6edf3',
-          secondary: '#8b949e',
-          muted: '#6e7681',
-        }
+        status: {
+          commit: '#3fd17a',
+          rollback: '#ff6b6b',
+          scale: '#f0b429',
+          project: '#58a6ff',
+          readonly: '#94a3b4',
+          running: '#56d4dd',
+          failed: '#ff6b6b',
+        },
+        statusFill: {
+          commit: '#1f7a45',
+          rollback: '#9c2b2b',
+          scale: '#8a6410',
+          project: '#1f4f8f',
+          readonly: '#48545f',
+        },
+        series: {
+          a: '#58a6ff', // base / first series
+          b: '#3fd17a', // frozen / second series
+          c: '#f0b429', // adaptive / third series
+          d: '#c792ea', // fourth series
+          e: '#56d4dd', // fifth series
+        },
       },
       fontFamily: {
-        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+        sans: ['Archivo', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        mono: ['JetBrains Mono', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
-      animation: {
-        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'glow': 'glow 2s ease-in-out infinite alternate',
+      fontSize: {
+        // nothing below 11px
+        micro: ['11px', { lineHeight: '15px' }],
+        label: ['11.5px', { lineHeight: '16px' }],
+        xs: ['12px', { lineHeight: '17px' }],
+        sm: ['13px', { lineHeight: '19px' }],
+        base: ['14px', { lineHeight: '21px' }],
+        md: ['15px', { lineHeight: '23px' }],
+        lg: ['17px', { lineHeight: '25px' }],
+        xl: ['21px', { lineHeight: '28px' }],
+        '2xl': ['27px', { lineHeight: '34px' }],
+        '3xl': ['36px', { lineHeight: '42px' }],
       },
-      keyframes: {
-        glow: {
-          '0%': { boxShadow: '0 0 5px rgba(88, 166, 255, 0.5)' },
-          '100%': { boxShadow: '0 0 20px rgba(88, 166, 255, 0.8)' },
-        }
-      }
+      borderRadius: {
+        DEFAULT: '6px',
+        lg: '10px',
+      },
     },
   },
   plugins: [],
-}
+};

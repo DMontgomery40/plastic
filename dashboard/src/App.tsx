@@ -1,78 +1,81 @@
 import { useEffect } from 'react';
-import { useDashboardStore } from './store';
 import { Header } from './components/layout/Header';
-import {
-  SessionTreeTab,
-  OverviewTab,
-  TextMonitorTab,
-  ChatTab,
-  TextTrainTab,
-  WeightsTab,
-  TransactionsTab,
-  EnvironmentTab,
-  ArchitectureTab,
-  SessionsTab,
-} from './components/tabs';
-import { motion, AnimatePresence } from 'framer-motion';
+import { TabNav } from './components/layout/TabNav';
+import { ErrorBanner } from './components/panels';
+import { SessionsTab } from './components/tabs/SessionsTab';
+import { SessionTab } from './components/tabs/SessionTab';
+import { ChatTab } from './components/tabs/ChatTab';
+import { PhysicsTab } from './components/tabs/PhysicsTab';
+import { TrainTab } from './components/tabs/TrainTab';
+import { RedTeamTab } from './components/tabs/RedTeamTab';
+import { ArchitectureTab } from './components/tabs/ArchitectureTab';
+import { TAB_KEYS, stopJobPolling, syncJobPolling, useStore } from './store';
 
-function App() {
-  const activeTab = useDashboardStore((state) => state.activeTab);
-  const initialize = useDashboardStore((state) => state.initialize);
+const TAB_VIEWS = {
+  sessions: SessionsTab,
+  session: SessionTab,
+  chat: ChatTab,
+  physics: PhysicsTab,
+  train: TrainTab,
+  redteam: RedTeamTab,
+  architecture: ArchitectureTab,
+} as const;
+
+/** True while the user is typing, so digit shortcuts must not steal the key. */
+function isTyping(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
+}
+
+export default function App() {
+  const activeTab = useStore((s) => s.activeTab);
+  const setActiveTab = useStore((s) => s.setActiveTab);
+  const error = useStore((s) => s.error);
+  const clearError = useStore((s) => s.clearError);
+  const bootstrap = useStore((s) => s.bootstrap);
+  const jobs = useStore((s) => s.jobs);
 
   useEffect(() => {
-    void initialize();
-  }, [initialize]);
+    void bootstrap();
+    return stopJobPolling;
+  }, [bootstrap]);
+
+  // Poll running training jobs every 2 s; the loop stops itself when none runs.
+  useEffect(() => {
+    syncJobPolling(jobs);
+  }, [jobs]);
+
+  // Keys 1 to 7 select a tab. Nothing else is bound, so nothing is claimed that
+  // is not implemented.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
+      const n = Number(event.key);
+      if (!Number.isInteger(n) || n < 1 || n > TAB_KEYS.length) return;
+      event.preventDefault();
+      setActiveTab(TAB_KEYS[n - 1]);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [setActiveTab]);
+
+  const View = TAB_VIEWS[activeTab];
 
   return (
-    <div className="min-h-screen bg-surface flex flex-col">
+    <div className="min-h-screen bg-surface">
       <Header />
-
-      <main className="flex-1 p-6 overflow-auto">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.15 }}
-            className="tab-content"
-          >
-            {activeTab === 'session-tree' && <SessionTreeTab />}
-            {activeTab === 'overview' && <OverviewTab />}
-            {activeTab === 'text-monitor' && <TextMonitorTab />}
-            {activeTab === 'chat' && <ChatTab />}
-            {activeTab === 'train' && <TextTrainTab />}
-            {activeTab === 'weights' && <WeightsTab />}
-            {activeTab === 'transactions' && <TransactionsTab />}
-            {activeTab === 'environment' && <EnvironmentTab />}
-            {activeTab === 'architecture' && <ArchitectureTab />}
-            {activeTab === 'sessions' && <SessionsTab />}
-          </motion.div>
-        </AnimatePresence>
+      <TabNav />
+      <main className="mx-auto max-w-[1700px] px-5 py-5">
+        {error ? (
+          <div className="mb-4">
+            <ErrorBanner message={error} onDismiss={clearError} />
+          </div>
+        ) : null}
+        <div key={activeTab} className="tab-enter">
+          <View />
+        </div>
       </main>
-
-      {/* Footer */}
-      <footer className="border-t border-surface-200 px-6 py-3 flex items-center justify-between text-xs text-text-muted">
-        <div className="flex items-center gap-4">
-          <span>TTT-SSM Phase 1 Dashboard</span>
-          <span className="text-surface-300">|</span>
-          <span>Test-Time Training Research Tool</span>
-        </div>
-        <div className="flex items-center gap-4">
-          <span>
-            <kbd className="px-1.5 py-0.5 bg-surface-100 rounded">←</kbd>
-            <kbd className="px-1.5 py-0.5 bg-surface-100 rounded ml-1">→</kbd>
-            <span className="ml-2">Navigate time</span>
-          </span>
-          <span className="text-surface-300">|</span>
-          <span>
-            <kbd className="px-1.5 py-0.5 bg-surface-100 rounded">Tab</kbd>
-            <span className="ml-2">Switch tabs</span>
-          </span>
-        </div>
-      </footer>
     </div>
   );
 }
-
-export default App;
