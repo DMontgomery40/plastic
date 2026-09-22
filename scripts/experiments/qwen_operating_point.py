@@ -64,6 +64,28 @@ def load_dolly_prompts(max_rows: int) -> tuple[list[dict[str, Any]], str]:
     return rows, revision
 
 
+def _load_exclusions(path: str) -> tuple[set[int], tuple[str, ...]]:
+    """Load a prior-exposure exclusion spec: explicit ids plus normalized-text-hash prefixes."""
+    d = json.load(open(path, encoding="utf-8"))
+    return {int(i) for i in d.get("ids", [])}, tuple(str(p) for p in d.get("normalized_text_hash_prefixes", []))
+
+
+def _apply_exclusions(rows: list[dict[str, Any]], ids: set[int], hash_prefixes: tuple[str, ...]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Reserve prior-exposed rows from a newly locked selection. A row is directly excluded if its id
+    is listed OR its normalized-text hash starts with a listed prefix (catching exact duplicates). The
+    exclusion then EXPANDS to whole context groups: any row sharing a nonempty normalized context with
+    a directly-excluded row is also reserved, so a passage from an earlier split cannot re-enter the
+    new evaluation through a sibling question (ASTRA-086). Empty-context rows are never group-excluded."""
+    directly = {r["id"] for r in rows
+                if r["id"] in ids or (hash_prefixes and r["text_sha256"].startswith(hash_prefixes))}
+    excluded_ctx = {c for r in rows if r["id"] in directly and (c := _norm(r["context"]))}
+    kept = [r for r in rows
+            if r["id"] not in directly and not (_norm(r["context"]) and _norm(r["context"]) in excluded_ctx)]
+    report = {"n_input": len(rows), "excluded_directly": len(directly), "excluded_context_groups": len(excluded_ctx),
+              "n_excluded_total": len(rows) - len(kept), "n_kept": len(kept)}
+    return kept, report
+
+
 def _stratify_by_category(groups: list[list[dict[str, Any]]], seed: int) -> list[list[dict[str, Any]]]:
     """Round-robin the groups across their (first row's) category so each split draws from present
     categories, deterministically."""
@@ -308,7 +330,7 @@ def _settings_identity(args: Any, checkpoint_digest: str, revision: str) -> str:
     payload = {
         "counts": {"fit": args.n_fit, "cusum": args.n_cusum, "dev": args.n_dev, "eval": args.n_eval},
         "max_prompt_tokens": args.max_prompt_tokens, "max_new_tokens": args.max_new_tokens,
-        "eval_chains": args.eval_chains, "smoke": args.smoke,
+        "eval_chains": args.eval_chains, "smoke": args.smoke, "exclusions": args.exclusions,
         "checkpoint_digest": checkpoint_digest, "revision": revision,
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
@@ -461,6 +483,9 @@ def main() -> None:
     ap.add_argument("--max-new-tokens", type=int, default=64)
     ap.add_argument("--max-prompt-tokens", type=int, default=256)
     ap.add_argument("--followups", default="artifacts/astra/qwen-runtime-20260922/conversation-followups-v1.json")
+    ap.add_argument("--exclusions", default=None,
+                    help="path to a prior-exposure exclusion spec (ids + normalized-text-hash prefixes); "
+                         "reserves those rows and their duplicate/context groups from the selection")
     ap.add_argument("--minutes", type=float, default=45.0, help="wall-clock budget; partial results are saved")
     ap.add_argument("--smoke", action="store_true", help="tiny counts to validate wiring (NOT the ASTRA-083 screen)")
     args = ap.parse_args()
@@ -481,6 +506,13 @@ def main() -> None:
 
     # corpus + split + manifest (saved before any generation)
     rows, revision = load_dolly_prompts(max_rows=20000)
+    exclusion_report: dict[str, Any] = {"applied": False}
+    if args.exclusions:
+        # reserve rows (and their duplicate/context groups) exposed in earlier smoke/pilot splits, so a
+        # newly locked evaluation never reuses a prompt the model has already seen through the harness
+        excl_ids, excl_prefixes = _load_exclusions(args.exclusions)
+        rows, exclusion_report = _apply_exclusions(rows, excl_ids, excl_prefixes)
+        exclusion_report.update({"applied": True, "spec": args.exclusions})
     be_for_tok = QwenBackend.load(args.checkpoint, device="cpu")
     counts = {"fit": args.n_fit, "cusum": args.n_cusum, "dev": args.n_dev, "eval": args.n_eval}
     split, manifest = build_split(rows, be_for_tok.encode_chat, counts=counts, seed=seed, max_prompt_tokens=args.max_prompt_tokens)
@@ -492,7 +524,7 @@ def main() -> None:
         code_commit = "unknown"
     manifest.update({"dataset": "databricks/databricks-dolly-15k", "revision": revision,
                      "checkpoint_digest": _checkpoint_digest(args.checkpoint), "smoke": args.smoke,
-                     "code_commit": code_commit, "settings": vars(args)})
+                     "code_commit": code_commit, "settings": vars(args), "exclusions": exclusion_report})
     del be_for_tok
     # reuse an existing run's model id + immutable manifest when the configuration matches, and refuse
     # (never overwrite) when it differs, BEFORE any run-artifact write (ASTRA-092 manifest preservation)

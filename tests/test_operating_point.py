@@ -273,7 +273,7 @@ def test_screen_verdict_separates_completion_from_pass():
 
 def _fake_args(**over):
     from types import SimpleNamespace
-    base = dict(n_fit=8, n_cusum=4, n_dev=4, n_eval=4, max_prompt_tokens=256, max_new_tokens=8, eval_chains=2, smoke=False)
+    base = dict(n_fit=8, n_cusum=4, n_dev=4, n_eval=4, max_prompt_tokens=256, max_new_tokens=8, eval_chains=2, smoke=False, exclusions=None)
     base.update(over)
     return SimpleNamespace(**base)
 
@@ -378,3 +378,25 @@ def test_reconcile_run_preserves_prior_artifacts_without_run_record(tmp_path):
         _reconcile_run(str(tmp_path), _manifest_of("new", split_new), split_new, "idA", lambda: "qwen_x")
     assert (tmp_path / "split-manifest.json").read_bytes() == before
     assert not (tmp_path / "run-record.json").exists()
+
+
+def test_apply_exclusions_reserves_ids_duplicates_and_context_groups():
+    # ASTRA-086: reserve prior-exposed rows by id or normalized-text-hash prefix (duplicates), and
+    # expand to whole nonempty-context groups, WITHOUT over-excluding context-less rows
+    from scripts.experiments.qwen_operating_point import _apply_exclusions
+    rows = [
+        {"id": 1, "context": "Passage  A", "text_sha256": "aaa111", "prompt": "q1"},  # excluded by id
+        {"id": 2, "context": "PASSAGE A", "text_sha256": "bbb222", "prompt": "q2"},    # same context as id 1 -> excluded
+        {"id": 3, "context": "", "text_sha256": "ccc333", "prompt": "q3"},             # context-less, kept
+        {"id": 4, "context": "", "text_sha256": "ded444", "prompt": "q4"},             # excluded by hash prefix
+        {"id": 5, "context": "Passage B", "text_sha256": "eee555", "prompt": "q5"},     # unrelated, kept
+    ]
+    kept, report = _apply_exclusions(rows, ids={1}, hash_prefixes=("ded4",))
+    assert {r["id"] for r in kept} == {3, 5}          # id 1, its context sibling 2, and prefix-match 4 reserved
+    assert report["excluded_directly"] == 2           # id 1 and the prefix match 4
+    assert report["excluded_context_groups"] == 1     # the "passage a" group (normalized, case-insensitive)
+    assert report["n_kept"] == 2 and report["n_excluded_total"] == 3
+
+    # an empty spec keeps everything
+    kept2, report2 = _apply_exclusions(rows, ids=set(), hash_prefixes=())
+    assert len(kept2) == 5 and report2["n_excluded_total"] == 0
