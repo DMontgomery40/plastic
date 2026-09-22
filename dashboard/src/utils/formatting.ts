@@ -68,6 +68,63 @@ export function calibrationDisplay(status: CalibrationStatus | string | null | u
   }
 }
 
+/**
+ * The single rendering decision for a session's calibration, folding the session's status together
+ * with whether the model detail (which carries the threshold artifact) has actually loaded. This is
+ * one source of truth so the status tile, the signals-panel subtitle and the rates panel can never
+ * contradict each other (an installed session must not simultaneously read "installed" and "not
+ * calibrated" while its model detail is still loading; a rejected artifact must not read "not
+ * calibrated"). Only the 'active' mode draws threshold lines / active rates; the fallback-to-robust-z
+ * statement is asserted only when the session status actually establishes it (absent), or as a
+ * distinct, honest reason for rejected / unknown — never for installed-but-details-pending.
+ */
+export type CalibrationRenderMode = 'active' | 'installed_pending' | 'rejected' | 'absent' | 'unknown';
+
+export interface CalibrationView {
+  mode: CalibrationRenderMode;
+  drawThresholds: boolean;
+  signalsSubtitle: string;
+  inactive: { title: string; detail: string } | null; // for the rates panel when it is not active
+}
+
+export function calibrationView(
+  status: CalibrationStatus | string | null | undefined,
+  modelLoaded: boolean,
+  hasThresholds: boolean,
+): CalibrationView {
+  const d = calibrationDisplay(status);
+  const fallback = ' The policy falls back to robust z-scores over the session’s own history.';
+  if (status === 'installed') {
+    if (modelLoaded && hasThresholds) {
+      return {
+        mode: 'active',
+        drawThresholds: true,
+        signalsSubtitle: 'Dashed lines are the calibrated thresholds installed on this session.',
+        inactive: null,
+      };
+    }
+    return {
+      mode: 'installed_pending',
+      drawThresholds: false,
+      signalsSubtitle: 'A calibration is installed on this session; its threshold details are loading or unavailable.',
+      inactive: {
+        title: 'Calibration installed; threshold details are loading or unavailable.',
+        detail: 'The installed thresholds have not loaded, so target and achievable rates are not shown yet. This is not the same as an uncalibrated session.',
+      },
+    };
+  }
+  if (status === 'absent') {
+    return { mode: 'absent', drawThresholds: false, signalsSubtitle: d.detail + fallback,
+      inactive: { title: 'This session is not calibrated.', detail: d.detail } };
+  }
+  if (status === 'rejected_signature_mismatch' || status === 'rejected_unsigned') {
+    return { mode: 'rejected', drawThresholds: false, signalsSubtitle: d.detail + fallback,
+      inactive: { title: `${d.label}; not active on this session.`, detail: d.detail } };
+  }
+  return { mode: 'unknown', drawThresholds: false, signalsSubtitle: d.detail + fallback,
+    inactive: { title: 'Calibration status is unavailable for this session.', detail: d.detail } };
+}
+
 export function fmt(v: unknown, decimals = 4): string {
   if (!isNum(v)) return UNAVAILABLE;
   if (v !== 0 && Math.abs(v) < 10 ** -decimals) return v.toExponential(2);

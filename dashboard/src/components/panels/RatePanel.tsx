@@ -73,13 +73,24 @@ export function countsFromSession(s: SessionSummary): InterventionCounts {
 }
 
 /** The calibration's requested target and its per-signal achievable rate. */
-export function CalibratedRates({ calibration }: { calibration: CalibrationSummary | null }) {
+export function CalibratedRates({
+  calibration,
+  inactive,
+}: {
+  calibration: CalibrationSummary | null;
+  // when the rates are not active, WHY -- so a session that is installed-but-loading, rejected or of
+  // unknown status is not mislabeled "not calibrated". Defaults to the genuine uncalibrated message.
+  inactive?: { title: string; detail: string } | null;
+}) {
   if (!calibration) {
     return (
       <Empty
-        title="This model is not calibrated."
-        detail="Without a calibration there is no target rate and no achievable rate; the policy falls back to robust z-scores over the session's own history."
-        command="uv run plastic calibrate <model_id> --data artifacts/data/wikitext"
+        title={inactive?.title ?? 'This model is not calibrated.'}
+        detail={
+          inactive?.detail ??
+          "Without a calibration there is no target rate and no achievable rate; the policy falls back to robust z-scores over the session's own history."
+        }
+        command={inactive ? undefined : 'uv run plastic calibrate <model_id> --data artifacts/data/wikitext'}
       />
     );
   }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { useStore } from '../../store';
 import type { TransactionRecord } from '../../api/types';
-import { UNAVAILABLE, calibrationDisplay, fmt, fmtInt, fmtPercent, fmtThreshold, isNum } from '../../utils/formatting';
+import { UNAVAILABLE, calibrationDisplay, calibrationView, fmt, fmtInt, fmtPercent, fmtThreshold, isNum } from '../../utils/formatting';
 import { LineChartPanel, type ReferenceSpec } from '../charts';
 import { DecisionBadge, Empty, KeyValue, Panel, StatTile } from '../panels';
 import { CalibratedRates, ObservedIntervention } from '../panels/RatePanel';
@@ -368,8 +368,12 @@ export function SessionTab() {
   // Gate the ACTIVE calibration display on the session's own installed state, not the model's saved
   // artifact: a rejected (different model / unsigned) or absent calibration must not draw active
   // policy threshold lines or claim active rates, even though the model still holds a saved artifact.
-  const calState = calibrationDisplay(sessionDetail?.summary?.calibration);
-  const thresholds = calState.active ? (model?.calibration?.thresholds ?? null) : null;
+  // calView folds in whether the model detail (which carries the thresholds) has loaded, so a single
+  // decision drives the tile, the signals subtitle and the rates panel -- they can never contradict.
+  const calStatus = sessionDetail?.summary?.calibration;
+  const calState = calibrationDisplay(calStatus);
+  const calView = calibrationView(calStatus, model !== null, Boolean(model?.calibration?.thresholds));
+  const thresholds = calView.drawThresholds ? (model?.calibration?.thresholds ?? null) : null;
   const transactions = sessionDetail?.transactions ?? [];
 
   const signalRows = useMemo(
@@ -488,11 +492,7 @@ export function SessionTab() {
       {transactions.length > 0 ? (
         <Panel
           title="Signals over the session"
-          subtitle={
-            thresholds
-              ? 'Dashed lines are the calibrated thresholds installed on this session.'
-              : `${calState.detail} The policy falls back to robust z-scores.`
-          }
+          subtitle={calView.signalsSubtitle}
         >
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             {SIGNAL_CHARTS.map((chart) => {
@@ -548,7 +548,10 @@ export function SessionTab() {
         subtitle="Three distinct quantities. None of them is evidence for another."
       >
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <CalibratedRates calibration={calState.active ? (model?.calibration ?? null) : null} />
+          <CalibratedRates
+            calibration={calView.drawThresholds ? (model?.calibration ?? null) : null}
+            inactive={calView.inactive}
+          />
           <ObservedIntervention
             counts={{
               n_transactions: transactions.length,
