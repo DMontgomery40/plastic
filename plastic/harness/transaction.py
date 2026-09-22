@@ -17,6 +17,7 @@ runner decides is logged with every signal that informed it.
 
 from __future__ import annotations
 
+import math
 import time
 from typing import Any, Literal
 
@@ -80,6 +81,7 @@ class TransactionRunner:
         self.history: dict[str, SignalHistory] = {n: SignalHistory(harness_cfg.history_window) for n in STAT_SIGNALS}
         self.cusum = Cusum(harness_cfg.cusum_k, harness_cfg.cusum_h)
         self.budget_used = 0.0
+        self._exhausted = False
         self.read_only = False
         self.read_only_reason: str | None = None
         self.n_transactions = 0
@@ -236,9 +238,15 @@ class TransactionRunner:
         thresholds = self.calibration.thresholds if self.calibration is not None else None
         decision = decide(sig, self.hcfg, thresholds, read_only=self.read_only)
         applied = self._apply(decision, sig, deltas, g)
-        if self.hcfg.enable_budget and self.hcfg.budget_session is not None and self.budget_used > self.hcfg.budget_session:
+        if (
+            self.hcfg.enable_budget
+            and self.hcfg.budget_session is not None
+            and (self.budget_used >= self.hcfg.budget_session * (1.0 - 1e-3) or self._exhausted)
+        ):
+            # the remaining budget is effectively exhausted: later chunks could only be
+            # scaled into noise, so the session becomes read-only until resumed
             self.read_only = True
-            self.read_only_reason = f"budget_session({self.budget_used:.4g}>{self.hcfg.budget_session:.4g})"
+            self.read_only_reason = f"budget_session({self.budget_used:.4g}>={self.hcfg.budget_session:.4g})"
         if sig.cusum_alarm and self.hcfg.freeze_on_alarm and not self.hcfg.log_only:
             self.read_only = True
             self.read_only_reason = "cusum_alarm"
@@ -265,42 +273,109 @@ class TransactionRunner:
         self.pending_loss, self.pending_signals = [], []
         return record
 
+    # ------------------------------------------------------------------ acceptance
+    def _cap(self) -> float | None:
+        """Hard cap on the complete state delta of this chunk: min(chunk cap, remaining session budget)."""
+        if not self.hcfg.enable_budget:
+            return None
+        caps: list[float] = []
+        if self.hcfg.budget_chunk is not None:
+            caps.append(float(self.hcfg.budget_chunk))
+        if self.hcfg.budget_session is not None:
+            caps.append(max(0.0, float(self.hcfg.budget_session) - self.budget_used))
+        return min(caps) if caps else None
+
+    def _cap_is_session_remaining(self, cap: float) -> bool:
+        if self.hcfg.budget_session is None:
+            return False
+        remaining = max(0.0, float(self.hcfg.budget_session) - self.budget_used)
+        return cap <= remaining * (1.0 + 1e-9)
+
+    def _candidate_delta_norm(self) -> float:
+        return delta_norms(self.working.s_delta(self.committed))[0]
+
+    @staticmethod
+    def _finite(state: SessionState) -> bool:
+        return all(bool(torch.isfinite(l.S).all()) and bool(torch.isfinite(l.h).all()) for l in state.layers)
+
+    def _accept(self, kind: str, reasons: list[str], scale: float) -> Decision:
+        self.budget_used += self._candidate_delta_norm()
+        self.committed = self.working.clone()
+        return Decision(kind, reasons, scale)  # type: ignore[arg-type]
+
+    def _reject_frozen(self, kind: str, reasons: list[str]) -> Decision:
+        """Refuse the chunk as training signal: recompute it frozen and commit that."""
+        self._reprocess(freeze=True, beta_scale=1.0)
+        if not self._finite(self.working):
+            # even reading the chunk produced non-finite state: keep the last good state and stop learning
+            self.working = self.committed.clone()
+            self.read_only = True
+            self.read_only_reason = "nonfinite_frozen_recompute"
+            return Decision("rollback", reasons + ["nonfinite_frozen_recompute"])
+        self.committed = self.working.clone()
+        return Decision(kind, reasons)  # type: ignore[arg-type]
+
     def _apply(self, decision: Decision, sig: ChunkSignals, deltas: list[Tensor], g: list[Tensor] | None) -> Decision:
+        reasons = list(decision.reasons)
         kind = decision.kind
-        if kind == "commit":
-            self.committed = self.working.clone()
-            self.budget_used += sig.delta_norm
-            return decision
         if kind in ("rollback", "readonly"):
-            self._reprocess(freeze=True, beta_scale=1.0)
-            self.committed = self.working.clone()
-            return decision
-        if kind == "scale":
-            self._reprocess(freeze=False, beta_scale=decision.scale)
-            self.budget_used += delta_norms(self.working.s_delta(self.committed))[0]
-            self.committed = self.working.clone()
-            return decision
+            return self._reject_frozen(kind, reasons)
+        if not self._finite(self.working) or not math.isfinite(sig.delta_norm):
+            return self._reject_frozen("rollback", reasons + ["nonfinite_candidate"])
+        cap = self._cap()
+
         if kind == "project":
             if g is None:
-                return self._apply(Decision("rollback", decision.reasons + ["project_unavailable"]), sig, deltas, None)
+                return self._reject_frozen("rollback", reasons + ["project_unavailable"])
             projected, pstats = project_delta(deltas, g, eps_dot=self.hcfg.project_eps_dot, eps_cos=self.hcfg.project_eps_cos)
             if pstats.removed_ratio > self.hcfg.project_max_removed:
-                return self._apply(
-                    Decision("rollback", decision.reasons + [f"project_removed({pstats.removed_ratio:.3f}>{self.hcfg.project_max_removed})"]),
-                    sig, deltas, None,
+                return self._reject_frozen(
+                    "rollback", reasons + [f"project_removed({pstats.removed_ratio:.3f}>{self.hcfg.project_max_removed})"]
                 )
+            scale_p = 1.0
+            norm_p = delta_norms(projected)[0]
+            if cap is not None and norm_p > cap:
+                if cap <= 0.0:
+                    self._exhausted = True
+                    return self._reject_frozen("rollback", reasons + ["budget_exhausted"])
+                scale_p = cap / norm_p  # a shrunk delta keeps the half-space constraint (eps >= 0)
+                reasons.append(f"budget_scaled_projection(scale={scale_p:.3g})")
             for layer, base, d in zip(self.working.layers, self.committed.layers, projected):
-                layer.S = base.S + d.to(base.S.device)
-            self.budget_used += delta_norms(projected)[0]
-            self.committed = self.working.clone()
-            return Decision("project", decision.reasons + [f"removed_ratio({pstats.removed_ratio:.3f})", f"dot({pstats.dot_before:+.4g}->{pstats.dot_after:+.4g})"])
-        raise ValueError(f"unknown decision {kind!r}")
+                layer.S = base.S + scale_p * d.to(base.S.device)
+            if not self._finite(self.working):
+                return self._reject_frozen("rollback", reasons + ["nonfinite_candidate"])
+            reasons += [f"removed_ratio({pstats.removed_ratio:.3f})", f"dot({pstats.dot_before:+.4g}->{pstats.dot_after:+.4g})"]
+            return self._accept("project", reasons, scale_p)
+
+        # commit or scale: the policy's scale is a suggestion; the cap is checked on the actual candidate
+        scale = float(decision.scale) if kind == "scale" else 1.0
+        if kind == "scale":
+            self._reprocess(freeze=False, beta_scale=scale)
+        actual = self._candidate_delta_norm()
+        tries = 0
+        while cap is not None and actual > cap * (1.0 + 1e-6) and tries < 3:
+            if actual <= 0.0 or cap <= 0.0:
+                break
+            scale = scale * (cap / actual) * 0.95
+            self._reprocess(freeze=False, beta_scale=scale)
+            actual = self._candidate_delta_norm()
+            tries += 1
+            reasons.append(f"budget_retry(scale={scale:.3g},delta={actual:.4g})")
+        if cap is not None and actual > cap * (1.0 + 1e-6):
+            reasons.append(f"budget_unsatisfiable(delta={actual:.4g}>cap={cap:.4g})")
+            if self._cap_is_session_remaining(cap):
+                self._exhausted = True
+            return self._reject_frozen("rollback", reasons)
+        if not self._finite(self.working):
+            return self._reject_frozen("rollback", reasons + ["nonfinite_candidate"])
+        return self._accept("scale" if scale != 1.0 else "commit", reasons, scale)
 
     # ------------------------------------------------------------------ control
     def resume(self) -> None:
         """Lift a latched read-only state (after a verification pass by the caller)."""
         self.read_only = False
         self.read_only_reason = None
+        self._exhausted = False
 
     def reset(self) -> None:
         self.committed = self.model.init_state(1, self.device)
@@ -312,6 +387,7 @@ class TransactionRunner:
         self.history = {n: SignalHistory(self.hcfg.history_window) for n in STAT_SIGNALS}
         self.cusum = Cusum(self.hcfg.cusum_k, self.hcfg.cusum_h)
         self.budget_used = 0.0
+        self._exhausted = False
         self.read_only = False
         self.read_only_reason = None
 

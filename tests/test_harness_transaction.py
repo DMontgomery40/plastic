@@ -106,17 +106,113 @@ def test_project_path_and_fallback():
     assert rec2["decision"]["kind"] == "rollback" and any("project_removed" in x for x in rec2["decision"]["reasons"])
 
 
-def test_session_budget_latches_read_only():
+def _delta(a, b):
+    from plastic.harness.signals import delta_norms
+
+    return delta_norms(a.s_delta(b))[0]
+
+
+def test_session_budget_is_hard_and_latches_read_only():
     cfg, lm = _lm()
-    hcfg = HarnessConfig(budget_session=1e-6, enable_projection=False)
+    # budget large enough for roughly one chunk: the first chunk must be accepted within it,
+    # the next must be scaled or refused, never over-committed
+    r0 = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)
+    r0.feed_tokens(_ids(8))
+    one_chunk = r0.budget_used
+    hcfg = HarnessConfig(budget_session=one_chunk * 1.2, enable_projection=False)
     r = TransactionRunner(lm, cfg, hcfg, device=CPU)
+    zero = lm.init_state(1)
     r.feed_tokens(_ids(8))
+    assert r.transactions[0]["decision"]["kind"] == "commit" and not r.read_only
+    used1 = r.budget_used
+    r.feed_tokens(_ids(8, seed=1))
+    rec = r.transactions[1]
+    assert rec["decision"]["kind"] in ("scale", "rollback"), rec["decision"]
+    assert r.budget_used <= hcfg.budget_session * (1 + 1e-6)
+    assert _delta(r.committed, zero) <= hcfg.budget_session * (1 + 1e-6) or rec["decision"]["kind"] == "rollback"
+    # keep feeding: the session exhausts and latches read-only, never exceeding the budget
+    for s in range(2, 6):
+        r.feed_tokens(_ids(8, seed=s))
+    assert r.budget_used <= hcfg.budget_session * (1 + 1e-6)
     assert r.read_only and "budget_session" in (r.read_only_reason or "")
     S_before = [l.S.clone() for l in r.committed.layers]
-    r.feed_tokens(_ids(8, seed=1))
-    assert r.transactions[1]["decision"]["kind"] == "readonly"
+    r.feed_tokens(_ids(8, seed=99))
+    assert r.transactions[-1]["decision"]["kind"] == "readonly"
     assert all(torch.equal(a, l.S) for a, l in zip(S_before, r.committed.layers))
     r.resume()
+    assert not r.read_only
+
+
+def test_tiny_session_budget_never_over_commits():
+    cfg, lm = _lm()
+    cap = 1e-6
+    r = TransactionRunner(lm, cfg, HarnessConfig(budget_session=cap, enable_projection=False), device=CPU)
+    zero = lm.init_state(1)
+    for s in range(4):
+        r.feed_tokens(_ids(8, seed=s))
+    kinds = [t["decision"]["kind"] for t in r.transactions]
+    assert all(k in ("scale", "rollback", "readonly") for k in kinds), kinds
+    assert _delta(r.committed, zero) <= cap * (1 + 1e-6)
+    assert r.budget_used <= cap * (1 + 1e-6)
+
+
+def test_chunk_cap_enforced_on_final_candidate_with_warm_state():
+    cfg, lm = _lm()
+    r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)
+    r.feed_tokens(_ids(32))  # warm memory: decay alone now moves S
+    before = r.committed.clone()
+    cap = 1e-4
+    r.hcfg = HarnessConfig(enable_projection=False, budget_chunk=cap)
+    r.feed_tokens(_ids(8, seed=9))
+    rec = r.transactions[-1]
+    moved = _delta(r.committed, before)
+    if rec["decision"]["kind"] == "rollback":
+        assert any("budget_unsatisfiable" in x for x in rec["decision"]["reasons"])
+        assert moved == 0.0
+    else:
+        assert moved <= cap * (1 + 1e-6), (rec["decision"], moved)
+
+
+def test_chunk_cap_scaling_retry_satisfies_cap():
+    cfg, lm = _lm()
+    r0 = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)
+    r0.feed_tokens(_ids(8))
+    full = r0.budget_used
+    cap = 0.5 * full
+    r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False, budget_chunk=cap), device=CPU)
+    r.feed_tokens(_ids(8))
+    rec = r.transactions[0]
+    assert rec["decision"]["kind"] == "scale", rec["decision"]
+    assert _delta(r.committed, lm.init_state(1)) <= cap * (1 + 1e-6)
+    assert 0 < rec["decision"]["scale"] < 1
+
+
+def test_projection_respects_budget():
+    cfg, lm = _lm()
+    suite = _fake_suite(cfg)
+    base = HarnessConfig(project_eps_cos=-1.0, canary_delta_max=1e9, poison_delta_min=-1e9, enable_stats=False)
+    r0 = TransactionRunner(lm, cfg, base, suite=suite, device=CPU)
+    r0.feed_tokens(_ids(8))
+    full = r0.budget_used
+    cap = 0.5 * full
+    hcfg = HarnessConfig(project_eps_cos=-1.0, canary_delta_max=1e9, poison_delta_min=-1e9, enable_stats=False, budget_chunk=cap)
+    r = TransactionRunner(lm, cfg, hcfg, suite=suite, device=CPU)
+    r.feed_tokens(_ids(8))
+    rec = r.transactions[0]
+    assert rec["decision"]["kind"] == "project" and any("budget_scaled_projection" in x for x in rec["decision"]["reasons"])
+    assert _delta(r.committed, lm.init_state(1)) <= cap * (1 + 1e-6)
+
+
+def test_nonfinite_candidate_is_rejected():
+    cfg, lm = _lm()
+    r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)
+    r.feed_tokens(_ids(8))
+    good = r.committed.clone()
+    r.working.layers[0].S.fill_(float("nan"))
+    r.feed_tokens(_ids(8, seed=2))
+    rec = r.transactions[-1]
+    assert rec["decision"]["kind"] == "rollback" and any("nonfinite_candidate" in x for x in rec["decision"]["reasons"])
+    assert all(torch.isfinite(l.S).all() for l in r.committed.layers)
     assert not r.read_only
 
 
@@ -199,10 +295,10 @@ def test_calibration_from_runner_and_fpr(tmp_path):
 
 def test_read_only_chunks_do_not_feed_statistics():
     cfg, lm = _lm()
-    hcfg = HarnessConfig(budget_session=1e-6, enable_projection=False)
-    r = TransactionRunner(lm, cfg, hcfg, device=CPU)
+    r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), device=CPU)
     r.feed_tokens(_ids(8))
-    assert r.read_only
+    r.read_only = True
+    r.read_only_reason = "test"
     before = r.cusum.state()
     r.feed_tokens(_ids(8, seed=5))
     sig = r.transactions[1]["signals"]

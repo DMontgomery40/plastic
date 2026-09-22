@@ -117,3 +117,15 @@ def test_gradients_finite_with_identical_keys(device):
     o, S, _ = delta_chunk(k, k, v, beta, alpha, chunk=64)
     (o.pow(2).mean() + S.pow(2).mean()).backward()
     assert torch.isfinite(beta.grad).all() and torch.isfinite(alpha.grad).all()
+
+
+@pytest.mark.parametrize("beta_value", [0.0, 1e-9, 0.5])
+def test_surprise_is_independent_of_beta(device, beta_value):
+    """The error signal is the pre-write prediction error; it must match the recurrent path
+    even when writes are disabled or tiny."""
+    q, k, v, _, alpha, S0 = _inputs(1, 2, 40, 8, device)
+    beta = torch.full((1, 2, 40), beta_value, device=device)
+    _, _, e1 = delta_recurrent(q, k, v, beta, alpha, S0)
+    _, _, e2 = delta_chunk(q, k, v, beta, alpha, S0, chunk=16)
+    assert torch.allclose(e1, e2, atol=1e-4, rtol=1e-4)
+    assert float(e2.mean()) > 0

@@ -97,7 +97,9 @@ class PlasticBlock(nn.Module):
         a = torch.exp(log_a)
         z = torch.sqrt(1.0 - a * a + 1e-6) * (i * self.W_in(u))
         if mode == "chunk":
-            return scan_chunked(a, z, h0, chunk=self.cfg.chunk)
+            # the scan's chunk only sets the (B, n, L, L, D) working-set size; results are
+            # identical for any value, so it stays small (memory) and independent of cfg.chunk
+            return scan_chunked(a, z, h0, chunk=self.cfg.scan_chunk)
         if mode == "recurrent":
             return scan_sequential(a, z, h0)
         raise ValueError(f"unknown mode {mode!r}")

@@ -49,3 +49,13 @@ def test_fisher_diag_shapes_and_norm(tmp_path):
     assert fisher_norm(zeros, fisher) == 0.0
     ones = [torch.ones(1, 2, 16, 16) for _ in range(2)]
     assert fisher_norm(ones, fisher) > 0
+
+
+def test_projection_is_invariant_to_gradient_scale():
+    d = [torch.tensor([[[[1000.0, 2000.0]]]])]
+    for scale in (1.0, 1e-6, 1e-9, 1e3):
+        g = [torch.tensor([[[[scale, 0.0]]]])]
+        out, st = project_delta(d, g, eps_dot=0.0, eps_cos=0.0)
+        assert st.applied
+        assert torch.allclose(out[0], torch.tensor([[[[0.0, 2000.0]]]]), atol=1e-3), (scale, out)
+        assert abs(st.dot_after) <= 1e-6 * scale + 1e-9

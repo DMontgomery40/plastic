@@ -67,8 +67,9 @@ def project_delta(
     allowed = max(float(eps_dot), float(eps_cos) * gn * dn)
     if gn < tiny or dot <= allowed:
         return [t.clone() for t in deltas], ProjectionStats(dot, dot, allowed, 0.0, False)
-    alpha = (dot - allowed) / (gn * gn + tiny)
-    d_new = d - alpha * g
+    # project along the unit direction so a rescaled gradient gives the same geometric result
+    unit = g / gn
+    d_new = d - ((dot - allowed) / gn) * unit
     dot_after = float((g * d_new).sum())
     removed = float((d - d_new).norm() / max(dn, tiny))
     return unflatten_like(d_new, deltas), ProjectionStats(dot, dot_after, allowed, min(1.0, removed), True)

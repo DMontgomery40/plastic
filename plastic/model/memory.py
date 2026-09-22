@@ -13,8 +13,9 @@ forget ``α``. Two inner rules share the interface:
 
 Control modes, by contract:
 
-- ``freeze=True`` leaves ``S`` (and ``M``, and pending chunk statistics) bit-identical:
-  no write, no decay, no accumulation. Reads still happen.
+- ``freeze=True`` leaves ``S`` and ``M`` bit-identical: no write, no decay, no accumulation
+  of pending statistics (frozen tokens count with neutral retention; a boundary crossed
+  while frozen discards the pending statistics). Reads still happen.
 - ``beta_scale`` scales the write only. For the delta rule it scales β; for the chunk
   rule it scales the complete update after orthogonalization (and the gradient's
   contribution to momentum), so ``beta_scale=0`` writes nothing while decay continues.

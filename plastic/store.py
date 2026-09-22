@@ -201,3 +201,213 @@ class ArtifactStore:
 
     def read_log(self, model_id: str, *, limit: int | None = None) -> list[dict[str, Any]]:
         return read_jsonl(self.train_log_path(model_id), limit=limit)
+
+
+# ---------------------------------------------------------------------- sessions
+class SessionStoreMixin:
+    """Session directories under ``<root>/sessions/<session_id>/``:
+
+        meta.json            lineage, model id and signature, harness config, summary
+        runner_state.pt      TransactionRunner.state_dict()
+        transactions.jsonl   one record per chunk decision with every signal
+        trace.jsonl          prompts/completions (text) or episodes (physics)
+    """
+
+    root: str
+
+    @property
+    def sessions_dir(self) -> str:
+        return os.path.join(self.root, "sessions")
+
+    @property
+    def sessions_index(self) -> str:
+        return os.path.join(self.sessions_dir, "index.json")
+
+    def session_dir(self, session_id: str) -> str:
+        return os.path.join(self.sessions_dir, session_id)
+
+    def session_meta_path(self, session_id: str) -> str:
+        return os.path.join(self.session_dir(session_id), "meta.json")
+
+    def runner_state_path(self, session_id: str) -> str:
+        return os.path.join(self.session_dir(session_id), "runner_state.pt")
+
+    def transactions_path(self, session_id: str) -> str:
+        return os.path.join(self.session_dir(session_id), "transactions.jsonl")
+
+    def trace_path(self, session_id: str) -> str:
+        return os.path.join(self.session_dir(session_id), "trace.jsonl")
+
+    def canary_path(self, model_id: str) -> str:
+        return os.path.join(self.model_dir(model_id), "canary.json")  # type: ignore[attr-defined]
+
+    def ensure_sessions(self) -> None:
+        os.makedirs(self.sessions_dir, exist_ok=True)
+        if not os.path.exists(self.sessions_index):
+            atomic_write_json(self.sessions_index, {"sessions": {}})
+
+    def _load_sessions_index(self) -> dict[str, Any]:
+        self.ensure_sessions()
+        idx = read_json(self.sessions_index)
+        sessions = idx.get("sessions", {}) if isinstance(idx, dict) else {}
+        return {"sessions": dict(sessions) if isinstance(sessions, dict) else {}}
+
+    def _upsert_session_index(self, session_id: str, summary: dict[str, Any]) -> None:
+        idx = self._load_sessions_index()
+        idx["sessions"][session_id] = summary
+        atomic_write_json(self.sessions_index, idx)
+
+    def session_exists(self, session_id: str) -> bool:
+        return os.path.exists(self.session_meta_path(session_id))
+
+    def new_session_id(self, prefix: str = "sess") -> str:
+        self.ensure_sessions()
+        base = f"{prefix}_{int(time.time())}"
+        known = set(self._load_sessions_index()["sessions"].keys())
+        sid, n = base, 1
+        while self.session_exists(sid) or sid in known:
+            sid = f"{base}_{n}"
+            n += 1
+        return sid
+
+    def _session_summary(self, meta: dict[str, Any]) -> dict[str, Any]:
+        keys = ("session_id", "model_id", "domain", "parent_session_id", "root_session_id", "created_at_unix",
+                "updated_at_unix", "pos", "n_transactions", "commits", "rollbacks", "scales", "projects",
+                "readonly", "budget_used", "read_only", "read_only_reason", "forked_at_pos")
+        return {k: meta.get(k) for k in keys}
+
+    def create_session(
+        self,
+        session_id: str,
+        *,
+        model_id: str,
+        domain: str,
+        harness_cfg: Any,
+        parent_session_id: str | None = None,
+        runner_state: dict[str, Any] | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        self.ensure_sessions()
+        if self.session_exists(session_id):
+            raise FileExistsError(f"session already exists: {session_id}")
+        signature = self.model_signature(model_id)  # type: ignore[attr-defined]
+        root_id = session_id
+        forked_at = None
+        if parent_session_id is not None:
+            parent = self.load_session_meta(parent_session_id)
+            if parent.get("model_signature") != signature:
+                raise ValueError("parent session was created with a different model")
+            root_id = str(parent.get("root_session_id", parent_session_id))
+            forked_at = parent.get("pos", 0)
+        now = int(time.time())
+        meta: dict[str, Any] = {
+            "session_id": session_id,
+            "model_id": model_id,
+            "model_signature": signature,
+            "domain": domain,
+            "parent_session_id": parent_session_id,
+            "root_session_id": root_id,
+            "forked_at_pos": forked_at,
+            "created_at_unix": now,
+            "updated_at_unix": now,
+            "harness": harness_cfg.to_dict() if hasattr(harness_cfg, "to_dict") else dict(harness_cfg),
+            "pos": 0 if runner_state is None else int(runner_state.get("working", {}).get("pos", 0)),
+            "n_transactions": 0,
+            "commits": 0,
+            "rollbacks": 0,
+            "scales": 0,
+            "projects": 0,
+            "readonly": 0,
+            "budget_used": 0.0 if runner_state is None else float(runner_state.get("budget_used", 0.0)),
+            "read_only": False if runner_state is None else bool(runner_state.get("read_only", False)),
+            "read_only_reason": None if runner_state is None else runner_state.get("read_only_reason"),
+            "extra": dict(extra or {}),
+        }
+        os.makedirs(self.session_dir(session_id), exist_ok=True)
+        atomic_write_json(self.session_meta_path(session_id), meta)
+        torch.save(runner_state or {}, self.runner_state_path(session_id))
+        self._upsert_session_index(session_id, self._session_summary(meta))
+        return meta
+
+    def load_session_meta(self, session_id: str) -> dict[str, Any]:
+        if not self.session_exists(session_id):
+            raise FileNotFoundError(f"session not found: {session_id}")
+        return read_json(self.session_meta_path(session_id))
+
+    def verify_session_model(self, session_id: str) -> None:
+        meta = self.load_session_meta(session_id)
+        sig = self.model_signature(str(meta["model_id"]))  # type: ignore[attr-defined]
+        if sig != meta.get("model_signature"):
+            raise ValueError(
+                f"session {session_id} was created with model {meta['model_id']} at a different signature; refusing to load"
+            )
+
+    def list_sessions(self) -> list[dict[str, Any]]:
+        sessions = list(self._load_sessions_index()["sessions"].values())
+        sessions.sort(key=lambda r: int(r.get("created_at_unix", 0) or 0), reverse=True)
+        return sessions
+
+    def save_runner_state(self, session_id: str, state: dict[str, Any], *, summary: dict[str, Any], counts: dict[str, int] | None = None) -> dict[str, Any]:
+        meta = self.load_session_meta(session_id)
+        meta["updated_at_unix"] = int(time.time())
+        meta["pos"] = int(summary.get("pos", meta.get("pos", 0)))
+        meta["n_transactions"] = int(summary.get("n_transactions", meta.get("n_transactions", 0)))
+        meta["budget_used"] = float(summary.get("budget_used", 0.0))
+        meta["read_only"] = bool(summary.get("read_only", False))
+        meta["read_only_reason"] = summary.get("read_only_reason")
+        for k, v in (counts or {}).items():
+            meta[k] = int(meta.get(k, 0)) + int(v)
+        tmp = self.runner_state_path(session_id) + ".tmp"
+        torch.save(state, tmp)
+        os.replace(tmp, self.runner_state_path(session_id))
+        atomic_write_json(self.session_meta_path(session_id), meta)
+        self._upsert_session_index(session_id, self._session_summary(meta))
+        return meta
+
+    def load_runner_state(self, session_id: str) -> dict[str, Any]:
+        p = self.runner_state_path(session_id)
+        if not os.path.exists(p):
+            return {}
+        st = torch.load(p, map_location="cpu", weights_only=False)
+        return st if isinstance(st, dict) else {}
+
+    def append_transaction(self, session_id: str, record: dict[str, Any]) -> None:
+        append_jsonl(self.transactions_path(session_id), record)
+
+    def read_transactions(self, session_id: str, *, limit: int | None = None) -> list[dict[str, Any]]:
+        return read_jsonl(self.transactions_path(session_id), limit=limit)
+
+    def append_trace(self, session_id: str, record: dict[str, Any]) -> None:
+        append_jsonl(self.trace_path(session_id), record)
+
+    def read_trace(self, session_id: str, *, limit: int | None = None) -> list[dict[str, Any]]:
+        return read_jsonl(self.trace_path(session_id), limit=limit)
+
+    def fork_session(self, parent_session_id: str, child_session_id: str) -> dict[str, Any]:
+        from plastic.harness.config import HarnessConfig
+
+        parent = self.load_session_meta(parent_session_id)
+        state = self.load_runner_state(parent_session_id)
+        meta = self.create_session(
+            child_session_id,
+            model_id=str(parent["model_id"]),
+            domain=str(parent["domain"]),
+            harness_cfg=HarnessConfig.from_dict(parent["harness"]),
+            parent_session_id=parent_session_id,
+            runner_state=state,
+            extra=dict(parent.get("extra", {})),
+        )
+        return meta
+
+    def delete_session(self, session_id: str) -> None:
+        import shutil
+
+        if self.session_exists(session_id):
+            shutil.rmtree(self.session_dir(session_id))
+        idx = self._load_sessions_index()
+        idx["sessions"].pop(session_id, None)
+        atomic_write_json(self.sessions_index, idx)
+
+
+class ArtifactStore(ArtifactStore, SessionStoreMixin):  # type: ignore[no-redef]
+    """Models plus sessions."""

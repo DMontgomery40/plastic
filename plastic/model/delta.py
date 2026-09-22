@@ -122,14 +122,20 @@ def delta_chunk(
     S = torch.zeros(B, H, d, d, dtype=q.dtype, device=q.device) if S0 is None else S0
     outs, errs = [], []
     for c in range(n):
-        qc, kc = q[:, :, c], k[:, :, c]
+        qc, kc, vc = q[:, :, c], k[:, :, c], v[:, :, c]
         u_eff = u[:, :, c] - w[:, :, c] @ S  # pseudo-values = beta_t e_t
         Aqk = torch.einsum("bhtd,bhsd->bhts", qc, kc) * Dm[:, :, c]
         o = torch.einsum("bhts,bhsd->bhtd", Aqk, u_eff) + torch.einsum(
             "bhtd,bhdv->bhtv", qc * gexp[:, :, c].unsqueeze(-1), S
         )
         outs.append(o)
-        errs.append(u_eff.norm(dim=-1) / beta[:, :, c].clamp_min(1e-12))
+        # surprise e_t = v_t - k_t (alpha_t S_{t-1}): the pre-write prediction uses only s < t,
+        # computed directly so it does not depend on beta (frozen chunks still report surprise)
+        Akk = torch.einsum("bhtd,bhsd->bhts", kc, kc) * Ds[:, :, c]
+        pred = torch.einsum("bhts,bhsd->bhtd", Akk, u_eff) + torch.einsum(
+            "bhtd,bhdv->bhtv", kc * gexp[:, :, c].unsqueeze(-1), S
+        )
+        errs.append((vc - pred).norm(dim=-1))
         dec_to_end = torch.exp(g[:, :, c, -1:] - g[:, :, c])  # alpha_{s+1..L}
         S = gexp[:, :, c, -1, None, None] * S + torch.einsum(
             "bhsd,bhsv->bhdv", kc * dec_to_end.unsqueeze(-1), u_eff

@@ -71,7 +71,7 @@ h_t     = a_t ⊙ h_{t−1} + z_t                   activation state, (D,)
 x_t    += W_o (h_t ⊙ SiLU(W_g u_t))
 ```
 
-Computed with a chunked log-space scan: within a chunk, `P[t,s] = exp(C_t − C_s)` for s ≤ t where `C_t = Σ_{r≤t} log a_r`, so only pairwise decay ratios in (0, 1] are ever formed; the chunk carry is a T/L-step loop. Verified max error 2e-5 against the sequential reference including decays of 1e-3, on CPU and MPS, with gradients to `a` and `z`. This replaces the broken closed form.
+Computed with a chunked log-space scan: within a chunk, `P[t,s] = exp(C_t − C_s)` for s ≤ t where `C_t = Σ_{r≤t} log a_r`, so only pairwise decay ratios in (0, 1] are ever formed; the chunk carry is a T/L-step loop. The scan's own chunk (`scan_chunk`, default 16) is independent of the transaction chunk: results are identical for any value and it only sets the (B, n, L, L, D) working set, which at chunk 64 and batch 32 was 2 GB per layer per tensor and exhausted a 24 GB GPU. Verified max error 2e-5 against the sequential reference including decays of 1e-3, on CPU and MPS, with gradients to `a` and `z`. This replaces the broken closed form.
 
 **Memory branch (fast weights, fed by the SSM output).**
 
@@ -164,7 +164,7 @@ Per chunk, per layer and total:
 - Surprise statistics: mean and max `‖e_t‖`; mean β_t (the model's own gate); mean α_t.
 - Update norm `‖Δ‖_F`, `Δ[ℓ] = S_working[ℓ] − S_committed[ℓ]`; log-transformed for statistics.
 - Fisher-weighted update size `Σ_i F_i Δ_i²` and cumulative drift from the session anchor `Σ_i F_i (S_i − S_anchor,i)²`, with diagonal Fisher over state entries estimated on the benign calibration stream (Elastic TTT / EWC style; the alignment-collapse result says first-order projection alone leaks through curvature).
-- Canary suite score before and after the chunk: a fixed per-domain probe set run read-only (`freeze=True`: no write, no decay, momentum and pending statistics untouched) from a scratch copy of the state. Two sets: a coherence set whose loss must not rise, and a private poison set (garbage and recorded attack payloads) whose loss must not fall. `ΔL_C > τ_C` or `ΔL_P < −τ_P` is the rollback trigger, matching the TTT-guardrails perplexity-shift detector.
+- Canary suite score before and after the chunk: a fixed per-domain probe set run read-only (`freeze=True`: no write, no decay, momentum untouched) from a scratch copy of the state. Two sets: a coherence set whose loss must not rise, and a private poison set (garbage and recorded attack payloads) whose loss must not fall. `ΔL_C > τ_C` or `ΔL_P < −τ_P` is the rollback trigger, matching the TTT-guardrails perplexity-shift detector.
 - Canary gradient alignment `cos(Δ, g_C)` where `g_C[ℓ] = ∂score_C/∂S[ℓ]` from a read-only canary forward with `S` marked differentiable.
 - Robust z-scores (median, 1.4826·MAD) of each stream against a fixed benign reference window from calibration and against session history; two-sided CUSUM (k = 0.5, h = 4 to 5 in z units) on log‖Δ‖ for slow drift.
 - Budget remaining: per-chunk cap on `‖Δ‖_F` and per-session cumulative cap.

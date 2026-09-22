@@ -21,6 +21,7 @@ class ModelConfig:
     n_heads: int = 4
     n_layers: int = 4
     chunk: int = 64
+    scan_chunk: int = 16
     conv_kernel: int = 4
     vocab_size: int = 4096
     tie_embeddings: bool = True
@@ -44,6 +45,8 @@ class ModelConfig:
             raise ValueError(f"d_model={self.d_model} must be divisible by n_heads={self.n_heads}")
         if self.chunk < 1:
             raise ValueError("chunk must be >= 1")
+        if self.scan_chunk < 1:
+            raise ValueError("scan_chunk must be >= 1")
         if self.conv_kernel < 1:
             raise ValueError("conv_kernel must be >= 1 (1 disables the short convolution)")
         if self.n_layers < 1:
