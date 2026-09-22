@@ -117,6 +117,12 @@ class ArtifactStore:
     def register_model(self, model_id: str, record: dict[str, Any]) -> None:
         idx = self._load_index()
         rec = dict(idx["models"].get(model_id, {}))
+        # A record that declares a fresh terminal/lifecycle status is authoritative about the
+        # run's outcome: a later success (or a retry) at the same model_id must not inherit a
+        # previous attempt's stale error. Only an incoming record that carries its own error
+        # keeps one.
+        if "status" in record and "error" not in record:
+            rec.pop("error", None)
         rec.update(record)
         rec["model_id"] = model_id
         rec.setdefault("created_at_unix", int(time.time()))

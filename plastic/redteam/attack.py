@@ -298,7 +298,7 @@ def pgd_attack(
         opt.zero_grad(set_to_none=True)
         dmg, nll, _ = damage(model, prefix_state, last, base + delta, suite, device=device)
         if d0 is None:
-            d0 = float(dmg)
+            d0 = float(dmg.detach())
         penalty = F.relu(nll - nll_max)
         loss = -dmg + cfg.nll_weight * penalty
         loss.backward()

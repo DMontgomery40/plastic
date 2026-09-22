@@ -23,6 +23,26 @@ def test_register_and_list(tmp_path):
     assert store.load_model_record(a)["created_at_unix"] == 10
 
 
+def test_retried_run_does_not_inherit_stale_error(tmp_path):
+    # A failed attempt records an error; a retry at the same model_id must not carry it forward.
+    store = ArtifactStore(str(tmp_path))
+    mid = store.new_model_id("lm")
+    store.register_model(mid, {"status": "running", "created_at_unix": 1})
+    store.register_model(mid, {"status": "failed", "error": "OutOfMemoryError: CUDA OOM"})
+    assert store.load_model_record(mid)["error"].startswith("OutOfMemoryError")
+    # the retry starts (running) and then completes; neither carries an error field
+    store.register_model(mid, {"status": "running"})
+    assert "error" not in store.load_model_record(mid)  # stale error cleared the moment the retry starts
+    store.register_model(mid, {"status": "completed", "steps": 6000})
+    rec = store.load_model_record(mid)
+    assert rec["status"] == "completed" and "error" not in rec
+
+    # a partial register that does not declare a status (e.g. calibration) must NOT wipe a real error
+    store.register_model(mid, {"status": "failed", "error": "boom"})
+    store.register_model(mid, {"calibrated_at_unix": 123})
+    assert store.load_model_record(mid)["error"] == "boom"
+
+
 def test_checkpoint_roundtrip_and_signature(tmp_path):
     store = ArtifactStore(str(tmp_path))
     cfg = _cfg()
