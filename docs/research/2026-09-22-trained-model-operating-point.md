@@ -192,6 +192,16 @@ cannot separate from benign text.
 
 ## 5. Where the honest research goes next
 
+**Update — the targeted-poison candidate was built and run** (`coherence_poison`; see
+`docs/research/2026-09-22-coherence-poison-write-bandwidth.md`). The finding: the write path is
+steerable into catastrophic coherence damage in *latent* space (embedding-space upper bound ~17,
+~13× the gate), but the discrete-token realization saturates at the benign-band edge (~0.65) and
+does not clear it even at 24 chunks. So the token→write channel is low-bandwidth for targeted
+corruption, and no *deliverable* attack cleared the band. The still-open case is the other
+candidate below: a fluency-constrained payload that passes the anomaly gates while moving
+coherence — which would isolate the canary gate's value (the poison above is gibberish caught by
+the loss/surprise gates, so it does not).
+
 The productive next attack is not more PGD steps; it is a family that produces
 *above-benign* unprotected damage so the detector has something to separate. Two candidates:
 a fluency-constrained joint optimizer (maximize canary damage subject to NLL ≤ ceiling), and
