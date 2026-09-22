@@ -545,7 +545,7 @@ def summarize_operating_point(transactions: list[dict[str, Any]]) -> dict[str, A
         }
 
     out: dict[str, Any] = {"prompt": _blank(), "generation": _blank(), "unknown": _blank()}
-    anomalies = {"mixed_source": 0, "missing_source": 0, "unknown_kind": 0}
+    anomalies = {"mixed_source": 0, "missing_source": 0, "unknown_kind": 0, "nonfinite_accepted": 0}
     for tx in transactions:
         src_info = tx.get("sources")
         if not isinstance(src_info, dict) or ("user" not in src_info and "model" not in src_info):
@@ -577,8 +577,12 @@ def summarize_operating_point(transactions: list[dict[str, Any]]) -> dict[str, A
             reason = tx.get("read_only_reason") or "learning_ineligible"
             rec["readonly_reasons"][reason] = rec["readonly_reasons"].get(reason, 0) + 1
         acc = tx.get("accepted")
-        if isinstance(acc, dict) and float(acc.get("delta_norm", 0) or 0) > 0:
-            rec["accepted_change"] += 1
+        if isinstance(acc, dict):
+            d = float(acc.get("delta_norm", 0) or 0)
+            if not math.isfinite(d):  # a nonfinite accepted delta is not a valid retention
+                anomalies["nonfinite_accepted"] += 1
+            elif d > 0:
+                rec["accepted_change"] += 1
     for rec in (out["prompt"], out["generation"], out["unknown"]):
         n, e = rec["chunks"], rec["eligible"]
         rec["eligible_intervention_rate"] = (rec["eligible_interventions"] / e) if e else None

@@ -92,3 +92,100 @@ def test_build_split_groups_shared_context_into_one_split():
     holders = [name for name in ("fit", "cusum", "dev", "eval") if any(r["context"] == ctx for r in split[name])]
     assert len(holders) == 1
     assert sum(1 for r in split[holders[0]] if r["context"] == ctx) == 4 and manifest["n_context_groups"] == 1
+
+
+class _FakeRunner:
+    """Minimal runner for driver logic tests: a decision-kind script, a clearable transaction log."""
+
+    def __init__(self, kinds):
+        self._kinds, self._i = list(kinds), 0
+        self.transactions = []
+        self.read_only, self.read_only_reason, self.committed = False, None, object()
+
+        class _B:
+            def is_finite(self, _s):
+                return True
+
+        self.backend = _B()
+
+    def reset(self):
+        self.transactions = []  # clears the log; the kind script continues (does not reset _i)
+
+
+def _fake_drive(runner, tok, prompt, *, max_new_tokens, temperature, top_k, gen):
+    kind = runner._kinds[runner._i]
+    runner._i += 1
+    runner.transactions.append({"sources": {"user": 0, "model": 8}, "decision": {"kind": kind},
+                                "eligible": kind != "readonly",
+                                "accepted": {"delta_norm": 1.0 if kind == "commit" else 0.0}})
+    return ("an answer", [1, 2, 3], [4, 5, 6])
+
+
+def test_followup_isolation_detects_all_readonly_turns():
+    # ASTRA-086: without clearing transactions per turn, an early commit masks later all-read-only
+    # turns (false all_ok). With the fix, each turn is judged on its own records.
+    from scripts.experiments.qwen_operating_point import _run_followups
+    fixture = {"sessions": [{"id": f"s{i}", "turns": ["a", "b", "c"]} for i in range(4)]}  # commit,readonly,readonly each
+    runner = _FakeRunner(kinds=["commit", "readonly", "readonly"] * 4)
+    out = _run_followups(None, None, None, {"max_new_tokens": 4, "temperature": 0.9, "top_k": 50}, 0,
+                         "unused", None, deadline=1e18, _runner=runner, _drive=_fake_drive, _fixture=fixture)
+    assert out["all_ok"] is False  # the read-only turns are caught, not masked
+    for s in out["sessions"]:
+        assert [t["all_readonly"] for t in s["turns"]] == [False, True, True]
+
+
+def _gen_settings():
+    return {"max_new_tokens": 4, "temperature": 0.9, "top_k": 50}
+
+
+def test_eval_uses_matched_seeds_across_fresh_and_carried():
+    # ASTRA-083/086: the same per-row seed in fresh and carried (only the state differs)
+    from scripts.experiments.qwen_operating_point import _eval_sessions
+    seeds = []
+
+    def rec_drive(runner, tok, prompt, *, max_new_tokens, temperature, top_k, gen):
+        seeds.append(gen.initial_seed())
+        runner.transactions.append({"sources": {"user": 8, "model": 0}, "decision": {"kind": "commit"}, "eligible": True, "accepted": {"delta_norm": 1.0}})
+        runner.transactions.append({"sources": {"user": 0, "model": 8}, "decision": {"kind": "commit"}, "eligible": True, "accepted": {"delta_norm": 1.0}})
+        return ("x", [1], [2])
+
+    prompts = [{"id": i, "prompt": f"p{i}"} for i in range(4)]
+    _eval_sessions(None, None, None, prompts, hcfg=None, gen=_gen_settings(), seed_base=20260922, chains=2,
+                   deadline=1e18, _runner=_FakeRunner(["commit"] * 100), _drive=rec_drive)
+    fresh_seeds, carried_seeds = seeds[:4], seeds[4:8]
+    assert fresh_seeds == carried_seeds == [20260922 + i for i in range(4)]
+
+
+def test_eval_keeps_completed_turns_when_a_chain_is_cut():
+    # ASTRA-086: a deadline mid-chain keeps the completed turns (durable evidence) with an incomplete
+    # flag, and the regime is marked not complete
+    import time as _t
+    from scripts.experiments.qwen_operating_point import _eval_sessions
+
+    calls = {"n": 0}
+
+    def cutting_drive(runner, tok, prompt, *, max_new_tokens, temperature, top_k, gen):
+        calls["n"] += 1
+        runner.transactions.append({"sources": {"user": 8, "model": 0}, "decision": {"kind": "commit"}, "eligible": True, "accepted": {"delta_norm": 1.0}})
+        runner.transactions.append({"sources": {"user": 0, "model": 8}, "decision": {"kind": "commit"}, "eligible": True, "accepted": {"delta_norm": 1.0}})
+        return ("x", [1], [2])
+
+    prompts = [{"id": i, "prompt": f"p{i}"} for i in range(4)]
+    # deadline in the near past for CARRIED only: run fresh with a far deadline, then check carried cut
+    rep = _eval_sessions(None, None, None, prompts, hcfg=None, gen=_gen_settings(), seed_base=0, chains=1,
+                         deadline=_t.time() - 1, _runner=_FakeRunner(["commit"] * 100), _drive=cutting_drive)
+    # the far-past deadline stops both regimes immediately: nothing processed, marked incomplete
+    assert rep["fresh"]["complete"] is False and rep["carried"]["complete"] is False
+    assert rep["fresh"]["processed_ids"] == [] and rep["fresh"]["n_expected_sessions"] == 4
+
+
+def test_summarize_flags_nonfinite_accepted_delta():
+    # ASTRA-086: a nonfinite accepted delta is NOT counted as retention and is surfaced as an anomaly
+    from plastic.harness.calibrate import summarize_operating_point
+    txns = [
+        {"sources": {"user": 8, "model": 0}, "decision": {"kind": "commit"}, "eligible": True, "accepted": {"delta_norm": float("inf")}},
+        {"sources": {"user": 8, "model": 0}, "decision": {"kind": "commit"}, "eligible": True, "accepted": {"delta_norm": 0.5}},
+    ]
+    rep = summarize_operating_point(txns)
+    assert rep["prompt"]["accepted_change"] == 1  # only the finite positive one
+    assert rep["anomalies"]["nonfinite_accepted"] == 1

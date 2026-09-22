@@ -60,7 +60,7 @@ def load_dolly_prompts(max_rows: int) -> tuple[list[dict[str, Any]], str]:
         seen.add(key)
         prompt = instr if not ctx else f"{instr}\n\n{ctx}"
         rows.append({"id": i, "instruction": instr, "context": ctx, "category": ex.get("category", ""),
-                     "prompt": prompt, "text_sha256": hashlib.sha256(key.encode()).hexdigest()[:16]})
+                     "prompt": prompt, "text_sha256": hashlib.sha256(key.encode()).hexdigest()})
     return rows, revision
 
 
@@ -117,9 +117,13 @@ def build_split(rows: list[dict[str, Any]], encode_chat, *, counts: dict[str, in
         "requested_counts": dict(counts), "actual_counts": {k: len(v) for k, v in split.items()},
         "category_counts": {k: _cat_counts(v) for k, v in split.items()},
         "ids": {k: [r["id"] for r in v] for k, v in split.items()},
-        "text_hashes": {k: [r["text_sha256"] for r in v] for k, v in split.items()},
         "corpus_hash": hashlib.sha256("".join(all_hashes).encode()).hexdigest(),
         "n_context_groups": len(ctx_groups),
+        # an immutable raw export of the selected records (full text + full hash), so the exact corpus
+        # is pinned regardless of any Hub revision drift (ASTRA-086)
+        "selected_records": {k: [{"id": r["id"], "instruction": r["instruction"], "context": r["context"],
+                                  "category": r["category"], "sha256": r["text_sha256"]} for r in v]
+                             for k, v in split.items()},
     }
     return split, manifest
 
@@ -131,27 +135,33 @@ def _cat_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
     return out
 
 
-def _eval_sessions(backend, cfg, calibration, prompts, *, hcfg, gen, seed_base, chains, deadline):
+def _eval_sessions(backend, cfg, calibration, prompts, *, hcfg, gen, seed_base, chains, deadline, _runner=None, _drive=None):
     """Evaluate the locked set through the frozen harness in two regimes on ONE reused backend/runner
     (fresh sessions reset between; carried chains retain state within a chain), via the shared
     drive_chat_turn. Records per-session eligible/accepted-by-source, read-only, completions and
     outcomes, and the ordered raw transactions; the deadline is honored per turn; completion is by
-    processed-vs-expected ids."""
+    processed-vs-expected ids. ``_runner``/``_drive`` allow a fake runner/drive for tests."""
     import torch
 
     from plastic.harness.calibrate import summarize_operating_point
-    from plastic.harness.transaction import TransactionRunner
-    from plastic.session.runner import _QwenTextIO, drive_chat_turn
 
-    tok = _QwenTextIO(backend)
-    runner = TransactionRunner(None, cfg, hcfg, calibration=calibration, device=backend.device, backend=backend)
+    if _drive is None:
+        from plastic.session.runner import drive_chat_turn as _drive
+    if _runner is None:
+        from plastic.harness.transaction import TransactionRunner
+        from plastic.session.runner import _QwenTextIO
+        tok = _QwenTextIO(backend)
+        _runner = TransactionRunner(None, cfg, hcfg, calibration=calibration, device=backend.device, backend=backend)
+    else:
+        tok = None
+    runner = _runner
 
     def _turn(prompt: str, seed: int) -> dict[str, Any]:
         runner.transactions = []
         g = torch.Generator().manual_seed(int(seed))
         t0 = time.time()
-        completion, out_ids, in_ids = drive_chat_turn(runner, tok, prompt, max_new_tokens=gen["max_new_tokens"],
-                                                       temperature=gen["temperature"], top_k=gen["top_k"], gen=g)
+        completion, out_ids, in_ids = _drive(runner, tok, prompt, max_new_tokens=gen["max_new_tokens"],
+                                              temperature=gen["temperature"], top_k=gen["top_k"], gen=g)
         return {"seed": seed, "completion": completion, "n_in": len(in_ids), "n_out": len(out_ids),
                 "outcome": ("cap" if len(out_ids) >= gen["max_new_tokens"] else ("empty" if not out_ids else "eos")),
                 "seconds": time.time() - t0, "transactions": list(runner.transactions),
@@ -183,18 +193,25 @@ def _eval_sessions(backend, cfg, calibration, prompts, *, hcfg, gen, seed_base, 
                 turns.append(_turn(r["prompt"], seed0 + salt))
                 processed.append(r["id"])
                 salt += 1
-            if len(turns) != len(g):  # a turn was cut by the deadline -> this session is incomplete, drop it
+            incomplete = len(turns) != len(g)
+            if turns:  # keep the completed turns' records even if the chain was cut (durable evidence)
+                rec, txns = _session_record([r["id"] for r in g[:len(turns)]], regime, turns)
+                rec["incomplete"] = incomplete
+                sessions.append(rec)
+                all_tx.extend(txns)
+            if incomplete:
                 break
-            rec, txns = _session_record([r["id"] for r in g], regime, turns)
-            sessions.append(rec)
-            all_tx.extend(txns)
         return {"operating_point": summarize_operating_point(all_tx), "sessions": sessions,
                 "expected_ids": expected, "processed_ids": processed,
+                "n_expected_sessions": len(groups),
+                "n_complete_sessions": sum(1 for s in sessions if not s.get("incomplete")),
                 "complete": processed == expected, "raw_transactions": all_tx}
 
     fresh_groups = [[r] for r in prompts]
     carried_groups = _split_into_chains(prompts, chains)
-    return {"fresh": _run("fresh", fresh_groups, seed_base), "carried": _run("carried", carried_groups, seed_base + 10000)}
+    # ASTRA-083: the SAME per-row eval seed in fresh and carried (salt == the row's position in both),
+    # so the only difference between the regimes is fresh vs carried state, not the RNG
+    return {"fresh": _run("fresh", fresh_groups, seed_base), "carried": _run("carried", carried_groups, seed_base)}
 
 
 def _split_into_chains(prompts: list[Any], chains: int) -> list[list[Any]]:
@@ -223,13 +240,15 @@ def _check_criterion(report: dict[str, Any], *, elig_max: float = 0.10, readonly
     for regime in ("fresh", "carried"):
         blk = report[regime]
         op = blk["operating_point"]
-        n = len(blk["sessions"])
-        retained = sum(1 for s in blk["sessions"] if s["retained_both"])
+        complete_sessions = [s for s in blk["sessions"] if not s.get("incomplete")]
+        n = len(complete_sessions)
+        retained = sum(1 for s in complete_sessions if s["retained_both"])
         retained_frac = (retained / n) if n else None
         complete = bool(blk.get("complete"))
         anomalies_clean = not any(op.get("anomalies", {}).values())
         out["regimes"][regime] = {
-            "n_sessions": n, "retained_both": retained, "retained_fraction": retained_frac,
+            "n_sessions": len(blk["sessions"]), "n_complete_sessions": n, "n_expected_sessions": blk.get("n_expected_sessions"),
+            "retained_both": retained, "retained_fraction": retained_frac,
             "retained_ok": (retained_frac is not None and retained_frac >= retained_min),
             "complete": complete, "anomalies_clean": anomalies_clean,
         }
@@ -251,21 +270,31 @@ def _check_criterion(report: dict[str, Any], *, elig_max: float = 0.10, readonly
     return out
 
 
-def _run_followups(backend, cfg, calibration, gen, seed0, fixture_path, hcfg, deadline):
+def _run_followups(backend, cfg, calibration, gen, seed0, fixture_path, hcfg, deadline, *, _runner=None, _drive=None, _fixture=None):
     """Run the predeclared multi-turn follow-up sessions (never fit/tuned on). Each turn must complete
     without exception or nonfinite state and must not be entirely read-only; saved answers are for
-    textual review, reported separately from any rate. Returns per-session outcomes + an all_ok flag."""
+    textual review, reported separately from any rate. Returns per-session outcomes + an all_ok flag.
+    ``_runner``/``_drive``/``_fixture`` allow a fake runner/drive/fixture for tests."""
     import torch
 
     from plastic.harness.calibrate import summarize_operating_point
-    from plastic.harness.transaction import TransactionRunner
-    from plastic.session.runner import _QwenTextIO, drive_chat_turn
 
-    if not os.path.exists(fixture_path):
+    if _drive is None:
+        from plastic.session.runner import drive_chat_turn as _drive
+    if _fixture is not None:
+        fixture = _fixture
+    elif not os.path.exists(fixture_path):
         return {"skipped": "fixture missing", "path": fixture_path}
-    fixture = json.load(open(fixture_path))
-    tok = _QwenTextIO(backend)
-    runner = TransactionRunner(None, cfg, hcfg, calibration=calibration, device=backend.device, backend=backend)
+    else:
+        fixture = json.load(open(fixture_path))
+    if _runner is None:
+        from plastic.harness.transaction import TransactionRunner
+        from plastic.session.runner import _QwenTextIO
+        tok = _QwenTextIO(backend)
+        _runner = TransactionRunner(None, cfg, hcfg, calibration=calibration, device=backend.device, backend=backend)
+    else:
+        tok = None
+    runner, drive_chat_turn = _runner, _drive
 
     out = {"purpose": fixture.get("purpose", ""), "sessions": []}
     salt = 0
@@ -278,6 +307,7 @@ def _run_followups(backend, cfg, calibration, gen, seed0, fixture_path, hcfg, de
         session_ok = True
         for text in sess["turns"]:
             try:
+                runner.transactions = []  # THIS turn's records only (carried model state is retained)
                 completion, out_ids, _ = drive_chat_turn(runner, tok, text, max_new_tokens=gen["max_new_tokens"],
                                                           temperature=gen["temperature"], top_k=gen["top_k"],
                                                           gen=torch.Generator().manual_seed(seed0 + salt))
