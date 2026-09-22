@@ -23,9 +23,13 @@ if *any* z-signal, the canary-coherence gate, the canary-poison gate, or the gra
 projection fires. The seven calibrated per-signal rates — the five z-signals *and* the two
 canary gates — already sum to 1.36% at their nominal 0.195% each; the projection, CUSUM, and
 session-history effects are additional. The end-to-end sequential rate is therefore a thing to
-*measure*, not assume: on a 200-chunk continuous benign stream the **measured combined per-chunk
-intervention rate is 3.5%** (4 rollbacks, 3 projections, no scales). That 3.5% — not 0.195% — is
-the rate at which the harness touches benign traffic. (Do not read this against the ASTRA-026
+*measure*, not assume: on a 200-chunk continuous benign stream (validation.bin chunks 0–199,
+shipped `HarnessConfig` defaults) the **measured combined per-chunk intervention rate is 3.5%**
+(4 rollbacks, 3 projections, no scales, no read-only latch). Reproduce with
+`scripts/experiments/benign_operating_point.py lm_wikitext_l4 --data artifacts/data/wikitext
+--chunks 200` — which also prints the in-distribution caveat (this stream and the CUSUM reference
+both draw from the validation split). That 3.5% — not 0.195% — is the rate at which the harness
+touches benign traffic. (Do not read this against the ASTRA-026
 audit's 1.56%: that was a different model under the earlier, broken CUSUM threshold, and is not
 evidence about this harness.)
 
@@ -65,7 +69,9 @@ Two things were wrong, both now fixed:
   through the real `Cusum(k, h)` for a grid of `h` and take the smallest whose per-chunk alarm
   rate is ≤ target, reporting the empirical achieved rate (alarms/n, including 0.0 when none
   fired — not floored) alongside `achievable_fpr` (here in-sample 0.78% at target
-  1%). This is the same order-statistic discipline the per-chunk thresholds use.
+  1%). This is a fitted empirical run-length minimization, *not* a conformal order statistic like
+  the per-chunk thresholds — it carries no exchangeability guarantee, and the reported rate is an
+  in-sample fit to the reference it was calibrated on.
 - **The CUSUM signal was standardized against a biased reference.** The per-chunk reference is
   gathered with the session reset every 4 chunks (so it covers fresh sessions), but a live
   continuous session runs long. A mature continuous session's `log_delta_norm` sits persistently
@@ -90,8 +96,9 @@ stream and the CUSUM reference both draw from the validation split, so this is a
 observation, not a held-out generalization test). Either way a long enough benign auto-committing
 session will eventually latch on one alarm. Whether that latch should decay, require N alarms, or
 auto-clear after a quiet period is a policy question for the operator, not one to settle here. The
-red-team results below are unaffected: those sessions are 2–3 chunks, far short
-of any CUSUM run-length.
+red-team results below are unaffected by this latch — not asserted from length but from the
+records: across all 40 attacks the applied decisions are only rollback (31) and commit (9), with
+zero readonly/CUSUM latches (each attack validates a single payload chunk).
 
 ## 2. Attack study
 

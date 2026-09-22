@@ -138,7 +138,9 @@ def calibrated_cusum_h(zs: list[float], *, k: float, h_min: float, target_fpr: f
     ``zs`` (centered on its own regime, see the caller), we replay it through the real
     ``Cusum(k, h)`` for a grid of candidate ``h``, count alarms, and return the smallest ``h``
     whose benign per-chunk alarm rate is at or below ``target_fpr``, together with that achieved
-    rate. This is the same order-statistic discipline the per-chunk thresholds use.
+    rate. Note this is a fitted empirical run-length minimization on a reference sequence, *not* a
+    conformal order statistic: unlike the per-chunk thresholds it carries no exchangeability
+    guarantee, and the achieved rate is an in-sample fit to ``zs``.
 
     Two mistakes this avoids. (1) The old heuristic took ``1.25 * peak`` of a never-resetting
     walk, which is not a quantile of anything and let a benign continuous stream alarm within
