@@ -193,21 +193,57 @@ def test_session_summary_surfaces_backend_and_signals(text_model):
     assert summ["calibration"] == "absent"  # this fixture registers no calibration
 
 
-def test_summarize_operating_point_separates_prompt_and_generation():
-    # per-source decision breakdown: prompt (user-only) vs generation (any model source), reported
-    # separately, with interventions = rollback/scale/project.
+def _tx(user, model, kind, *, eligible, accepted=0.0, reason=None):
+    d = {"sources": {"user": user, "model": model}, "decision": {"kind": kind},
+         "eligible": eligible, "accepted": {"delta_norm": accepted}}
+    if reason is not None:
+        d["read_only_reason"] = reason
+    return d
+
+
+def test_summarize_operating_point_eligible_denominators_and_anomalies():
+    # ASTRA-083: the operating point is on ELIGIBLE denominators (never inferred from the decision
+    # label), with read-only/accepted-change accounting and mixed/missing-source anomalies surfaced.
     from plastic.harness.calibrate import summarize_operating_point
 
     txns = [
-        {"sources": {"user": 8, "model": 0}, "decision": {"kind": "commit"}},
-        {"sources": {"user": 5, "model": 0}, "decision": {"kind": "rollback"}},
-        {"sources": {"user": 0, "model": 8}, "decision": {"kind": "commit"}},
-        {"sources": {"user": 0, "model": 2}, "decision": {"kind": "scale"}},
-        {"sources": {"user": 0, "model": 4}, "decision": {"kind": "readonly"}},
+        _tx(8, 0, "commit", eligible=True, accepted=0.5),            # prompt eligible commit (accepted)
+        _tx(5, 0, "rollback", eligible=True, accepted=0.0),          # prompt eligible intervention
+        _tx(0, 8, "commit", eligible=True, accepted=0.3),            # generation eligible commit
+        _tx(0, 2, "scale", eligible=True, accepted=0.1),             # generation eligible intervention
+        _tx(0, 4, "readonly", eligible=False, reason="cusum_alarm"), # generation read-only (ineligible)
     ]
     rep = summarize_operating_point(txns)
-    assert rep["prompt"]["chunks"] == 2 and rep["prompt"]["interventions"] == 1 and rep["prompt"]["intervention_rate"] == 0.5
-    assert rep["generation"]["chunks"] == 3 and rep["generation"]["interventions"] == 1  # scale only
-    assert rep["generation"]["commit"] == 1 and rep["generation"]["scale"] == 1 and rep["generation"]["readonly"] == 1
+    assert rep["prompt"]["chunks"] == 2 and rep["prompt"]["eligible"] == 2
+    assert rep["prompt"]["eligible_interventions"] == 1 and rep["prompt"]["eligible_intervention_rate"] == 0.5
+    assert rep["prompt"]["accepted_change"] == 1  # only the commit had a nonzero accepted delta
+    assert rep["generation"]["chunks"] == 3 and rep["generation"]["eligible"] == 2
+    assert rep["generation"]["eligible_intervention_rate"] == 0.5  # scale among 2 eligible
+    assert rep["generation"]["readonly"] == 1 and rep["generation"]["readonly_rate"] == 1 / 3
+    assert rep["generation"]["readonly_reasons"] == {"cusum_alarm": 1}
+
+    # the exact ASTRA-083 repro: 1 eligible rollback then 99 ineligible read-only -> eligible rate 1.0,
+    # not diluted to 1%; the total-chunk burden is reported separately as 1%
+    only = [_tx(8, 0, "rollback", eligible=True)] + [_tx(8, 0, "readonly", eligible=False) for _ in range(99)]
+    r2 = summarize_operating_point(only)
+    assert r2["prompt"]["eligible"] == 1 and r2["prompt"]["eligible_intervention_rate"] == 1.0
+    assert r2["prompt"]["total_intervention_rate"] == 1 / 100
+
+    # zero eligible -> undefined (None) eligible rate, not 0.0
+    zero = [_tx(0, 4, "readonly", eligible=False) for _ in range(10)]
+    assert summarize_operating_point(zero)["generation"]["eligible_intervention_rate"] is None
+
+    # missing source and unknown decision kind are surfaced, not silently bucketed
+    weird = summarize_operating_point([
+        {"decision": {"kind": "commit"}, "eligible": True},  # no sources
+        _tx(4, 0, "weird", eligible=True),                   # unknown kind
+    ])
+    assert weird["anomalies"]["missing_source"] == 1 and weird["unknown"]["chunks"] == 1
+    assert weird["anomalies"]["unknown_kind"] == 1
+
+    # a mixed-source chunk counts as generation and as a mixed anomaly
+    mixed = summarize_operating_point([_tx(4, 4, "commit", eligible=True)])
+    assert mixed["generation"]["chunks"] == 1 and mixed["anomalies"]["mixed_source"] == 1
+
     empty = summarize_operating_point([])
-    assert empty["prompt"]["chunks"] == 0 and empty["prompt"]["intervention_rate"] is None
+    assert empty["prompt"]["chunks"] == 0 and empty["prompt"]["eligible_intervention_rate"] is None

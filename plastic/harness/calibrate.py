@@ -506,29 +506,73 @@ def calibrate_qwen(
     return cal
 
 
-def summarize_operating_point(transactions: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Per-source decision breakdown of a set of chat transactions.
+_DECISION_KINDS = ("commit", "rollback", "scale", "project", "readonly")
+_INTERVENTIONS = ("rollback", "scale", "project")
 
-    Splits chunks by source — ``prompt`` (user tokens only) vs ``generation`` (any model-source
-    tokens; the chat protocol flushes the prompt before generation, so no chunk mixes the two) — and
-    reports, for each, the count of every decision kind, the number of interventions
-    (rollback/scale/project), and the intervention rate. The two sources are reported SEPARATELY and
-    never pooled, so a prompt-side operating point stays distinguishable from a generation-side one.
-    This is a measurement over recorded decisions, not a calibrated-performance or safety claim.
+
+def summarize_operating_point(transactions: list[dict[str, Any]]) -> dict[str, Any]:
+    """Per-source operating-point breakdown of chat transactions, on ELIGIBLE denominators.
+
+    Chunks are split by source: ``prompt`` (user tokens only), ``generation`` (any model-source
+    token — the any-model rule), and ``unknown`` (a record missing ``sources``). A chunk with BOTH
+    user and model tokens counts as generation but is also tallied as a ``mixed_source`` chat-protocol
+    anomaly; an unknown decision kind and a missing source are likewise surfaced in ``anomalies``.
+
+    Eligibility is read from each record's ``eligible`` flag — NEVER inferred from the decision label.
+    Per source it reports: total ``chunks``; per-kind counts; ``eligible`` count; ``eligible_interventions``
+    (rollback/scale/project among eligible chunks) and ``eligible_intervention_rate`` (``None`` when no
+    eligible chunk — the promised eligible-write operating point); ``readonly`` count, ``readonly_rate``
+    (among all chunks), and a ``readonly_reasons`` breakdown; ``accepted_change`` (chunks with a nonzero
+    accepted state delta); and ``total_interventions`` / ``total_intervention_rate`` (explicitly a
+    total-chunk burden, not the eligible operating point). A measurement over recorded decisions, not a
+    calibrated-performance or safety claim.
     """
-    kinds = ("commit", "rollback", "scale", "project", "readonly")
-    out: dict[str, dict[str, Any]] = {
-        src: {"chunks": 0, "interventions": 0, "intervention_rate": None, **{k: 0 for k in kinds}}
-        for src in ("prompt", "generation")
-    }
+    def _blank() -> dict[str, Any]:
+        return {
+            "chunks": 0, "eligible": 0, "eligible_interventions": 0, "eligible_intervention_rate": None,
+            "readonly": 0, "readonly_rate": None, "readonly_reasons": {}, "accepted_change": 0,
+            "total_interventions": 0, "total_intervention_rate": None, **{k: 0 for k in _DECISION_KINDS},
+        }
+
+    out: dict[str, Any] = {"prompt": _blank(), "generation": _blank(), "unknown": _blank()}
+    anomalies = {"mixed_source": 0, "missing_source": 0, "unknown_kind": 0}
     for tx in transactions:
-        src = "generation" if tx.get("sources", {}).get("model", 0) > 0 else "prompt"
-        kind = tx["decision"]["kind"]
+        src_info = tx.get("sources")
+        if not isinstance(src_info, dict) or ("user" not in src_info and "model" not in src_info):
+            src = "unknown"
+            anomalies["missing_source"] += 1
+        else:
+            u, m = int(src_info.get("user", 0)), int(src_info.get("model", 0))
+            if u > 0 and m > 0:  # any-model rule -> generation, but record the mixed chunk as an anomaly
+                anomalies["mixed_source"] += 1
+                src = "generation"
+            elif m > 0:
+                src = "generation"
+            else:
+                src = "prompt"
         rec = out[src]
         rec["chunks"] += 1
-        rec[kind] = rec.get(kind, 0) + 1
-        if kind in ("rollback", "scale", "project"):
-            rec["interventions"] += 1
-    for rec in out.values():
-        rec["intervention_rate"] = (rec["interventions"] / rec["chunks"]) if rec["chunks"] else None
+        kind = (tx.get("decision") or {}).get("kind")
+        if kind in _DECISION_KINDS:
+            rec[kind] += 1
+        else:
+            anomalies["unknown_kind"] += 1
+        if bool(tx.get("eligible", False)):
+            rec["eligible"] += 1
+            if kind in _INTERVENTIONS:
+                rec["eligible_interventions"] += 1
+        if kind in _INTERVENTIONS:
+            rec["total_interventions"] += 1
+        if kind == "readonly":  # rec["readonly"] is already the per-kind count above; just add the reason
+            reason = tx.get("read_only_reason") or "learning_ineligible"
+            rec["readonly_reasons"][reason] = rec["readonly_reasons"].get(reason, 0) + 1
+        acc = tx.get("accepted")
+        if isinstance(acc, dict) and float(acc.get("delta_norm", 0) or 0) > 0:
+            rec["accepted_change"] += 1
+    for rec in (out["prompt"], out["generation"], out["unknown"]):
+        n, e = rec["chunks"], rec["eligible"]
+        rec["eligible_intervention_rate"] = (rec["eligible_interventions"] / e) if e else None
+        rec["readonly_rate"] = (rec["readonly"] / n) if n else None
+        rec["total_intervention_rate"] = (rec["total_interventions"] / n) if n else None
+    out["anomalies"] = anomalies
     return out
