@@ -186,8 +186,12 @@ class QwenBackend:
                     dtype=self.dtype,
                 )
                 memory = torch.zeros(
+                    # the GDN kernels compute and return the recurrent state in float32 and
+                    # DynamicCache preserves it there even when weights/conv/KV are bfloat16;
+                    # allocating this at the model dtype would quantize it every update and diverge
+                    # after the first chunk (ASTRA-057). Conv/KV stay at the model dtype.
                     1, c.linear_num_value_heads, c.linear_key_head_dim, c.linear_value_head_dim,
-                    device=self.device, dtype=self.dtype,
+                    device=self.device, dtype=torch.float32,
                 )
                 layer.lazy_initialization(conv_states=conv, recurrent_states=memory)
                 layer.has_previous_state[0] = True

@@ -122,6 +122,23 @@ def test_fresh_state_is_position_zero_and_gradient_works(backend):
     assert len(grads) == 18 and all(torch.isfinite(g).all() and g.norm() > 0 for g in grads)
 
 
+def test_recurrent_is_float32_under_bfloat16():
+    # native Qwen keeps the GDN recurrent accumulator at float32 even with bfloat16 weights/conv/KV;
+    # allocating it at the model dtype would quantize it every update and diverge after chunk 1
+    # (ASTRA-057). Conv/KV stay at the model dtype. (Own bf16 load; not the float32 module fixture.)
+    from plastic.backends.qwen import QwenBackend
+
+    be = QwenBackend.load(CKPT, dtype=torch.bfloat16)
+    st = be.init_state()
+    assert all(s.dtype == torch.float32 for s in st.recurrent_leaves())
+    ids = be.encode("A multi-chunk continuation under bfloat16 weights, long enough for three chunks.")
+    for i in range(0, min(12, len(ids)), 4):
+        _, st = be.process(ids[i : i + 4], st)
+    assert all(s.dtype == torch.float32 for s in st.recurrent_leaves())  # stays float32 across chunks
+    conv = [c for l in st.cache.layers for c in getattr(l, "conv_states", {}).values()]
+    assert conv and all(c.dtype == torch.bfloat16 for c in conv)  # conv follows the model dtype
+
+
 def test_encode_chat_returns_integer_ids(backend):
     # apply_chat_template defaults to a dict in tf 5.17; encode_chat must return native integer ids
     # that tensorize, for empty / ascii / unicode, matching render-then-tokenize.
