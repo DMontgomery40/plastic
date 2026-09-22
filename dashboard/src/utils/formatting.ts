@@ -121,7 +121,9 @@ export function calibrationView(
     return { mode: 'rejected', drawThresholds: false, signalsSubtitle: d.detail + fallback,
       inactive: { title: `${d.label}; not active on this session.`, detail: d.detail } };
   }
-  return { mode: 'unknown', drawThresholds: false, signalsSubtitle: d.detail + fallback,
+  // unknown status does NOT establish which policy is active (unlike a rejected calibration, which is
+  // known not installed), so it must not assert the robust-z fallback -- only report the uncertainty
+  return { mode: 'unknown', drawThresholds: false, signalsSubtitle: d.detail,
     inactive: { title: 'Calibration status is unavailable for this session.', detail: d.detail } };
 }
 

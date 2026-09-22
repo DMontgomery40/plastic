@@ -80,6 +80,8 @@ describe('calibrationView', () => {
       expect(v.mode).toBe('unknown');
       expect(v.drawThresholds).toBe(false);
       expect(v.inactive?.title).not.toMatch(/not calibrated/i);
+      // unknown does not establish the active policy, so it must NOT assert the robust-z fallback
+      expect(v.signalsSubtitle).not.toMatch(/falls back/i);
     }
   });
 });
