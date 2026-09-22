@@ -9,7 +9,10 @@ CUSUM, budget), asks the policy for a decision, and applies it:
 - scale:    working := committed, the chunk is reprocessed with β scaled, committed := working
 - project:  the multi-layer S delta is projected against the coherence-canary gradient;
             if too much of it is removed the decision falls back to rollback
-- readonly: as rollback, for a session whose budget is exhausted or whose alarm is latched
+- readonly: an observation, not an intervention — a chunk that proposed no write (its tokens
+            were learning-ineligible, e.g. generation, or the session is read-only from a spent
+            budget or latched alarm). Its already-frozen state is committed directly; nothing
+            was rejected, so it must not be counted as an intervention.
 
 Outputs already produced inside a chunk are not retracted. Everything the
 runner decides is logged with every signal that informed it.
