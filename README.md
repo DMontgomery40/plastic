@@ -9,7 +9,7 @@
   backend source to run the playground locally or build your own experiments.
 - **[Trace the full project history on GitHub](https://github.com/DMontgomery40/plastic/commits/main/)** —
   follow development since January 2026, from the original TTT/SSM experiments to
-  Plastic. Explore the [earlier implementation](https://github.com/DMontgomery40/plastic/tree/master),
+  Plastic. Explore the [earlier implementation](https://github.com/DMontgomery40/plastic/tree/e73c6921bd72af6716828e8e0f5fe31b2ee7b027),
   [current source](https://github.com/DMontgomery40/plastic), and
   [research notes](https://github.com/DMontgomery40/plastic/tree/main/docs/research)
   alongside the complete recorded commit history.

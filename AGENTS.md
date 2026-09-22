@@ -211,6 +211,15 @@ the source record, derivation, ablations, and review are the auditable evidence.
 
 ## Artifacts, compute, and Git
 
+- Use the canonical repository checkout on `main`. Keep one branch by default and
+  at most two branch names total across local and remote development; a second
+  branch needs a current purpose and owner. Do not create per-agent or per-run
+  branches/worktrees by default. Coordinate file ownership in the shared scratchpad.
+- Before a handoff, preserve and integrate or explicitly park unique work, push it,
+  verify GitHub and both HF destinations, then remove superseded branches and
+  temporary worktrees. Stop owned experiment/dev-server processes and obsolete
+  agent sessions. Never delete unique dirty files to make status look clean; keep
+  private state private. An active user-owned session is not an orphan.
 - Generated `artifacts/` and `training_data/` contents are generally ignored; a Git
   push does not back up checkpoints or datasets. Some historical files are tracked.
   Preserve original experiment artifacts and use disposable stores for destructive
