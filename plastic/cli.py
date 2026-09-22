@@ -241,8 +241,9 @@ def cmd_redteam(args: argparse.Namespace) -> int:
     from plastic.store import ArtifactStore
 
     cfg = AttackConfig(
-        suffix_len=args.suffix_len, steps=args.steps, lr=args.lr, radius=args.radius, seed=args.seed,
-        families=tuple(args.families.split(",")), harness=(json.loads(args.harness_json) if args.harness_json else None),
+        suffix_len=args.suffix_len, poison_chunks=args.poison_chunks, steps=args.steps, lr=args.lr, radius=args.radius,
+        seed=args.seed, families=tuple(args.families.split(",")),
+        harness=(json.loads(args.harness_json) if args.harness_json else None),
     )
     summary = run_redteam(
         ArtifactStore(args.artifacts_root), args.model_id, cfg=cfg, data_dir=args.data, n_prefixes=args.prefixes,
@@ -382,6 +383,7 @@ def build_parser() -> argparse.ArgumentParser:
     rt.add_argument("--prefixes", type=int, default=8)
     rt.add_argument("--prefix-len", type=int, default=128)
     rt.add_argument("--suffix-len", type=int, default=64)
+    rt.add_argument("--poison-chunks", type=int, default=8, help="coherence_poison payload length in chunks")
     rt.add_argument("--steps", type=int, default=50)
     rt.add_argument("--lr", type=float, default=0.05)
     rt.add_argument("--radius", type=float, default=1.0)
