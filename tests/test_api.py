@@ -477,3 +477,57 @@ def test_model_summary_exposes_sleep_field():
     assert out["type"] == "sleep_consolidation" and out["parent_model_id"] == "base"
     # a model without a sleep record reports None, not a fabricated value
     assert model_summary(store, {"model_id": "m2", "domain": "text"})["sleep"] is None
+
+
+def test_state_payload_native_missing_or_failed_drift_is_null():
+    # ASTRA-094: a failed / missing / nonfinite measurement is null (unavailable), never a measured
+    # zero; a genuine zero is preserved. Driven with fakes, no model.
+    import torch
+
+    from plastic.api.service import state_payload
+
+    class _QwenLikeState:
+        pass
+
+    def _sess(norms, delta):
+        class _Backend:
+            def state_norms(self, _s):
+                return norms
+
+            def state_delta(self, _a, _b):
+                if isinstance(delta, Exception):
+                    raise delta
+                return delta
+
+        class _Runner:
+            committed = _QwenLikeState()
+            anchor = _QwenLikeState()
+            pos = 5
+            backend = _Backend()
+
+        class _Session:
+            runner = _Runner()
+            backend_kind = "qwen"
+
+        return _Session()
+
+    # state_delta raises -> every drift null, but the recurrent norms are still reported
+    body = state_payload(_sess({"recurrent_norm": [1.0, 2.0], "recurrent_norm_total": 3.0}, RuntimeError("boom")))
+    assert [u["drift_from_anchor"] for u in body["units"]] == [None, None]
+    assert [u["recurrent_norm"] for u in body["units"]] == [1.0, 2.0]
+
+    # a short delta list -> the unmatched unit is null; a genuine zero drift is preserved as 0.0
+    body = state_payload(_sess({"recurrent_norm": [1.0, 2.0, 3.0], "recurrent_norm_total": 4.0},
+                               [torch.tensor([0.0]), torch.tensor([4.0])]))
+    assert [u["drift_from_anchor"] for u in body["units"]] == [0.0, 4.0, None]
+
+    # an absent total is null, not zero
+    body = state_payload(_sess({"recurrent_norm": [1.0]}, [torch.tensor([2.0])]))
+    assert body["recurrent_norm_total"] is None
+
+    # nonfinite norm / total / drift are all null
+    body = state_payload(_sess({"recurrent_norm": [float("inf")], "recurrent_norm_total": float("nan")},
+                               [torch.tensor([float("inf")])]))
+    assert body["units"][0]["recurrent_norm"] is None
+    assert body["units"][0]["drift_from_anchor"] is None
+    assert body["recurrent_norm_total"] is None

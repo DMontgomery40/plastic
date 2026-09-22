@@ -207,21 +207,40 @@ def transactions_page(store: ArtifactStore, session_id: str, *, limit: int, offs
     return {"total": len(items), "items": items[offset : offset + limit]}
 
 
+def _finite_or_none(x: Any) -> float | None:
+    """A real finite float, or None for a missing/non-numeric/nonfinite value — so a failed or absent
+    measurement renders as unavailable, never as a measured zero (ASTRA-094)."""
+    try:
+        f = float(x)
+    except (TypeError, ValueError):
+        return None
+    return f if math.isfinite(f) else None
+
+
 def _native_state_payload(session: Any) -> dict[str, Any]:
     """State view for a pretrained Protocol backend (Qwen): honest per-memory-unit recurrent norms
     and drift-from-anchor over the backend's own memory units, with a ``kind`` discriminator so the
     client renders the GDN path distinctly. No fabricated per-head S / singular values / h tensors —
-    those are the toy Plastic shape and do not exist here; the backend reports what it actually has."""
+    those are the toy Plastic shape and do not exist here. A measurement that FAILS or is missing is
+    null (unavailable), never a measured zero; a genuine zero is preserved."""
     runner = session.runner
     backend = runner.backend
     norms = backend.state_norms(runner.committed)
-    per = list(norms.get("recurrent_norm", []))
+    per = norms.get("recurrent_norm")
+    per = list(per) if isinstance(per, list) else []
+    # drift is a separate measurement that can raise or come back short; an unmatched or failed unit
+    # is UNKNOWN (null), not zero drift
+    drift: list[Any] | None
     try:
-        drift = [float(t.float().norm()) for t in backend.state_delta(runner.committed, runner.anchor)]
-    except Exception:  # noqa: BLE001 - a degenerate/empty state must not fail the route
-        drift = []
+        drift = [t.float().norm() for t in backend.state_delta(runner.committed, runner.anchor)]
+    except Exception:  # noqa: BLE001 - a degenerate/failed delta reports unknown, not a route error or zero
+        drift = None
     units = [
-        {"index": i, "recurrent_norm": float(per[i]), "drift_from_anchor": float(drift[i]) if i < len(drift) else 0.0}
+        {
+            "index": i,
+            "recurrent_norm": _finite_or_none(per[i]),
+            "drift_from_anchor": _finite_or_none(drift[i]) if (isinstance(drift, list) and i < len(drift)) else None,
+        }
         for i in range(len(per))
     ]
     return {
@@ -229,7 +248,7 @@ def _native_state_payload(session: Any) -> dict[str, Any]:
         "backend": getattr(session, "backend_kind", "qwen"),
         "pos": int(runner.pos),
         "units": units,
-        "recurrent_norm_total": float(norms.get("recurrent_norm_total", 0.0)),
+        "recurrent_norm_total": _finite_or_none(norms.get("recurrent_norm_total")),
     }
 
 
