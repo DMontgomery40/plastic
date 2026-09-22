@@ -399,3 +399,17 @@ def test_sleep(api):
 
     assert api.client.post("/api/sleep", json={"model_id": "nope"}).status_code == 404
     assert api.client.post("/api/sleep", json={"model_id": api.physics}).status_code == 400
+
+
+def test_model_summary_exposes_sleep_field():
+    from plastic.api.service import model_summary
+    from plastic.store import ArtifactStore
+
+    store = ArtifactStore("/nonexistent-root-for-summary-only")
+    rec = {"model_id": "m", "domain": "text", "type": "sleep_consolidation", "parent_model_id": "base",
+           "sleep": {"accepted": True, "delta_coherence": 0.01, "delta_poison": -0.2}}
+    out = model_summary(store, rec)
+    assert out["sleep"] == rec["sleep"]
+    assert out["type"] == "sleep_consolidation" and out["parent_model_id"] == "base"
+    # a model without a sleep record reports None, not a fabricated value
+    assert model_summary(store, {"model_id": "m2", "domain": "text"})["sleep"] is None
