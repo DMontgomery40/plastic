@@ -159,6 +159,13 @@ class QwenBackend:
     def init_state(self) -> QwenState:
         return QwenState(cache=None)
 
+    def clone(self, state: QwenState) -> QwenState:
+        """Concurrency-safe snapshot: the cache deep copy runs under the backend lock (with an MPS
+        sync), so it never races a forward on the shared device. The harness clones through here;
+        QwenState.clone() is the equivalent for single-threaded use."""
+        with self._serialized():
+            return QwenState(copy.deepcopy(state.cache))
+
     # ------------------------------------------------------------------ forward
     @torch.no_grad()
     def process(self, ids: list[int], state: QwenState, *, freeze: bool = False) -> tuple[torch.Tensor, QwenState]:
@@ -199,22 +206,25 @@ class QwenBackend:
         per instance (never globally) to replace the tensor instead of copying in place, so
         autograd reaches the leaves even though the frozen kernel would otherwise not update them.
         """
-        probe = copy.deepcopy(state.cache)
-        leaves: list[torch.Tensor] = []
-        for layer in getattr(probe, "layers", []):
-            rs = getattr(layer, "recurrent_states", None)
-            if not rs:
-                continue
-            layer.recurrent_states = {i: s.detach().clone().requires_grad_(True) for i, s in rs.items()}
-            leaves.extend(layer.recurrent_states.values())
-
-            def _update(self, s, state_idx=0, **kwargs):  # noqa: ANN001
-                self.recurrent_states[state_idx] = s
-                return s
-
-            layer.update_recurrent_state = types.MethodType(_update, layer)
         x = torch.tensor([probe_ids], dtype=torch.long, device=self.device)
+        # the ENTIRE operation — including the cache deep copy — must be serialized: deep-copying
+        # MPS cache tensors concurrently with a forward also aborts the runtime (ASTRA review of the
+        # forward-only lock), so cache preparation goes inside the lock too.
         with self._serialized():
+            probe = copy.deepcopy(state.cache)
+            leaves: list[torch.Tensor] = []
+            for layer in getattr(probe, "layers", []):
+                rs = getattr(layer, "recurrent_states", None)
+                if not rs:
+                    continue
+                layer.recurrent_states = {i: s.detach().clone().requires_grad_(True) for i, s in rs.items()}
+                leaves.extend(layer.recurrent_states.values())
+
+                def _update(self, s, state_idx=0, **kwargs):  # noqa: ANN001
+                    self.recurrent_states[state_idx] = s
+                    return s
+
+                layer.update_recurrent_state = types.MethodType(_update, layer)
             with _frozen():
                 y = self.model(x, past_key_values=probe, use_cache=True)
             loss = torch.nn.functional.cross_entropy(
