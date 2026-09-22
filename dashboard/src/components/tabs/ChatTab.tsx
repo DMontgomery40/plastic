@@ -53,10 +53,14 @@ export function ChatTab() {
   const turns = (sessionDetail?.trace ?? []).filter((t) => t.kind === 'chat').slice().reverse();
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
       <div className="space-y-4">
         <Panel title="Prompt" subtitle="Prompt tokens are learned through transactions; generated tokens are read-only by default.">
+          <label htmlFor="chat-prompt" className="mb-1 block text-label font-semibold uppercase tracking-wide text-ink-muted">
+            Prompt text
+          </label>
           <textarea
+            id="chat-prompt"
             className="h-28 w-full rounded border border-edge bg-surface-overlay px-3 py-2 text-base text-ink-primary placeholder:text-ink-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             value={prompt}
             placeholder="Type a prompt. Every chunk boundary inside it produces one transaction."
@@ -93,13 +97,17 @@ export function ChatTab() {
                     <li key={tx.index} className="rounded border border-edge bg-surface-overlay px-3 py-2">
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                         <DecisionBadge kind={tx.decision.kind} size="sm" />
+                        {tx.requested.kind !== tx.decision.kind ? (
+                          <span className="font-mono text-micro text-status-scale">requested {tx.requested.kind}</span>
+                        ) : null}
                         <span className="font-mono text-xs text-ink-secondary">chunk {tx.index}</span>
                         <span className="font-mono text-xs text-ink-secondary">
                           pos {tx.pos_start}–{tx.pos_end}
                         </span>
                         <span className="font-mono text-xs text-ink-secondary">loss {fmt(tx.signals.chunk_loss, 4)}</span>
                         <span className="font-mono text-xs text-ink-secondary">β {fmt(tx.signals.beta_mean, 4)}</span>
-                        <span className="font-mono text-xs text-ink-secondary">‖Δ‖ {fmt(tx.signals.delta_norm, 4)}</span>
+                        <span className="font-mono text-xs text-status-scale">‖Δ‖ proposed {fmt(tx.signals.delta_norm, 4)}</span>
+                        <span className="font-mono text-xs text-status-commit">‖Δ‖ accepted {fmt(tx.accepted?.delta_norm, 4)}</span>
                       </div>
                       {tx.decision.reasons.length > 0 ? (
                         <ul className="mt-1.5 flex flex-wrap gap-1.5">

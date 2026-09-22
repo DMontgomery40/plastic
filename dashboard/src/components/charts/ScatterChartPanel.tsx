@@ -34,6 +34,8 @@ interface Props<T> {
   yReferences?: ReferenceSpec[];
   tooltipFormatter?: (value: number | string, name: string) => [string, string];
   showLegend?: boolean;
+  /** Required. The chart's programmatic label; charts are images to assistive tech. */
+  ariaLabel: string;
 }
 
 export function ScatterChartPanel<T extends object>({
@@ -49,9 +51,11 @@ export function ScatterChartPanel<T extends object>({
   yReferences = [],
   tooltipFormatter,
   showLegend = false,
+  ariaLabel,
 }: Props<T>) {
   return (
-    <ResponsiveContainer width="100%" height={height}>
+    <figure role="img" aria-label={ariaLabel} className="m-0">
+      <ResponsiveContainer width="100%" height={height}>
       <ScatterChart margin={{ top: 10, right: 18, bottom: xLabel ? 26 : 10, left: yLabel ? 12 : 0 }}>
         <CartesianGrid stroke={CHART.grid} strokeDasharray="3 3" />
         <XAxis
@@ -116,6 +120,7 @@ export function ScatterChartPanel<T extends object>({
           {colorFor ? data.map((row, i) => <Cell key={i} fill={colorFor(row, i)} />) : null}
         </Scatter>
       </ScatterChart>
-    </ResponsiveContainer>
+      </ResponsiveContainer>
+    </figure>
   );
 }

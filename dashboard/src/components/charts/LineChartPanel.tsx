@@ -37,6 +37,8 @@ interface Props<T> {
   showLegend?: boolean;
   dots?: boolean;
   onPointClick?: (index: number) => void;
+  /** Required. The chart's programmatic label; charts are images to assistive tech. */
+  ariaLabel: string;
 }
 
 export function LineChartPanel<T extends object>({
@@ -49,6 +51,7 @@ export function LineChartPanel<T extends object>({
   yLabel,
   references = [],
   showLegend = true,
+  ariaLabel,
   dots = false,
   onPointClick,
 }: Props<T>) {
@@ -59,7 +62,8 @@ export function LineChartPanel<T extends object>({
     : undefined;
 
   return (
-    <ResponsiveContainer width="100%" height={height}>
+    <figure role="img" aria-label={ariaLabel} className="m-0">
+      <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 8, right: 14, bottom: xLabel ? 22 : 6, left: yLabel ? 10 : 0 }} onClick={handleClick}>
         <CartesianGrid stroke={CHART.grid} strokeDasharray="3 3" vertical={false} />
         <XAxis
@@ -136,6 +140,7 @@ export function LineChartPanel<T extends object>({
           />
         ))}
       </LineChart>
-    </ResponsiveContainer>
+      </ResponsiveContainer>
+    </figure>
   );
 }

@@ -11,6 +11,8 @@ interface Props<T> {
   height?: number;
   xLabel?: string;
   yLabel?: string;
+  /** Required. The chart's programmatic label; charts are images to assistive tech. */
+  ariaLabel: string;
 }
 
 export function BarChartPanel<T extends object>({
@@ -23,9 +25,11 @@ export function BarChartPanel<T extends object>({
   height = 200,
   xLabel,
   yLabel,
+  ariaLabel,
 }: Props<T>) {
   return (
-    <ResponsiveContainer width="100%" height={height}>
+    <figure role="img" aria-label={ariaLabel} className="m-0">
+      <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} margin={{ top: 8, right: 14, bottom: xLabel ? 22 : 6, left: yLabel ? 10 : 0 }}>
         <CartesianGrid stroke={CHART.grid} strokeDasharray="3 3" vertical={false} />
         <XAxis
@@ -71,6 +75,7 @@ export function BarChartPanel<T extends object>({
             : null}
         </Bar>
       </BarChart>
-    </ResponsiveContainer>
+      </ResponsiveContainer>
+    </figure>
   );
 }

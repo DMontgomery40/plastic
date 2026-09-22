@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useStore } from '../../store';
-import { fmt, fmtInt, fmtPercent } from '../../utils/formatting';
+import { UNAVAILABLE, fmt, fmtInt, fmtPercent } from '../../utils/formatting';
 import { LineChartPanel } from '../charts';
 import { Button, Checkbox, DecisionBadge, Empty, Field, NumberInput, Panel, Slider, StatTile, Table } from '../panels';
 
@@ -56,7 +56,7 @@ export function PhysicsTab() {
       : null;
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
       <div className="space-y-4">
         <Panel title="Episode" subtitle="A 2D point mass with hidden friction mu, resampled per episode.">
           <div className="space-y-3">
@@ -107,13 +107,13 @@ export function PhysicsTab() {
       <div className="space-y-4">
         {episode ? (
           <>
-            <div className="grid gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
               <StatTile label="mu" value={fmt(episode.mu, 3)} hint="hidden, must be identified" />
               <StatTile label="Steps" value={fmtInt(episode.steps)} />
               <StatTile label="Transactions" value={fmtInt(episode.transactions.length)} />
               <StatTile
                 label="Adaptive vs frozen"
-                value={improvement === null ? '—' : fmtPercent(improvement, 1)}
+                value={improvement === null ? UNAVAILABLE : fmtPercent(improvement, 1)}
                 tone={improvement !== null && improvement > 0 ? 'commit' : 'rollback'}
                 hint="error removed by learning"
               />
@@ -146,6 +146,7 @@ export function PhysicsTab() {
                 logScale={logScale}
                 xLabel="step"
                 yLabel="squared error"
+                ariaLabel="Per-step squared error for the base, frozen and adaptive variants on one trajectory"
               />
             </Panel>
 
@@ -153,18 +154,26 @@ export function PhysicsTab() {
               {episode.transactions.length === 0 ? (
                 <Empty title="No chunk boundary was crossed." detail="The episode was shorter than one chunk." />
               ) : (
-                <Table head={['Chunk', 'Decision', 'Loss', 'Surprise', 'β', '‖Δ‖', 'Reasons']}>
+                <Table head={['Chunk', 'Requested', 'Applied', 'Loss', 'Surprise', 'β', '‖Δ‖ proposed', '‖Δ‖ accepted', 'Reasons']}>
                   {episode.transactions.map((tx) => (
                     <tr key={tx.index} className="border-b border-edge">
                       <td className="px-2 py-1.5 font-mono text-ink-primary">{tx.index}</td>
+                      <td className="px-2 py-1.5">
+                        {tx.requested.kind === tx.decision.kind ? (
+                          <span className="text-micro text-ink-muted">same</span>
+                        ) : (
+                          <DecisionBadge kind={tx.requested.kind} size="sm" />
+                        )}
+                      </td>
                       <td className="px-2 py-1.5">
                         <DecisionBadge kind={tx.decision.kind} size="sm" />
                       </td>
                       <td className="px-2 py-1.5 font-mono text-ink-primary">{fmt(tx.signals.chunk_loss)}</td>
                       <td className="px-2 py-1.5 font-mono text-ink-primary">{fmt(tx.signals.surprise_mean)}</td>
                       <td className="px-2 py-1.5 font-mono text-ink-primary">{fmt(tx.signals.beta_mean)}</td>
-                      <td className="px-2 py-1.5 font-mono text-ink-primary">{fmt(tx.signals.delta_norm)}</td>
-                      <td className="px-2 py-1.5 font-mono text-xs text-ink-secondary">{tx.decision.reasons.join(', ') || '—'}</td>
+                      <td className="px-2 py-1.5 font-mono text-status-scale">{fmt(tx.signals.delta_norm)}</td>
+                      <td className="px-2 py-1.5 font-mono text-status-commit">{fmt(tx.accepted?.delta_norm)}</td>
+                      <td className="px-2 py-1.5 font-mono text-xs text-ink-secondary">{tx.decision.reasons.join(', ') || 'none recorded'}</td>
                     </tr>
                   ))}
                 </Table>

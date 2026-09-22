@@ -53,6 +53,7 @@ export function ArchitectureTab() {
         actions={
           <div className="min-w-[240px]">
             <Select
+              ariaLabel="Model whose architecture is drawn"
               value={selectedId ?? ''}
               onChange={setSelected}
               options={usable.map((m) => ({ value: m.model_id, label: `${m.model_id} · ${m.domain}` }))}
@@ -63,7 +64,7 @@ export function ArchitectureTab() {
         {!cfg ? (
           <p className="text-sm text-ink-secondary">Loading the model configuration…</p>
         ) : (
-          <div className="grid gap-5 xl:grid-cols-[auto_minmax(0,1fr)]">
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[auto_minmax(0,1fr)]">
             <BlockDiagram cfg={cfg} />
             <div className="space-y-4">
               <KeyValue

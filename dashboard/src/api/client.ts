@@ -4,6 +4,7 @@
 // base is the empty string and every URL is same-origin. Setting VITE_API_URL in
 // a built bundle points the client straight at the API instead.
 
+import { cleanErrorMessage } from '../utils/formatting';
 import type {
   CalibrateRequest,
   CalibrationSummary,
@@ -85,7 +86,8 @@ export async function fetchJson<T>(path: string, options: FetchOptions = {}): Pr
     try {
       payload = JSON.parse(text);
     } catch {
-      if (!response.ok) throw new ApiError(text.slice(0, 400), response.status, url);
+      // an HTML error page or a stack trace must never reach the banner raw
+      if (!response.ok) throw new ApiError(cleanErrorMessage(text), response.status, url);
       throw new ApiError('response was not JSON', response.status, url);
     }
   }
@@ -93,7 +95,7 @@ export async function fetchJson<T>(path: string, options: FetchOptions = {}): Pr
   if (!response.ok) {
     const detail =
       payload && typeof payload === 'object' && 'detail' in payload
-        ? String((payload as { detail: unknown }).detail)
+        ? cleanErrorMessage(String((payload as { detail: unknown }).detail))
         : `request failed with status ${response.status}`;
     throw new ApiError(detail, response.status, url);
   }

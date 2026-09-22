@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { hasRunningJob, initialState, isPolling, startJobPolling, stopJobPolling, useStore } from './index';
 import { buildLineageForest } from '../components/tabs/SessionsTab';
+import { countsFromSession, interventionRate } from '../components/panels/RatePanel';
+import { UNAVAILABLE, UNBOUNDED, cleanErrorMessage, fmt, fmtThreshold } from '../utils/formatting';
 import type {
   ChunkSignals,
   Health,
@@ -72,7 +74,9 @@ const MODEL_DETAIL: ModelDetail = {
   eval: MODEL.eval ?? null,
   calibration: {
     n_chunks: 256,
-    thresholds: { chunk_loss: 4.8, surprise_mean: 1.2, log_delta_norm: -1.4, canary_delta_coherence: 0.05 },
+    // log_write_norm is unbounded: a null threshold, which is not zero
+    thresholds: { chunk_loss: 4.8, surprise_mean: 1.2, log_delta_norm: -1.4, log_write_norm: null, canary_delta_coherence: 0.05 },
+    achievable_fpr: { chunk_loss: 0.004, surprise_mean: 0.004, log_delta_norm: 0.004, log_write_norm: null, canary_delta_coherence: 0.004 },
     canary_baseline: { coherence: 3.4, poison: 8.1 },
     reference_sizes: { chunk_loss: 256 },
     target_fpr: 0.01,
@@ -146,6 +150,17 @@ const SIGNALS: ChunkSignals = {
   log_write_norm: 0.87,
 };
 
+const ACCEPTED: TransactionRecord['accepted'] = {
+  delta_norm: 0.31,
+  budget_charge: 0.31,
+  budget_used: 1.25,
+  budget_remaining: 8.75,
+  canary_coherence_after: 3.39,
+  canary_poison_after: 8.15,
+  canary_delta_coherence: -0.01,
+  canary_delta_poison: 0.05,
+};
+
 const TRANSACTION: TransactionRecord = {
   index: 0,
   t_unix: 1_726_902_400,
@@ -154,9 +169,26 @@ const TRANSACTION: TransactionRecord = {
   decision: { kind: 'commit', reasons: [], scale: 1 },
   requested: { kind: 'commit', reasons: [], scale: 1 },
   signals: SIGNALS,
+  accepted: ACCEPTED,
   read_only: false,
   read_only_reason: null,
   seconds: 0.08,
+};
+
+/** A rolled-back chunk: a large proposal, nothing accepted. */
+const ROLLED_BACK: TransactionRecord = {
+  ...({} as TransactionRecord),
+  index: 1,
+  t_unix: 1_726_902_500,
+  pos_start: 64,
+  pos_end: 128,
+  decision: { kind: 'rollback', reasons: ['budget_chunk(2.9>1.0)'], scale: 1 },
+  requested: { kind: 'scale', reasons: ['z_chunk_loss(3.4)'], scale: 0.25 },
+  signals: { ...SIGNALS, pos_start: 64, pos_end: 128, delta_norm: 2.9 },
+  accepted: { delta_norm: 0, budget_charge: 0, budget_used: 1.25, budget_remaining: 8.75 },
+  read_only: false,
+  read_only_reason: null,
+  seconds: 0.09,
 };
 
 const RUNNER: RunnerSummary = {
@@ -483,5 +515,111 @@ describe('lineage forest', () => {
     const older: SessionSummary = { ...SESSION_A, session_id: 's0', created_at_unix: 1 };
     const forest = buildLineageForest([SESSION_A, older, SESSION_B]);
     expect(forest.map((n) => n.session.session_id)).toEqual(['s0', 's1']);
+  });
+});
+
+describe('proposed against accepted evidence', () => {
+  it('keeps the two metric sets apart on a rolled-back chunk', async () => {
+    mockRoutes({ ...FULL_ROUTES, '/api/sessions/s1': { ...SESSION_DETAIL, transactions: [TRANSACTION, ROLLED_BACK] } });
+    await useStore.getState().loadSession('s1');
+    const txs = useStore.getState().sessionDetail?.transactions ?? [];
+    const rolled = txs[1];
+    // the proposal was large; nothing was learned
+    expect(rolled.signals.delta_norm).toBe(2.9);
+    expect(rolled.accepted.delta_norm).toBe(0);
+    expect(rolled.accepted.budget_charge).toBe(0);
+    // and the accepted value is never the proposed one scaled
+    expect(rolled.accepted.delta_norm).not.toBeCloseTo(rolled.signals.delta_norm * rolled.requested.scale);
+  });
+
+  it('carries the requested decision separately from the applied one', async () => {
+    mockRoutes({ ...FULL_ROUTES, '/api/sessions/s1': { ...SESSION_DETAIL, transactions: [TRANSACTION, ROLLED_BACK] } });
+    await useStore.getState().loadSession('s1');
+    const txs = useStore.getState().sessionDetail?.transactions ?? [];
+    expect(txs[1].requested.kind).toBe('scale');
+    expect(txs[1].decision.kind).toBe('rollback');
+    expect(txs[1].requested.reasons).not.toEqual(txs[1].decision.reasons);
+    expect(txs[0].requested.kind).toBe(txs[0].decision.kind);
+  });
+});
+
+describe('missing values never read as measurements', () => {
+  it('renders an absent number as unavailable, not zero', () => {
+    expect(fmt(null)).toBe(UNAVAILABLE);
+    expect(fmt(undefined)).toBe(UNAVAILABLE);
+    expect(fmt(Number.NaN)).toBe(UNAVAILABLE);
+    expect(fmt(0)).toBe('0.0000');
+  });
+
+  it('separates an unbounded threshold from an unknown one', () => {
+    expect(fmtThreshold(null)).toBe(UNBOUNDED);
+    expect(fmtThreshold(undefined)).toBe(UNAVAILABLE);
+    expect(fmtThreshold(1.25, 2)).toBe('1.25');
+  });
+
+  it('carries a null threshold and a null achievable rate through the store', async () => {
+    mockRoutes(FULL_ROUTES);
+    await useStore.getState().loadModel('lm_1');
+    const cal = useStore.getState().modelDetail?.calibration;
+    expect(cal?.thresholds.log_write_norm).toBeNull();
+    expect(cal?.achievable_fpr.log_write_norm).toBeNull();
+    expect(cal?.achievable_fpr.chunk_loss).toBe(0.004);
+    // the achievable rate is the honest one and differs from the request
+    expect(cal?.target_fpr).toBe(0.01);
+  });
+});
+
+describe('observed intervention rate', () => {
+  it('counts every non-commit decision, not just rollbacks', () => {
+    const rate = interventionRate({ n_transactions: 10, commits: 6, rollbacks: 1, scales: 2, projects: 1, readonly: 0 });
+    expect(rate).toBeCloseTo(0.4);
+  });
+
+  it('is unavailable rather than zero when nothing has run', () => {
+    expect(interventionRate({ n_transactions: 0, commits: 0, rollbacks: 0, scales: 0, projects: 0, readonly: 0 })).toBeNull();
+  });
+
+  it('reads the counts off a session summary', () => {
+    expect(countsFromSession(SESSION_A)).toEqual({
+      n_transactions: 8,
+      commits: 6,
+      rollbacks: 1,
+      scales: 1,
+      projects: 0,
+      readonly: 0,
+    });
+    expect(interventionRate(countsFromSession(SESSION_A))).toBeCloseTo(0.25);
+  });
+});
+
+describe('error messages', () => {
+  it('strips markup from an HTML error page', () => {
+    const html = '<html><head><style>b{}</style></head><body><h1>502 Bad Gateway</h1><p>nginx</p></body></html>';
+    expect(cleanErrorMessage(html)).toBe('502 Bad Gateway nginx');
+  });
+
+  it('keeps only the message from a Python traceback', () => {
+    const raw = 'KeyError: model_id\nTraceback (most recent call last):\n  File "x.py", line 3, in f\n    boom()';
+    expect(cleanErrorMessage(raw)).toBe('KeyError: model_id');
+  });
+
+  it('bounds the length and never returns an empty banner', () => {
+    expect(cleanErrorMessage('x'.repeat(500)).length).toBeLessThanOrEqual(240);
+    expect(cleanErrorMessage('   ')).toContain('no readable message');
+  });
+
+  it('sanitizes what reaches the store from a failing route', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 502,
+        text: async () => '<html><body><h1>502 Bad Gateway</h1></body></html>',
+      }) as Response),
+    );
+    await useStore.getState().refreshModels();
+    const message = useStore.getState().error ?? '';
+    expect(message).toContain('502 Bad Gateway');
+    expect(message).not.toContain('<');
   });
 });

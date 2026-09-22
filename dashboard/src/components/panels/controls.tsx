@@ -95,17 +95,21 @@ export function Select({
   onChange,
   options,
   disabled,
+  ariaLabel,
 }: {
   id?: string;
   value: string;
   onChange: (v: string) => void;
   options: Array<{ value: string; label: string }>;
   disabled?: boolean;
+  /** Required when no visible <label> is associated with this control. */
+  ariaLabel?: string;
 }) {
   return (
     <select
       id={id}
       className={controlBase}
+      aria-label={ariaLabel}
       value={value}
       disabled={disabled}
       onChange={(e: ChangeEvent<HTMLSelectElement>) => onChange(e.target.value)}

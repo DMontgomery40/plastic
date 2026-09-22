@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../../store';
-import { fmt, fmtInt, fmtPercent, fmtRelative, isNum } from '../../utils/formatting';
+import { UNAVAILABLE, fmt, fmtInt, fmtPercent, fmtRelative, isNum } from '../../utils/formatting';
 import { ScatterChartPanel, SERIES_COLORS, type ReferenceSpec } from '../charts';
 import { Button, Checkbox, Empty, Field, KeyValue, NumberInput, Panel, Select, StatTile, Table } from '../panels';
 
@@ -58,7 +58,7 @@ export function RedTeamTab() {
     setFamilies((prev) => (prev.includes(name) ? prev.filter((f) => f !== name) : [...prev, name]));
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
       <div className="space-y-4">
         <Panel title="Run a campaign" subtitle="Attacks go through the real token path and the real harness.">
           {textModels.length === 0 ? (
@@ -171,7 +171,7 @@ export function RedTeamTab() {
           />
         ) : (
           <>
-            <div className="grid gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
               <StatTile label="Attacks" value={fmtInt(detail?.results.length ?? 0)} hint={summary.run_id} />
               <StatTile
                 label="Worst validated damage"
@@ -195,22 +195,43 @@ export function RedTeamTab() {
 
             <Panel
               title="Per family"
-              subtitle="Validated damage is measured on the payload that was actually decoded and re-tokenized; provisional damage is what the attacker saw before the harness decided."
+              subtitle="Accepted damage is what survived the harness on the re-tokenized payload. Provisional is the peak intermediate proposal, not an endpoint. Unprotected is the same payload with the harness disabled, frozen is the payload read but not learned. Valid-only columns are null, not zero, when no attack met the plausibility constraint."
             >
               <Table
-                head={['Family', 'n', 'Damage mean', 'Damage max', 'Provisional max', 'Gated fraction', 'Constraint violated', 'Over threshold']}
+                head={[
+                  'Family',
+                  'n',
+                  'n valid',
+                  'Accepted damage mean',
+                  'Accepted damage max',
+                  'Valid-only mean',
+                  'Provisional max',
+                  'Unprotected mean',
+                  'Frozen mean',
+                  'Gated',
+                  'Constraint violated',
+                  'Over threshold',
+                  'Valid over threshold',
+                ]}
               >
                 {Object.entries(summary.families).map(([family, stats]) => (
                   <tr key={family} className="border-b border-edge">
                     <td className="px-2 py-1.5 font-mono text-ink-primary">{family}</td>
                     <td className="px-2 py-1.5 font-mono text-ink-primary">{fmtInt(stats.n)}</td>
+                    <td className="px-2 py-1.5 font-mono text-ink-secondary">{fmtInt(stats.n_valid)}</td>
                     <td className="px-2 py-1.5 font-mono text-ink-primary">{fmt(stats.damage_mean)}</td>
                     <td className="px-2 py-1.5 font-mono text-status-rollback">{fmt(stats.damage_max)}</td>
-                    <td className="px-2 py-1.5 font-mono text-ink-secondary">{fmt(stats.provisional_damage_max)}</td>
+                    <td className="px-2 py-1.5 font-mono text-ink-primary">{fmt(stats.valid_damage_mean)}</td>
+                    <td className="px-2 py-1.5 font-mono text-status-scale">{fmt(stats.provisional_damage_max)}</td>
+                    <td className="px-2 py-1.5 font-mono text-ink-secondary">{fmt(stats.unprotected_damage_mean)}</td>
+                    <td className="px-2 py-1.5 font-mono text-ink-secondary">{fmt(stats.frozen_damage_mean)}</td>
                     <td className="px-2 py-1.5 font-mono text-status-commit">{fmtPercent(stats.gated_fraction, 0)}</td>
                     <td className="px-2 py-1.5 font-mono text-ink-secondary">{fmtPercent(stats.constraint_violated_fraction, 0)}</td>
                     <td className="px-2 py-1.5 font-mono text-status-scale">
-                      {isNum(stats.over_threshold_fraction) ? fmtPercent(stats.over_threshold_fraction, 0) : '—'}
+                      {isNum(stats.over_threshold_fraction) ? fmtPercent(stats.over_threshold_fraction, 0) : UNAVAILABLE}
+                    </td>
+                    <td className="px-2 py-1.5 font-mono text-status-scale">
+                      {isNum(stats.valid_over_threshold_fraction) ? fmtPercent(stats.valid_over_threshold_fraction, 0) : UNAVAILABLE}
                     </td>
                   </tr>
                 ))}
@@ -235,6 +256,7 @@ export function RedTeamTab() {
                     height={300}
                     xLabel="payload NLL (nats per token)"
                     yLabel="validated damage"
+                    ariaLabel="Validated canary damage against payload negative log likelihood, one point per attack"
                     yReferences={damageRefs}
                     colorFor={(row) => familyColor[String(row.family)] ?? '#58a6ff'}
                   />
@@ -252,17 +274,34 @@ export function RedTeamTab() {
 
             {detail && detail.results.length > 0 ? (
               <Panel title="Attacks" subtitle="Decisions are what the harness did to each chunk of the payload.">
-                <Table head={['Family', 'Damage', 'Provisional', 'NLL payload', 'NLL max', 'Constraint', 'Decisions', 'Seconds']}>
+                <Table
+                  head={[
+                    'Family',
+                    'Accepted damage',
+                    'Unprotected',
+                    'Frozen',
+                    'Provisional',
+                    'NLL payload',
+                    'NLL guarded',
+                    'NLL max',
+                    'Constraint',
+                    'Decisions',
+                    'Seconds',
+                  ]}
+                >
                   {detail.results.map((r, i) => (
                     <tr key={`${r.family}-${i}`} className="border-b border-edge">
                       <td className="px-2 py-1.5 font-mono text-ink-primary">{r.family}</td>
                       <td className="px-2 py-1.5 font-mono text-status-rollback">{fmt(r.damage_validated)}</td>
-                      <td className="px-2 py-1.5 font-mono text-ink-secondary">
+                      <td className="px-2 py-1.5 font-mono text-ink-secondary">{fmt(r.damage_unprotected)}</td>
+                      <td className="px-2 py-1.5 font-mono text-ink-secondary">{fmt(r.damage_frozen)}</td>
+                      <td className="px-2 py-1.5 font-mono text-status-scale">
                         {isNum(r.canary_after_provisional) && isNum(r.canary_before)
                           ? fmt(r.canary_after_provisional - r.canary_before)
-                          : '—'}
+                          : UNAVAILABLE}
                       </td>
                       <td className="px-2 py-1.5 font-mono text-ink-primary">{fmt(r.nll_payload, 3)}</td>
+                      <td className="px-2 py-1.5 font-mono text-ink-secondary">{fmt(r.nll_payload_guarded, 3)}</td>
                       <td className="px-2 py-1.5 font-mono text-ink-secondary">{fmt(r.nll_max, 3)}</td>
                       <td className="px-2 py-1.5 text-xs">
                         {r.constraint_violated ? (
@@ -271,7 +310,7 @@ export function RedTeamTab() {
                           <span className="text-ink-secondary">held</span>
                         )}
                       </td>
-                      <td className="px-2 py-1.5 font-mono text-xs text-ink-secondary">{r.decisions.join(', ') || '—'}</td>
+                      <td className="px-2 py-1.5 font-mono text-xs text-ink-secondary">{r.decisions.join(', ') || UNAVAILABLE}</td>
                       <td className="px-2 py-1.5 font-mono text-ink-secondary">{fmt(r.seconds, 1)}</td>
                     </tr>
                   ))}

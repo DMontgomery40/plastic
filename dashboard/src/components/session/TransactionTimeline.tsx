@@ -29,7 +29,9 @@ export function TransactionTimeline({ transactions, selected, onSelect }: Props)
             <button
               key={tx.index}
               type="button"
-              aria-label={`Chunk ${tx.index}, ${decisionLabel(tx.decision.kind)}`}
+              aria-label={`Chunk ${tx.index}, applied ${decisionLabel(tx.decision.kind)}${
+                tx.requested.kind !== tx.decision.kind ? `, requested ${decisionLabel(tx.requested.kind)}` : ''
+              }`}
               aria-pressed={isSelected}
               onClick={() => onSelect(tx.index)}
               onMouseEnter={() => setHovered(tx.index)}
@@ -54,7 +56,7 @@ export function TransactionTimeline({ transactions, selected, onSelect }: Props)
 
       {detail ? (
         <div className="mt-3 rounded border border-edge bg-surface-overlay px-3 py-2.5">
-          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1">
             <span className="font-mono text-sm font-semibold" style={{ color: decisionColor(detail.decision.kind) }}>
               chunk {detail.index} · {decisionLabel(detail.decision.kind)}
             </span>
@@ -62,7 +64,8 @@ export function TransactionTimeline({ transactions, selected, onSelect }: Props)
               pos {detail.pos_start}–{detail.pos_end}
             </span>
             <span className="font-mono text-xs text-ink-secondary">loss {fmt(detail.signals.chunk_loss, 4)}</span>
-            <span className="font-mono text-xs text-ink-secondary">‖Δ‖ {fmt(detail.signals.delta_norm, 4)}</span>
+            <span className="font-mono text-xs text-status-scale">‖Δ‖ proposed {fmt(detail.signals.delta_norm, 4)}</span>
+            <span className="font-mono text-xs text-status-commit">‖Δ‖ accepted {fmt(detail.accepted?.delta_norm, 4)}</span>
             {detail.decision.kind === 'scale' ? (
               <span className="font-mono text-xs text-ink-secondary">β scale {fmt(detail.decision.scale, 3)}</span>
             ) : null}
@@ -70,7 +73,7 @@ export function TransactionTimeline({ transactions, selected, onSelect }: Props)
           {detail.decision.reasons.length > 0 ? (
             <ul className="mt-1.5 flex flex-wrap gap-1.5">
               {detail.decision.reasons.map((reason, i) => (
-                <li key={`${reason}-${i}`} className="rounded border border-edge bg-surface-inset px-1.5 py-0.5 font-mono text-micro text-ink-secondary">
+                <li key={`${reason}-${i}`} className="break-all rounded border border-edge bg-surface-inset px-1.5 py-0.5 font-mono text-micro text-ink-secondary">
                   {reason}
                 </li>
               ))}
@@ -79,10 +82,16 @@ export function TransactionTimeline({ transactions, selected, onSelect }: Props)
             <p className="mt-1.5 text-micro text-ink-muted">No reason recorded: every signal stayed inside its threshold.</p>
           )}
           {detail.requested.kind !== detail.decision.kind ? (
-            <p className="mt-1.5 text-micro text-ink-secondary">
-              Policy asked for {decisionLabel(detail.requested.kind)}; the runner applied{' '}
-              {decisionLabel(detail.decision.kind)}.
-            </p>
+            <div className="mt-2 rounded border border-status-scale bg-surface-inset px-2 py-1.5">
+              <p className="text-micro font-semibold text-status-scale">
+                Requested {decisionLabel(detail.requested.kind)}, applied {decisionLabel(detail.decision.kind)}.
+              </p>
+              {detail.requested.reasons.length > 0 ? (
+                <p className="mt-1 font-mono text-micro text-ink-secondary">
+                  requested because: {detail.requested.reasons.join(', ')}
+                </p>
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : null}

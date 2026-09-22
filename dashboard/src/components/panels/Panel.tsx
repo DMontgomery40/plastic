@@ -11,9 +11,9 @@ interface Props {
 /** A titled card. The single container used for every block on every tab. */
 export function Panel({ title, subtitle, actions, children, className = '' }: Props) {
   return (
-    <section className={`rounded-lg border border-edge bg-surface-raised ${className}`}>
+    <section className={`min-w-0 rounded-lg border border-edge bg-surface-raised ${className}`}>
       <header className="flex flex-wrap items-baseline justify-between gap-3 border-b border-edge px-4 py-3">
-        <div>
+        <div className="min-w-0">
           <h2 className="text-md font-semibold text-ink-primary">{title}</h2>
           {subtitle ? <p className="mt-0.5 text-xs text-ink-muted">{subtitle}</p> : null}
         </div>

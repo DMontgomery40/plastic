@@ -46,13 +46,13 @@ function TreeRow({ node, depth, current, onSelect }: { node: TreeNode; depth: nu
         <button
           type="button"
           onClick={() => onSelect(s.session_id)}
-          className={`flex w-full items-center gap-2 rounded border px-2 py-1.5 text-left ${
+          className={`flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded border px-2 py-1.5 text-left ${
             active ? 'border-accent bg-accent-soft' : 'border-transparent hover:border-edge hover:bg-surface-overlay'
           }`}
-          style={{ paddingLeft: `${8 + depth * 18}px` }}
+          style={{ paddingLeft: `${8 + Math.min(depth, 4) * 18}px` }}
         >
           {depth > 0 ? <span aria-hidden className="font-mono text-micro text-ink-muted">└</span> : null}
-          <span className="font-mono text-sm text-ink-primary">{s.session_id}</span>
+          <span className="min-w-0 break-all font-mono text-sm text-ink-primary">{s.session_id}</span>
           <span className="rounded border border-edge bg-surface-overlay px-1.5 py-0.5 text-micro text-ink-secondary">{s.domain}</span>
           <span className="font-mono text-micro text-ink-muted">
             pos {fmtInt(s.pos)} · {fmtInt(s.n_transactions)} tx
@@ -122,7 +122,7 @@ export function SessionsTab() {
   };
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
       <div className="space-y-4">
         <Panel title="Lineage" subtitle="Forks share their parent's committed state at the fork position.">
           {sessions.length === 0 ? (

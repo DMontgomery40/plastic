@@ -22,6 +22,7 @@ function Mark() {
 
 export function Header() {
   const health = useStore((s) => s.health);
+  const healthLoading = useStore((s) => s.loading.health);
   const error = useStore((s) => s.error);
   const sessions = useStore((s) => s.sessions);
   const currentSessionId = useStore((s) => s.currentSessionId);
@@ -40,8 +41,11 @@ export function Header() {
   }));
   const active = currentSessionId !== null && options.some((o) => o.value === currentSessionId) ? currentSessionId : null;
 
-  const online = health?.ok === true;
-  const statusColor = online ? '#3fd17a' : '#ff6b6b';
+  // Three states, not two: healthy, unreachable, and not-yet-known. Green is
+  // only ever the API's own ok:true, never the absence of a loading flag.
+  const state: 'online' | 'offline' | 'connecting' = health?.ok === true ? 'online' : healthLoading && !health ? 'connecting' : 'offline';
+  const statusColor = { online: '#3fd17a', offline: '#ff6b6b', connecting: '#94a3b4' }[state];
+  const statusText = { online: 'API online', offline: 'API unreachable', connecting: 'Connecting to the API' }[state];
 
   return (
     <header className="sticky top-0 z-10 border-b border-edge bg-surface-raised">
@@ -54,21 +58,21 @@ export function Header() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 rounded border border-edge bg-surface-overlay px-2.5 py-1.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded border border-edge bg-surface-overlay px-2.5 py-1.5">
           <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: statusColor }} />
           <span className="text-xs font-semibold" style={{ color: statusColor }}>
-            {online ? 'API online' : 'API unreachable'}
+            {statusText}
           </span>
           {health ? (
-            <span className="font-mono text-micro text-ink-secondary">
+            <span className="min-w-0 break-words font-mono text-micro text-ink-secondary">
               {health.device} · {health.n_models} models · {health.n_sessions} sessions
             </span>
           ) : (
-            <span className="font-mono text-micro text-ink-secondary">{error ?? 'waiting for /api/health'}</span>
+            <span className="font-mono text-micro text-ink-secondary">{state === 'connecting' ? 'waiting for /api/health' : (error ?? 'no response from /api/health')}</span>
           )}
         </div>
 
-        <div className="ml-auto flex min-w-[280px] items-center gap-2">
+        <div className="flex w-full min-w-0 items-center gap-2 sm:ml-auto sm:w-auto sm:min-w-[280px]">
           <label htmlFor="session-picker" className="whitespace-nowrap text-label font-semibold uppercase tracking-wide text-ink-muted">
             Session
           </label>

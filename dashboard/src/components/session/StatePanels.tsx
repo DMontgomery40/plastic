@@ -73,13 +73,22 @@ export function LayerStatePanel({ state, loading }: { state: SessionState | null
         </div>
       }
     >
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div>
           <p className="mb-1 text-label font-semibold uppercase tracking-wide text-ink-muted">
             Memory norm per head, layer {index}
           </p>
           {headBars.length > 0 ? (
-            <BarChartPanel data={headBars} xKey="head" yKey="norm" label="‖S‖" color="#58a6ff" height={180} yLabel="‖S‖ Frobenius" />
+            <BarChartPanel
+              data={headBars}
+              xKey="head"
+              yKey="norm"
+              label="‖S‖"
+              color="#58a6ff"
+              height={180}
+              yLabel="‖S‖ Frobenius"
+              ariaLabel={`Frobenius norm of the memory state per head, layer ${index}`}
+            />
           ) : (
             <p className="text-sm text-ink-secondary">No per-head norms reported for this layer.</p>
           )}
@@ -106,6 +115,7 @@ export function LayerStatePanel({ state, loading }: { state: SessionState | null
               dots
               xLabel="rank"
               yLabel="σ"
+              ariaLabel={`Top singular values of the memory state per head, layer ${index}`}
             />
           ) : (
             <p className="text-sm text-ink-secondary">No spectrum reported for this layer.</p>
@@ -135,7 +145,17 @@ export function BetaHistogramPanel({ hist, modelId }: { hist: BetaHist | null | 
   }));
   return (
     <Panel title="Learned write rate β" subtitle={modelId ? `Model ${modelId}` : undefined}>
-      <BarChartPanel data={bars} xKey="bin" yKey="count" label="tokens" color="#3fd17a" height={170} xLabel="β" yLabel="tokens" />
+      <BarChartPanel
+        data={bars}
+        xKey="bin"
+        yKey="count"
+        label="tokens"
+        color="#3fd17a"
+        height={170}
+        xLabel="β"
+        yLabel="tokens"
+        ariaLabel="Histogram of the learned write rate beta over evaluation tokens"
+      />
       <div className="mt-3">
         <KeyValue
           columns={2}

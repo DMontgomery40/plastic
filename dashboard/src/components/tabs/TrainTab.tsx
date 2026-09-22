@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../../store';
 import type { Domain, EvalSummary, TrainRequest } from '../../api/types';
-import { fmt, fmtInt, fmtParams, fmtPercent, fmtRelative, isNum } from '../../utils/formatting';
+import { UNAVAILABLE, fmt, fmtInt, fmtParams, fmtPercent, fmtRelative, fmtSigned, fmtThreshold, isNum } from '../../utils/formatting';
 import { LineChartPanel } from '../charts';
 import { Button, Checkbox, Empty, Field, KeyValue, NumberInput, Panel, Select, StatTile, Table, TextInput } from '../panels';
+import { CalibratedRates } from '../panels/RatePanel';
+import type { ModelSummary } from '../../api/types';
 
 function MqarChips({ ev }: { ev: EvalSummary | null | undefined }) {
   const mqar = ev?.mqar_accuracy;
-  if (!mqar || Object.keys(mqar).length === 0) return <span className="text-ink-muted">—</span>;
+  if (!mqar || Object.keys(mqar).length === 0) return <span className="text-ink-muted">{UNAVAILABLE}</span>;
   return (
     <span className="flex flex-wrap gap-1">
       {Object.entries(mqar).map(([pairs, acc]) => (
@@ -16,6 +18,94 @@ function MqarChips({ ev }: { ev: EvalSummary | null | undefined }) {
         </span>
       ))}
     </span>
+  );
+}
+
+/** Where a model came from: a normal training run, or a sleep-consolidated child. */
+function Provenance({ m }: { m: ModelSummary }) {
+  if (!m.type && !m.parent_model_id) {
+    return <span className="text-xs text-ink-secondary">trained</span>;
+  }
+  return (
+    <span className="flex flex-col gap-0.5">
+      {m.type ? (
+        <span className="w-fit rounded border border-status-project px-1.5 py-0.5 text-micro font-semibold text-status-project">
+          {m.type}
+        </span>
+      ) : null}
+      {m.parent_model_id ? (
+        <span className="font-mono text-micro text-ink-secondary">from {m.parent_model_id}</span>
+      ) : null}
+    </span>
+  );
+}
+
+/**
+ * The sleep consolidation outcome of a child model. The manifest is written by
+ * plastic/sleep/consolidate.py onto the model record; the API does not forward
+ * it yet, so an absent manifest is reported as unavailable rather than guessed
+ * from the model's type.
+ */
+function SleepPanel({ m }: { m: ModelSummary | null }) {
+  if (!m) return null;
+  const isChild = m.type === 'sleep_consolidation' || Boolean(m.parent_model_id);
+  const sleep = m.sleep ?? null;
+
+  if (!isChild && !sleep) return null;
+
+  if (!sleep) {
+    return (
+      <Panel title="Sleep consolidation" subtitle={`${m.model_id} is a consolidated child of ${m.parent_model_id ?? 'an unknown parent'}.`}>
+        <Empty
+          title="The consolidation manifest is not reported by the API."
+          detail="The accept or reject outcome and its canary deltas live on the model record, but GET /api/models does not forward the sleep field, so this panel has nothing to show. It is not a rejection and not a zero."
+          command={`cat artifacts/models/${m.model_id}/checkpoint.pt  # the manifest is stored alongside the checkpoint`}
+        />
+      </Panel>
+    );
+  }
+
+  return (
+    <Panel
+      title="Sleep consolidation"
+      subtitle={`Distilled from ${sleep.base_model_id}, gated by the canary suite.`}
+      actions={
+        <span
+          className={`rounded border px-2 py-0.5 text-xs font-semibold ${
+            sleep.accepted ? 'border-status-commit text-status-commit' : 'border-status-rollback text-status-rollback'
+          }`}
+        >
+          {sleep.accepted ? 'Accepted' : 'Rejected'}
+        </span>
+      }
+    >
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <KeyValue
+          rows={[
+            { label: 'Δ coherence', value: fmtSigned(sleep.delta_coherence), note: `tolerance ${fmt(sleep.tolerance?.coherence, 4)}` },
+            { label: 'Δ poison', value: fmtSigned(sleep.delta_poison), note: `tolerance ${fmt(sleep.tolerance?.poison, 4)}` },
+            { label: 'Coherence before', value: fmt(sleep.canary_before?.coherence) },
+            { label: 'Coherence after', value: fmt(sleep.canary_after?.coherence) },
+            { label: 'Poison before', value: fmt(sleep.canary_before?.poison) },
+            { label: 'Poison after', value: fmt(sleep.canary_after?.poison) },
+          ]}
+        />
+        <KeyValue
+          rows={[
+            { label: 'Sessions consolidated', value: (sleep.sessions ?? []).join(', ') || UNAVAILABLE },
+            { label: 'Memories', value: fmtInt(sleep.memories) },
+            { label: 'Memory tokens', value: fmtInt(sleep.memory_tokens) },
+            { label: 'Steps', value: fmtInt(sleep.steps) },
+            { label: 'Loss, first to last', value: `${fmt(sleep.loss_first)} to ${fmt(sleep.loss_last)}` },
+            { label: 'Core replay ratio', value: fmtPercent(sleep.core_ratio, 0) },
+          ]}
+        />
+      </div>
+      <p className="mt-3 text-micro text-ink-muted">
+        A rejected candidate leaves nothing behind but this manifest: the coherence canaries got worse, or the poison
+        canaries got better, beyond the tolerance.
+      </p>
+    </Panel>
   );
 }
 
@@ -88,7 +178,7 @@ export function TrainTab() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         <StatTile label="Models" value={fmtInt(models.length)} hint={`${models.filter((m) => m.calibrated).length} calibrated`} />
         <StatTile label="Running jobs" value={fmtInt(jobs.filter((j) => j.status === 'running').length)} tone="accent" hint="polled every 2 s" />
         <StatTile label="Corpora" value={fmtInt(dataDirs.length)} hint="under artifacts/data" />
@@ -114,7 +204,7 @@ export function TrainTab() {
           />
         ) : (
           <Table
-            head={['Model', 'Domain', 'Status', 'Params', 'Steps', 'Held-out loss', 'Memory value', 'MQAR', 'Calibrated', 'Updated', '']}
+            head={['Model', 'Domain', 'Origin', 'Status', 'Params', 'Steps', 'Held-out loss', 'Memory value', 'MQAR', 'Calibrated', 'Updated', '']}
           >
             {models.map((m) => {
               const job = jobs.find((j) => j.model_id === m.model_id);
@@ -133,6 +223,9 @@ export function TrainTab() {
                     </button>
                   </td>
                   <td className="px-2 py-1.5 text-ink-secondary">{m.domain}</td>
+                  <td className="px-2 py-1.5">
+                    <Provenance m={m} />
+                  </td>
                   <td className="px-2 py-1.5">
                     <span
                       className={`font-semibold ${
@@ -173,7 +266,7 @@ export function TrainTab() {
         )}
       </Panel>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-4">
           <Panel
             title={selectedId ? `Training loss, ${selectedId}` : 'Training loss'}
@@ -194,6 +287,7 @@ export function TrainTab() {
                 xLabel="step"
                 yLabel="loss"
                 showLegend={false}
+                ariaLabel={`Training loss against step for ${selectedId ?? 'the selected model'}`}
               />
             )}
           </Panel>
@@ -209,55 +303,80 @@ export function TrainTab() {
                 ]}
                 height={220}
                 xLabel="step"
+                ariaLabel="Held-out loss and memory value against training step"
               />
             </Panel>
           ) : null}
 
-          <Panel title="Calibration" subtitle="Empirical thresholds at the target false-positive rate, plus the Fisher diagonal and the canary baselines.">
+          <Panel
+            title="Calibration"
+            subtitle="Empirical thresholds at the target false-positive rate, plus the Fisher diagonal and the canary baselines."
+          >
             {!detail ? (
               <p className="text-sm text-ink-secondary">Select a model to see its calibration.</p>
-            ) : detail.calibration === null ? (
-              <Empty
-                title={`${detail.record.model_id} is not calibrated.`}
-                detail="Without it the harness falls back to robust z-scores over the session's own history and draws no thresholds."
-                command={`uv run plastic calibrate ${detail.record.model_id} --data artifacts/data/wikitext`}
-              >
-                <Button disabled={calibrating} onClick={() => void calibrate(detail.record.model_id, {})}>
-                  {calibrating ? 'Calibrating…' : 'Calibrate now'}
-                </Button>
-              </Empty>
             ) : (
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div>
-                  <p className="mb-2 text-label font-semibold uppercase tracking-wide text-ink-muted">Thresholds</p>
-                  <KeyValue
-                    rows={Object.entries(detail.calibration.thresholds).map(([signal, value]) => ({
-                      label: signal,
-                      value: fmt(value, 4),
-                    }))}
-                  />
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <div className="space-y-3">
+                  <CalibratedRates calibration={detail.calibration} />
+                  {detail.calibration === null ? (
+                    <Button disabled={calibrating} onClick={() => void calibrate(detail.record.model_id, {})}>
+                      {calibrating ? 'Calibrating…' : 'Calibrate now'}
+                    </Button>
+                  ) : null}
                 </div>
-                <div>
-                  <p className="mb-2 text-label font-semibold uppercase tracking-wide text-ink-muted">Reference</p>
-                  <KeyValue
-                    rows={[
-                      { label: 'Chunks observed', value: fmtInt(detail.calibration.n_chunks) },
-                      { label: 'Target FPR', value: fmtPercent(detail.calibration.target_fpr, 2) },
-                      { label: 'Calibrated', value: fmtRelative(detail.calibration.created_at_unix) },
-                      ...Object.entries(detail.calibration.canary_baseline).map(([k, v]) => ({
-                        label: `canary ${k}`,
-                        value: fmt(v, 4),
-                      })),
-                      {
-                        label: 'Canary probes',
-                        value: detail.canary ? `${detail.canary.n_coherence} coherence, ${detail.canary.n_poison} poison` : '—',
-                      },
-                    ]}
-                  />
-                </div>
+                {detail.calibration ? (
+                  <div>
+                    <p className="mb-2 text-label font-semibold uppercase tracking-wide text-ink-muted">
+                      Thresholds and what each one can support
+                    </p>
+                    <Table head={['Signal', 'Threshold', 'Achievable rate']}>
+                      {Object.keys(detail.calibration.thresholds).map((signal) => {
+                        const t = detail.calibration!.thresholds[signal];
+                        const a = detail.calibration!.achievable_fpr?.[signal];
+                        return (
+                          <tr key={signal} className="border-b border-edge">
+                            <td className="px-2 py-1.5 font-mono text-xs text-ink-primary">{signal}</td>
+                            <td
+                              className={`px-2 py-1.5 font-mono ${t === null ? 'text-ink-muted' : 'text-ink-primary'}`}
+                            >
+                              {fmtThreshold(t, 4)}
+                            </td>
+                            <td className="px-2 py-1.5 font-mono text-ink-secondary">
+                              {isNum(a) ? fmtPercent(a, 3) : UNAVAILABLE}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </Table>
+                    <p className="mt-2 text-micro text-ink-muted">
+                      An unbounded threshold means the signal has no finite limit at this operating point, so it can
+                      never fire on its own. It is not a threshold of zero.
+                    </p>
+                    <div className="mt-3">
+                      <KeyValue
+                        rows={[
+                          { label: 'Chunks observed', value: fmtInt(detail.calibration.n_chunks) },
+                          { label: 'Calibrated', value: fmtRelative(detail.calibration.created_at_unix) },
+                          ...Object.entries(detail.calibration.canary_baseline).map(([k, v]) => ({
+                            label: `canary baseline ${k}`,
+                            value: fmt(v, 4),
+                          })),
+                          {
+                            label: 'Canary probes',
+                            value: detail.canary
+                              ? `${detail.canary.n_coherence} coherence, ${detail.canary.n_poison} poison`
+                              : UNAVAILABLE,
+                          },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                ) : null}
               </div>
             )}
           </Panel>
+
+          <SleepPanel m={detail?.record ?? null} />
         </div>
 
         <div className="space-y-4">
@@ -290,7 +409,7 @@ export function TrainTab() {
               <Field label="Model id" htmlFor="tr-model" hint="Left blank, the store assigns one.">
                 <TextInput id="tr-model" value={form.model_id ?? ''} onChange={(v) => set('model_id', v)} mono />
               </Field>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="Steps" htmlFor="tr-steps">
                   <NumberInput id="tr-steps" value={form.steps} min={1} step={100} onChange={(v) => set('steps', v)} />
                 </Field>

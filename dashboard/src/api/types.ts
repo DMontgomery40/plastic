@@ -66,8 +66,19 @@ export interface ModelSummary {
   eval?: EvalSummary | null;
   calibrated: boolean;
   has_canary: boolean;
+  /** Lineage: the model a sleep-consolidated child was distilled from. */
   parent_model_id?: string | null;
+  /** e.g. "sleep_consolidation". Absent for a normally trained model. */
   type?: string | null;
+  /**
+   * The sleep consolidation manifest of a child model, with its accept/reject
+   * outcome and canary deltas.
+   *
+   * NOTE: as of this writing `model_summary()` in plastic/api/service.py does
+   * not forward this field, so it arrives undefined. The UI renders an explicit
+   * "not reported" state rather than inventing an outcome.
+   */
+  sleep?: SleepManifest | null;
   device?: string | null;
   error?: string | null;
 }
@@ -100,9 +111,21 @@ export interface ModelConfig {
 
 export interface CalibrationSummary {
   n_chunks: number;
-  thresholds: Record<string, number>;
-  canary_baseline: Record<string, number>;
+  /**
+   * Per-signal threshold. A null value means the bound is UNBOUNDED: the
+   * quantile saturated or the signal has no finite limit. Never render a null
+   * threshold as a number, and never as zero.
+   */
+  thresholds: Record<string, number | null>;
+  /**
+   * The false-positive rate the calibration sample can actually support per
+   * signal. This, not `target_fpr`, is the honest number: `target_fpr` is what
+   * was requested, and a small sample cannot deliver it.
+   */
+  achievable_fpr: Record<string, number | null>;
+  canary_baseline: Record<string, number | null>;
   reference_sizes: Record<string, number>;
+  /** What was asked for. A request, not a guarantee. */
   target_fpr: number;
   created_at_unix: number;
   model_signature?: string | null;
@@ -207,6 +230,26 @@ export interface ChunkSignals {
   log_write_norm: number;
 }
 
+/**
+ * What was actually committed, measured on the committed state AFTER the
+ * decision. Distinct from `ChunkSignals`, which is the PROPOSED update measured
+ * before it: a rollback reports `delta_norm` 0 here while `signals.delta_norm`
+ * is large, and a scale reports the fraction it actually kept.
+ *
+ * The canary fields are absent when the model has no canary suite. Render them
+ * as unavailable, never as zero.
+ */
+export interface AcceptedMetrics {
+  delta_norm: number;
+  budget_charge: number;
+  budget_used: number;
+  budget_remaining: number | null;
+  canary_coherence_after?: number | null;
+  canary_poison_after?: number | null;
+  canary_delta_coherence?: number | null;
+  canary_delta_poison?: number | null;
+}
+
 export interface Decision {
   kind: DecisionKind;
   reasons: string[];
@@ -218,9 +261,14 @@ export interface TransactionRecord {
   t_unix: number;
   pos_start: number;
   pos_end: number;
+  /** What was applied. */
   decision: Decision;
+  /** What the policy asked for. Differs from `decision` when a later check overrode it. */
   requested: Decision;
+  /** PROPOSED: measured on the provisional state, before the decision. */
   signals: ChunkSignals;
+  /** ACCEPTED: measured on the committed state, after the decision. */
+  accepted: AcceptedMetrics;
   read_only: boolean;
   read_only_reason: string | null;
   seconds: number;
@@ -399,12 +447,23 @@ export interface TrainStarted {
 
 export interface RedteamFamilyStats {
   n: number;
+  /** Attacks whose payload met the plausibility constraint. */
+  n_valid: number;
   damage_mean: number;
   damage_max: number;
+  /** Same trajectory with the harness disabled: what the attack achieves undefended. */
+  unprotected_damage_mean: number | null;
+  /** Payload read but not learned: the activation-only change. */
+  frozen_damage_mean: number | null;
+  /** Restricted to constraint-satisfying attacks. Null when none qualified, never 0. */
+  valid_damage_mean: number | null;
+  valid_damage_max: number | null;
+  /** Peak intermediate proposal, not a final endpoint. */
   provisional_damage_max: number | null;
   gated_fraction: number;
   constraint_violated_fraction: number;
   over_threshold_fraction: number | null;
+  valid_over_threshold_fraction: number | null;
 }
 
 export interface RedteamSummary {
@@ -429,8 +488,16 @@ export interface AttackResult {
   decisions: string[];
   signals: Array<Record<string, unknown>>;
   canary_before: number | null;
+  /** Peak intermediate proposal along the guarded run, not an endpoint. */
   canary_after_provisional: number | null;
   canary_after_accepted: number | null;
+  /** Endpoint controls from the same post-prefix state. */
+  canary_after_unprotected: number | null;
+  canary_after_frozen: number | null;
+  damage_unprotected: number | null;
+  damage_frozen: number | null;
+  /** Payload NLL along the guarded trajectory; can differ from `nll_payload`. */
+  nll_payload_guarded: number | null;
   poison_before: number | null;
   poison_after_accepted: number | null;
   seconds: number;

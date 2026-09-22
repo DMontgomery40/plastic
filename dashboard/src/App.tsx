@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Header } from './components/layout/Header';
 import { TabNav } from './components/layout/TabNav';
-import { ErrorBanner } from './components/panels';
+import { Button, Empty, ErrorBanner } from './components/panels';
 import { SessionsTab } from './components/tabs/SessionsTab';
 import { SessionTab } from './components/tabs/SessionTab';
 import { ChatTab } from './components/tabs/ChatTab';
@@ -35,6 +35,12 @@ export default function App() {
   const clearError = useStore((s) => s.clearError);
   const bootstrap = useStore((s) => s.bootstrap);
   const jobs = useStore((s) => s.jobs);
+  const health = useStore((s) => s.health);
+  const healthLoading = useStore((s) => s.loading.health);
+
+  // Disconnected is a first-class state, not an empty dataset. Nothing below
+  // this point may render a number when the API never answered.
+  const disconnected = health === null && !healthLoading;
 
   useEffect(() => {
     void bootstrap();
@@ -72,9 +78,19 @@ export default function App() {
             <ErrorBanner message={error} onDismiss={clearError} />
           </div>
         ) : null}
-        <div key={activeTab} className="tab-enter">
-          <View />
-        </div>
+        {disconnected ? (
+          <Empty
+            title="The API is not answering."
+            detail="Nothing on this page is real data while the API is down, so no tab is rendered. Start the service and reconnect."
+            command={'uv run plastic serve --artifacts-root artifacts --port 13579 --device cpu'}
+          >
+            <Button onClick={() => void bootstrap()}>Retry the connection</Button>
+          </Empty>
+        ) : (
+          <div key={activeTab} className="tab-enter">
+            <View />
+          </div>
+        )}
       </main>
     </div>
   );
