@@ -295,6 +295,57 @@ def _screen_verdict(*, fit_complete: bool, report: dict[str, Any], followups: di
     }
 
 
+class RunConflict(Exception):
+    """Raised when ``args.out`` already holds a run whose configuration or pinned corpus differs from
+    this invocation. The existing manifest and run record are PRESERVED (never overwritten); a new run
+    must use a fresh ``--out``."""
+
+
+def _settings_identity(args: Any, checkpoint_digest: str, revision: str) -> str:
+    """A stable digest of the settings that determine the corpus and the calibration, so a
+    re-invocation with different settings is refused rather than silently overwriting a run."""
+    payload = {
+        "counts": {"fit": args.n_fit, "cusum": args.n_cusum, "dev": args.n_dev, "eval": args.n_eval},
+        "max_prompt_tokens": args.max_prompt_tokens, "max_new_tokens": args.max_new_tokens,
+        "eval_chains": args.eval_chains, "smoke": args.smoke,
+        "checkpoint_digest": checkpoint_digest, "revision": revision,
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def _write_json(path: str, obj: dict[str, Any]) -> None:
+    tmp = f"{path}.tmp.{os.getpid()}"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(obj, f, indent=2)
+    os.replace(tmp, path)  # atomic, so a kill mid-write never leaves a truncated manifest/run record
+
+
+def _reconcile_run(out_dir: str, manifest: dict[str, Any], settings_identity: str, new_model_id) -> tuple[str, str]:
+    """Decide whether this invocation is a fresh run or a continuation of an existing one in ``out_dir``.
+
+    Returns ``(mode, model_id)`` where mode is 'fresh' or 'resume'. A fresh run mints a model id and
+    writes the manifest + run record. A matching re-run reuses the recorded model id and LEAVES the
+    pinned manifest untouched (so a continuation never rewrites the immutable selection). A run whose
+    settings or corpus differ raises RunConflict WITHOUT writing anything, so a mismatched resume can
+    never clobber the original manifest (ASTRA-092)."""
+    run_path = os.path.join(out_dir, "run-record.json")
+    manifest_path = os.path.join(out_dir, "split-manifest.json")
+    if os.path.exists(run_path):
+        run = json.load(open(run_path, encoding="utf-8"))
+        if run.get("settings_identity") != settings_identity:
+            raise RunConflict(
+                f"{run_path} records a different configuration; refusing to overwrite this run's artifacts. Use a fresh --out.")
+        if run.get("corpus_hash") != manifest["corpus_hash"]:
+            raise RunConflict(
+                f"the corpus under {out_dir} differs from the pinned manifest (dataset drift?); refusing to overwrite. Use a fresh --out.")
+        return "resume", str(run["model_id"])
+    mid = new_model_id()
+    _write_json(manifest_path, manifest)  # written ONLY for a fresh run
+    _write_json(run_path, {"model_id": mid, "settings_identity": settings_identity,
+                           "corpus_hash": manifest["corpus_hash"], "created_at_unix": int(time.time())})
+    return "fresh", mid
+
+
 def _run_followups(backend, cfg, calibration, gen, seed0, fixture_path, hcfg, deadline, *, _runner=None, _drive=None, _fixture=None):
     """Run the predeclared multi-turn follow-up sessions (never fit/tuned on). Each turn must complete
     without exception or nonfinite state and must not be entirely read-only; saved answers are for
@@ -375,7 +426,7 @@ def main() -> None:
     import torch  # noqa
 
     from plastic.backends.qwen import QwenBackend, _checkpoint_digest
-    from plastic.harness.calibrate import CalibrationCheckpointError, CalibrationIncomplete, calibrate_qwen
+    from plastic.harness.calibrate import Calibration, CalibrationCheckpointError, CalibrationIncomplete, calibrate_qwen
     from plastic.harness.config import HarnessConfig
     from plastic.store import ArtifactStore
 
@@ -398,38 +449,51 @@ def main() -> None:
                      "checkpoint_digest": _checkpoint_digest(args.checkpoint), "smoke": args.smoke,
                      "code_commit": code_commit, "settings": vars(args)})
     del be_for_tok
-    json.dump(manifest, open(os.path.join(args.out, "split-manifest.json"), "w"), indent=2)
-    print(f"[oppoint] corpus split saved: {manifest['actual_counts']} (excluded_over_cap={manifest['excluded_over_cap']}, corpus_hash={manifest['corpus_hash'][:12]})")
-
+    # reuse an existing run's model id + immutable manifest when the configuration matches, and refuse
+    # (never overwrite) when it differs, BEFORE any run-artifact write (ASTRA-092 manifest preservation)
+    settings_identity = _settings_identity(args, manifest["checkpoint_digest"], revision)
     store = ArtifactStore(os.path.join(args.out, "store"))
-    mid = store.new_model_id("qwen")
+    try:
+        mode, mid = _reconcile_run(args.out, manifest, settings_identity, lambda: store.new_model_id("qwen"))
+    except RunConflict as err:
+        print(f"[oppoint] run conflict: {err}")
+        return
     store.register_model(mid, {"backend": "qwen", "checkpoint_dir": args.checkpoint, "domain": "text", "chunk": 8, "status": "completed"})
+    print(f"[oppoint] corpus split {mode}: {manifest['actual_counts']} (excluded_over_cap={manifest['excluded_over_cap']}, corpus_hash={manifest['corpus_hash'][:12]}, model={mid})")
 
     gen = {"max_new_tokens": args.max_new_tokens, "temperature": 0.9, "top_k": 50}
-    # fit (log-only inside calibrate_qwen): thresholds on fresh fit prompts, CUSUM on the cusum set.
-    # A durable checkpoint (bound to the model/corpus/config) lets a deadline persist progress and
-    # resume rather than re-fit; on an incomplete calibration we stop BEFORE eval so a conformant run
-    # never evaluates on partial thresholds. Re-running the same command resumes from the checkpoint.
     ckpt_path = os.path.join(args.out, "calibration.ckpt")
-    try:
-        cal = calibrate_qwen(store, mid, [r["prompt"] for r in split["fit"]], cusum_prompts=[r["prompt"] for r in split["cusum"]],
-                             target_fpr=0.01, max_new_tokens=args.max_new_tokens, seed=seed, device=args.device,
-                             deadline=deadline, checkpoint_path=ckpt_path, corpus_hash=manifest["corpus_hash"])
-    except CalibrationCheckpointError as err:
-        # an existing checkpoint is for a different config/corpus or is corrupt: it is preserved, not
-        # overwritten. Point --out at a fresh directory (or remove the stale file) to start clean.
-        print(f"[oppoint] calibration checkpoint conflict: {err}")
-        return
-    except CalibrationIncomplete as inc:
-        status = {"calibration_incomplete": True, "phase": inc.phase,
-                  "fit": [inc.fit_used, inc.fit_requested], "cusum": [inc.cusum_used, inc.cusum_requested],
-                  "checkpoint": ckpt_path, "corpus_hash": manifest["corpus_hash"]}
-        json.dump(status, open(os.path.join(args.out, "calibration-status.json"), "w"), indent=2)
-        print(f"[oppoint] calibration incomplete in {inc.phase}: fit {inc.fit_used}/{inc.fit_requested}, "
-              f"cusum {inc.cusum_used}/{inc.cusum_requested}; progress checkpointed. Re-run to resume.")
-        return
     fit_meta = store.load_model_record(mid)
-    print(f"[oppoint] fit: {cal.n_chunks} chunks; fit_prompts {fit_meta['calibration_fit_prompts_used']}/{fit_meta['calibration_fit_prompts_requested']}; thresholds={cal.thresholds}")
+    if fit_meta.get("calibration_fit_complete") and fit_meta.get("calibration_cusum_complete"):
+        # a completed calibration is reused, not re-fit under a new model id: calibrate_qwen deleted its
+        # progress checkpoint on completion, but the calibration artifact is durable in the model dir,
+        # so a continuation whose budget ended during eval does not discard finished fit work (ASTRA-092)
+        cal = Calibration.load(store.model_dir(mid))
+        print(f"[oppoint] calibration reused (already complete): thresholds={cal.thresholds}")
+    else:
+        # fit (log-only inside calibrate_qwen): thresholds on fresh fit prompts, CUSUM on the cusum set.
+        # A durable checkpoint (bound to the model/corpus/config) lets a deadline persist progress and
+        # resume rather than re-fit; on an incomplete calibration we stop BEFORE eval so a conformant run
+        # never evaluates on partial thresholds. Re-running the same command resumes from the checkpoint.
+        try:
+            cal = calibrate_qwen(store, mid, [r["prompt"] for r in split["fit"]], cusum_prompts=[r["prompt"] for r in split["cusum"]],
+                                 target_fpr=0.01, max_new_tokens=args.max_new_tokens, seed=seed, device=args.device,
+                                 deadline=deadline, checkpoint_path=ckpt_path, corpus_hash=manifest["corpus_hash"])
+        except CalibrationCheckpointError as err:
+            # an existing checkpoint is for a different config/corpus or is corrupt: it is preserved, not
+            # overwritten. Point --out at a fresh directory (or remove the stale file) to start clean.
+            print(f"[oppoint] calibration checkpoint conflict: {err}")
+            return
+        except CalibrationIncomplete as inc:
+            status = {"calibration_incomplete": True, "phase": inc.phase,
+                      "fit": [inc.fit_used, inc.fit_requested], "cusum": [inc.cusum_used, inc.cusum_requested],
+                      "checkpoint": ckpt_path, "corpus_hash": manifest["corpus_hash"]}
+            json.dump(status, open(os.path.join(args.out, "calibration-status.json"), "w"), indent=2)
+            print(f"[oppoint] calibration incomplete in {inc.phase}: fit {inc.fit_used}/{inc.fit_requested}, "
+                  f"cusum {inc.cusum_used}/{inc.cusum_requested}; progress checkpointed. Re-run to resume.")
+            return
+        fit_meta = store.load_model_record(mid)
+        print(f"[oppoint] fit: {cal.n_chunks} chunks; fit_prompts {fit_meta['calibration_fit_prompts_used']}/{fit_meta['calibration_fit_prompts_requested']}; thresholds={cal.thresholds}")
 
     # frozen evaluation harness: stats + rollback on, generation learning on, alarm latch, no budget
     from plastic.config import ModelConfig

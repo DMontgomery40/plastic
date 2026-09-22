@@ -269,3 +269,59 @@ def test_screen_verdict_separates_completion_from_pass():
     # fit incomplete -> not complete
     v = _screen_verdict(fit_complete=False, report=_rep(True, True), followups={"all_ok": True}, verdict=ok_v)
     assert v["complete"] is False
+
+
+def _fake_args(**over):
+    from types import SimpleNamespace
+    base = dict(n_fit=8, n_cusum=4, n_dev=4, n_eval=4, max_prompt_tokens=256, max_new_tokens=8, eval_chains=2, smoke=False)
+    base.update(over)
+    return SimpleNamespace(**base)
+
+
+def test_settings_identity_changes_with_each_determining_setting():
+    from scripts.experiments.qwen_operating_point import _settings_identity
+    base = _settings_identity(_fake_args(), "digestX", "rev1")
+    assert base == _settings_identity(_fake_args(), "digestX", "rev1")           # stable
+    assert base != _settings_identity(_fake_args(max_new_tokens=16), "digestX", "rev1")  # decoding changed
+    assert base != _settings_identity(_fake_args(n_fit=16), "digestX", "rev1")   # counts changed
+    assert base != _settings_identity(_fake_args(), "digestY", "rev1")           # checkpoint changed
+    assert base != _settings_identity(_fake_args(), "digestX", "rev2")           # dataset revision changed
+
+
+def _driver_manifest(corpus_hash="h1"):
+    return {"corpus_hash": corpus_hash, "actual_counts": {"fit": 8}, "excluded_over_cap": 0}
+
+
+def test_reconcile_run_fresh_then_resume_preserves_manifest(tmp_path):
+    from scripts.experiments.qwen_operating_point import _reconcile_run
+    minted = []
+
+    def mint():
+        minted.append(f"qwen_{len(minted) + 1}")
+        return minted[-1]
+
+    man = _driver_manifest()
+    mode, mid = _reconcile_run(str(tmp_path), man, "idA", mint)
+    assert mode == "fresh" and mid == "qwen_1" and len(minted) == 1
+    assert (tmp_path / "split-manifest.json").exists() and (tmp_path / "run-record.json").exists()
+    manifest_bytes = (tmp_path / "split-manifest.json").read_bytes()
+
+    # a matching re-run reuses the recorded model id, mints nothing new, and leaves the manifest untouched
+    mode2, mid2 = _reconcile_run(str(tmp_path), man, "idA", mint)
+    assert mode2 == "resume" and mid2 == "qwen_1" and len(minted) == 1
+    assert (tmp_path / "split-manifest.json").read_bytes() == manifest_bytes
+
+
+def test_reconcile_run_refuses_and_preserves_on_settings_or_corpus_change(tmp_path):
+    import pytest
+
+    from scripts.experiments.qwen_operating_point import RunConflict, _reconcile_run
+    _reconcile_run(str(tmp_path), _driver_manifest("h1"), "idA", lambda: "qwen_1")
+    before = (tmp_path / "split-manifest.json").read_bytes()
+
+    with pytest.raises(RunConflict):  # a different configuration
+        _reconcile_run(str(tmp_path), _driver_manifest("h1"), "idB", lambda: "qwen_x")
+    with pytest.raises(RunConflict):  # same settings but a drifted corpus
+        _reconcile_run(str(tmp_path), _driver_manifest("h2"), "idA", lambda: "qwen_x")
+
+    assert (tmp_path / "split-manifest.json").read_bytes() == before  # the pinned manifest is never overwritten
