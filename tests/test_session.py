@@ -178,3 +178,16 @@ def test_verify_calibration_signature_gating():
     assert _verify_calibration(cal, "sig-B") == (None, "rejected_signature_mismatch")
     assert _verify_calibration(Calibration(model_signature=""), "sig-A") == (None, "rejected_unsigned")
     assert _verify_calibration(None, "sig-A") == (None, "absent")
+
+
+def test_session_summary_surfaces_backend_and_signals(text_model):
+    # the summary honestly surfaces the backend, its full decision-signal set, and the calibration
+    # state so a client can display them (a plastic model produces every STAT_SIGNAL).
+    from plastic.harness.signals import STAT_SIGNALS
+
+    store, mid = text_model
+    s = Session.create(store, model_id=mid, harness_cfg=HarnessConfig(enable_projection=False))
+    summ = s.summary()
+    assert summ["backend"] == "plastic"
+    assert tuple(summ["signals_available"]) == STAT_SIGNALS
+    assert summ["calibration"] == "absent"  # this fixture registers no calibration

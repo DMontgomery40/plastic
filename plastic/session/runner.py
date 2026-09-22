@@ -196,7 +196,18 @@ class Session:
 
     def summary(self) -> dict[str, Any]:
         s = self.runner.summary()
-        s.update({"session_id": self.session_id, "model_id": self.model_id, "domain": self.cfg.domain})
+        s.update({
+            "session_id": self.session_id,
+            "model_id": self.model_id,
+            "domain": self.cfg.domain,
+            # surface the backend and its honest state so a client shows them plainly: which backend
+            # drives the session, whether a persisted calibration was installed/rejected/absent, and
+            # exactly which decision signals this backend can produce (a pretrained backend gates on a
+            # reduced set; the rest are carried as None).
+            "backend": self.backend_kind,
+            "calibration": self.calibration_status,
+            "signals_available": list(self.runner.backend.signal_names()),
+        })
         return s
 
     # ------------------------------------------------------------------ text

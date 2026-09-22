@@ -628,6 +628,10 @@ def test_qwen_session_chat_end_to_end(tmp_path):
     res = sess.chat("Hello", max_new_tokens=6, seed=0)
     assert isinstance(res.completion, str) and res.n_tokens_in > 0
     assert res.summary["domain"] == "text" and "recurrent_norm_total" in res.summary["state_norms"]
+    # the summary honestly surfaces the backend and its reduced decision-signal set
+    assert res.summary["backend"] == "qwen"
+    assert set(res.summary["signals_available"]) == {"chunk_loss", "log_delta_norm"}
+    assert res.summary["calibration"] == "absent"  # no calibration registered for this model
     assert res.transactions  # the prompt transacted through the harness
     # multi-turn framing: the assistant turn is closed in the carried state (pos counts the prompt,
     # the generated tokens, AND the turn terminator), and the terminator is not shown to the user
