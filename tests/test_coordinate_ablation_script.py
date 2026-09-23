@@ -49,7 +49,8 @@ def test_run_variant_and_collect_smoke(tmp_path):
         steps=2, batch=2, seq_len=32, episodes=1, lr=1e-3, log_every=1, d_model=32, n_heads=2, n_layers=1,
         chunk=16, seed=0, device="cpu", outer_loss="post_boundary",
     )
-    spec = ContractSpec(seq_len=32, eval_batch=2, stream_episodes=4, probe_steps=4)
+    # the speed horizon must reach past the coordinate variants' first boundary (chunk 16)
+    spec = ContractSpec(seq_len=32, eval_batch=2, stream_episodes=4, probe_steps=20)
     for v in ("full", "decay_only", "delta_baseline"):
         r = run_variant(v, args, str(tmp_path), spec=spec)
         assert r["contract"]["revert"]["ok"] is True

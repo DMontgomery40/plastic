@@ -136,7 +136,7 @@ def test_report_is_json_serializable_and_carries_denominators():
     assert report["spec"]["seq_len"] == 32 and report["split"]["heldout"]
     assert len(report["split"]["id"]) == 16 and report["split"]["bound_to_learner"] is False
     # the toy learner declares no update period, so the window is recorded as unchecked
-    assert report["adaptation_window"] == {"update_period": None, "boundaries_per_episode": None, "checked": False}
+    assert report["adaptation_window"] == {"update_period": None, "boundaries_per_episode": None, "speed_horizon": 6, "boundaries_in_speed_horizon": None, "checked": False}
 
 
 class _RecordingLearner(_BiasLearner):
@@ -204,12 +204,21 @@ def test_streams_outside_the_training_split_are_refused():
 def test_contract_refuses_a_spec_with_no_update_boundary_inside_an_episode():
     from plastic.eval.contract import adaptation_window
 
-    assert adaptation_window(ContractSpec(seq_len=64), 16) == {"update_period": 16, "boundaries_per_episode": 3, "checked": True}
+    assert adaptation_window(ContractSpec(seq_len=64), 16) == {"update_period": 16, "boundaries_per_episode": 3, "speed_horizon": 64, "boundaries_in_speed_horizon": 3, "checked": True}
     assert adaptation_window(ContractSpec(seq_len=64), 1)["boundaries_per_episode"] == 63
     with pytest.raises(ValueError, match="no fast-update boundary"):
         adaptation_window(ContractSpec(seq_len=16), 16)
     with pytest.raises(ValueError, match="no fast-update boundary"):
         adaptation_window(ContractSpec(seq_len=32), 32)
+    # the speed horizon must reach past the first boundary: below, at, and above it
+    with pytest.raises(ValueError, match="speed horizon"):
+        adaptation_window(ContractSpec(seq_len=64, probe_steps=8), 16)
+    with pytest.raises(ValueError, match="speed horizon"):
+        adaptation_window(ContractSpec(seq_len=64, probe_steps=16), 16)
+    above = adaptation_window(ContractSpec(seq_len=64, probe_steps=17), 16)
+    assert above["speed_horizon"] == 17 and above["boundaries_in_speed_horizon"] == 1
+    # an undeclared period records the horizon but checks nothing
+    assert adaptation_window(ContractSpec(seq_len=64, probe_steps=8), None)["checked"] is False
 
     class _Periodic(_BiasLearner):
         def update_period(self) -> int:

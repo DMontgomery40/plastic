@@ -240,7 +240,7 @@ def adaptation_window(spec: ContractSpec, update_period: int | None) -> dict[str
     """How many fast-update boundaries fall strictly inside one scored episode. Refuses a spec
     under which adaptation could not be measured at all."""
     if update_period is None:
-        return {"update_period": None, "boundaries_per_episode": None, "checked": False}
+        return {"update_period": None, "boundaries_per_episode": None, "speed_horizon": spec.probe_steps or spec.episode_len, "boundaries_in_speed_horizon": None, "checked": False}
     if update_period < 1:
         raise ValueError("update_period must be a positive number of steps")
     boundaries = (spec.episode_len - 1) // update_period
@@ -249,7 +249,15 @@ def adaptation_window(spec: ContractSpec, update_period: int | None) -> dict[str
             f"no fast-update boundary can fall inside a scored episode: episode length {spec.episode_len} "
             f"with update period {update_period}; lengthen seq_len or shorten the learner's period"
         )
-    return {"update_period": update_period, "boundaries_per_episode": boundaries, "checked": True}
+    # the speed curve is reported over the first probe_steps positions; if every one of them
+    # precedes the first update, the curve cannot show adaptation at all
+    horizon = spec.probe_steps or spec.episode_len
+    if horizon <= update_period:
+        raise ValueError(
+            f"the speed horizon ({horizon} steps) ends at or before the first fast-update boundary "
+            f"(period {update_period}); raise probe_steps or leave it unset"
+        )
+    return {"update_period": update_period, "boundaries_per_episode": boundaries, "speed_horizon": horizon, "boundaries_in_speed_horizon": (horizon - 1) // update_period, "checked": True}
 
 
 def run_contract(learner: Learner, spec: ContractSpec, *, seed: int = 0) -> dict[str, Any]:
