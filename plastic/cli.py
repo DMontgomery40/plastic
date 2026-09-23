@@ -288,6 +288,7 @@ def cmd_sleep(args: argparse.Namespace) -> int:
             replay_ratio=args.replay_ratio, replay_rows=args.replay_rows, heldout_rows=args.heldout_rows, anchor_lambda=args.anchor_lambda,
             distill_temperature=args.distill_temperature, tolerance_nll=args.tolerance_nll, seed=args.seed, device=args.device,
             scan_checkpoint_groups=args.scan_checkpoint_groups, provenance=args.provenance, session_loss=args.session_loss,
+            prompt_loss_weight=args.prompt_loss_weight,
         )
         probes = load_probes(args.recall) if args.recall else None
         report = sleep_mod.sleep_ttt(store, args.model_id, cfg, session_ids=(args.sessions or None), probes=probes, run_dir=args.out)
@@ -457,6 +458,7 @@ def build_parser() -> argparse.ArgumentParser:
     sl.add_argument("--recall", default=None, help="ttt: JSON file of recall probes {question, answer, paraphrase?}")
     sl.add_argument("--session-loss", default="all", choices=["all", "assistant"],
                     help="ttt: supervise every token of an accepted turn (default) or only the assistant's reply")
+    sl.add_argument("--prompt-loss-weight", type=float, default=1.0, help="ttt: weight of the user's tokens vs the assistant's in a session turn (0-1)")
     sl.add_argument("--provenance", default="accepted", choices=["accepted", "all"],
                     help="ttt: 'all' consumes rolled-back turns too (experiment control only; never the product rule)")
     sl.add_argument("--out", default=None, help="ttt: run directory for the report and log (default: <artifacts>/sleep/<run>)")

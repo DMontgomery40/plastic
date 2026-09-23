@@ -49,6 +49,22 @@ FACTS_ROLLED = [
     ("My dog is called Biscuit. Remember my dog's name is Biscuit.", "What is my dog called?", "Biscuit", "Remind me of my dog's name."),
     ("My car is a green Volvo. Remember that my car is a green Volvo.", "What car do I drive?", "Volvo", "Which car did I say I drive?"),
 ]
+# A templated "study set" per fact (arXiv 2309.14316: 5 diverse rewrites lift QA accuracy 9.7% -> 96.6%; arXiv 2607.11020:
+# paraphrases + QA + implications retain 46% vs 1% for bare statements). Each fact becomes several accepted turns:
+# restatements, the question answered, the answer asked back, and a one-line implication. The product path must
+# self-generate these with the chat checkpoint; the experiment uses fixed templates so the effect is measurable.
+def study_set(statement: str, question: str, answer: str, paraphrase: str) -> list[tuple[str, str]]:
+    """(user turn, assistant turn) pairs teaching one fact several ways."""
+    return [
+        (statement, f"Got it: {answer}."),
+        (f"Note for later: {statement}", f"Noted. The answer to \"{question}\" is {answer}."),
+        (question, f"{answer}."),
+        (paraphrase, f"{answer}."),
+        (f"If someone asks you \"{question}\", what do you say?", f"I say: {answer}."),
+        (f"Repeat back what I told you about this: {statement}", statement),
+    ]
+
+
 GENERAL = [
     ("What is the capital of France?", "Paris", "Name the capital city of France."),
     ("How many days are in a week?", "seven", "A week has how many days?"),
@@ -108,6 +124,8 @@ def main() -> None:
     ap.add_argument("--replay-ratio", type=float, default=0.5, help="share of each sleep batch drawn from the SFT replay corpus")
     ap.add_argument("--batch-size", type=int, default=2, help="rows per sleep step; choose it so the replay ratio is realizable (0.5 -> 2, 0.8 -> 5)")
     ap.add_argument("--session-loss", default="all", choices=["all", "assistant"])
+    ap.add_argument("--prompt-loss-weight", type=float, default=1.0, help="weight of user tokens in session turns (0-1)")
+    ap.add_argument("--augment", default="none", choices=["none", "study"], help="teach each fact once (none) or as a templated study set")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
@@ -140,9 +158,17 @@ def main() -> None:
 
     # 1) teaching session (accepted) and the forced-rollback session (excluded by provenance)
     teach = Session.create(store, model_id="parent", session_id="teach", device=args.device, harness_cfg=observe)
-    for i, (stmt, *_rest) in enumerate(FACTS_TAUGHT + FACTS_BOUNDARY):
+    if args.augment == "study":
+        # the study set is taught as user turns; the model still generates its own reply (an accepted turn is what
+        # the user said plus what the model answered), so the teacher-side answers are folded into the user turn
+        items = [(f"{u} (Correct answer: {a})", ) for stmt, q, a, p in FACTS_TAUGHT + FACTS_BOUNDARY for u, a in study_set(stmt, q, a, p)]
+        turns = [t[0] for t in items]
+    else:
+        turns = [stmt for stmt, *_ in FACTS_TAUGHT + FACTS_BOUNDARY]
+    for i, stmt in enumerate(turns):
         r = teach.chat(stmt, max_new_tokens=args.max_new_tokens, temperature=0.7, top_k=40, seed=args.seed + i)
         log(f"[teach] {stmt[:50]!r} -> {r.completion[:60]!r} ({len(r.transactions)} chunks)")
+    log(f"[teach] {len(turns)} teaching turns (augment={args.augment})")
     # a calibration whose chunk-loss threshold every chunk exceeds: with rollback enabled, every chunk rolls back
     forced = Calibration(model_signature=f"ttt:{digest}", thresholds={"chunk_loss": -1e9}, n_chunks=1)
     forced.save(store.model_dir("parent"))
@@ -167,7 +193,7 @@ def main() -> None:
         return group_counts(report_dict["results"], probes)
 
     results: dict[str, Any] = {"checkpoint": os.path.abspath(args.checkpoint), "checkpoint_digest": digest, "device": args.device,
-                               "steps": args.steps, "target": args.target, "lr": args.lr, "replay_ratio": args.replay_ratio, "batch_size": args.batch_size, "session_loss": args.session_loss, "arms": {}}
+                               "steps": args.steps, "target": args.target, "lr": args.lr, "replay_ratio": args.replay_ratio, "batch_size": args.batch_size, "session_loss": args.session_loss, "prompt_loss_weight": args.prompt_loss_weight, "augment": args.augment, "arms": {}}
     arms = [a.strip() for a in args.arms.split(",") if a.strip()]
 
     # 2) floor: the parent from a fresh session
@@ -208,7 +234,7 @@ def main() -> None:
             continue
         method = "replay" if arm == "ungated" else arm
         cfg = SleepConfig(method=method, target=args.target, steps=args.steps, lr=args.lr, seq_len=args.seq_len, batch_size=args.batch_size, replay_ratio=args.replay_ratio,
-                          session_loss=args.session_loss,
+                          session_loss=args.session_loss, prompt_loss_weight=args.prompt_loss_weight,
                           replay_rows=args.replay_rows, heldout_rows=args.heldout_rows, tolerance_nll=0.05, device=args.device,
                           recall_max_new_tokens=args.max_new_tokens, seed=args.seed, provenance="all" if arm == "ungated" else "accepted")
         sessions = ["teach", "rolled"]
@@ -239,7 +265,7 @@ def main() -> None:
         lines.append(f"| {arm} | {cell('taught')} | {cell('boundary')} | {cell('rolled')} | {cell('general')} | {nll} | {e.get('status', '')} |")
     table = "\n".join(lines)
     with open(os.path.join(args.out, "sleep_controls.md"), "w", encoding="utf-8") as f:
-        f.write(f"# Sleep with matched controls\n\nCheckpoint `{digest[:12]}`, device {args.device}, {args.steps} steps, target {args.target}, lr {args.lr}, replay ratio {args.replay_ratio}, session loss {args.session_loss}, {results['seconds']} s.\n\n{table}\n")
+        f.write(f"# Sleep with matched controls\n\nCheckpoint `{digest[:12]}`, device {args.device}, {args.steps} steps, target {args.target}, lr {args.lr}, replay ratio {args.replay_ratio}, session loss {args.session_loss}, plw {args.prompt_loss_weight}, augment {args.augment}, {results['seconds']} s.\n\n{table}\n")
     log("\n" + table)
 
 

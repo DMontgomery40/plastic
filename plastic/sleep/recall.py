@@ -65,6 +65,9 @@ class RecallResult:
     exact: bool
     variant: str = "verbatim"  # or "paraphrase"
     source_session: str | None = None
+    # mean log-probability per token of the EXPECTED answer given the question, teacher-forced from a fresh state:
+    # storage. A fact can be stored (lift here) and still not be retrieved (no greedy hit): access.
+    answer_logprob: float | None = None
 
 
 @dataclass
@@ -107,20 +110,23 @@ class RecallReport:
             "recalled_paraphrase": sum(r.contains for r in para),
             "distinct_ratio": self.distinct_ratio(),
             "max_cluster_share": self.max_cluster_share(),
+            "mean_answer_logprob": (sum(r.answer_logprob for r in verbatim if r.answer_logprob is not None) / len([r for r in verbatim if r.answer_logprob is not None]))
+            if any(r.answer_logprob is not None for r in verbatim) else None,
             "results": [asdict(r) for r in self.results],
         }
 
 
-def run_probes(probes: Iterable[RecallProbe], answer: Any) -> RecallReport:
+def run_probes(probes: Iterable[RecallProbe], answer: Any, answer_logprob: Any = None) -> RecallReport:
     """``answer(question) -> reply`` is the caller's fresh-session, greedy chat function; each probe (and
-    its paraphrase, when given) is asked from a fresh state so nothing leaks between questions."""
+    its paraphrase, when given) is asked from a fresh state so nothing leaks between questions.
+    ``answer_logprob(question, expected) -> float`` (optional) scores the expected answer teacher-forced."""
     report = RecallReport()
     for p in probes:
-        reply = answer(p.question)
-        s = score_reply(p.answer, reply)
-        report.results.append(RecallResult(p.question, p.answer, reply, s["contains"], s["exact"], "verbatim", p.source_session))
-        if p.paraphrase:
-            reply = answer(p.paraphrase)
+        for variant, q in (("verbatim", p.question), ("paraphrase", p.paraphrase)):
+            if not q:
+                continue
+            reply = answer(q)
             s = score_reply(p.answer, reply)
-            report.results.append(RecallResult(p.paraphrase, p.answer, reply, s["contains"], s["exact"], "paraphrase", p.source_session))
+            lp = float(answer_logprob(q, p.answer)) if answer_logprob is not None else None
+            report.results.append(RecallResult(q, p.answer, reply, s["contains"], s["exact"], variant, p.source_session, lp))
     return report

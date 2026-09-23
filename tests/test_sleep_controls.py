@@ -1,6 +1,6 @@
 """The matched-controls experiment's pure pieces: probe construction and per-group recall counting."""
 
-from scripts.experiments.sleep_controls import FACTS_BOUNDARY, FACTS_ROLLED, FACTS_TAUGHT, GENERAL, build_probes, group_counts
+from scripts.experiments.sleep_controls import FACTS_BOUNDARY, FACTS_ROLLED, FACTS_TAUGHT, GENERAL, build_probes, group_counts, study_set
 
 
 def test_fact_lists_are_well_formed_and_disjoint():
@@ -33,3 +33,12 @@ def test_group_counts_attribute_verbatim_and_paraphrase_results_and_ignore_stray
     assert c["rolled"] == {"n": 1, "recalled": 0, "n_paraphrase": 1, "recalled_paraphrase": 1}
     assert c["boundary"] == {"n": 0, "recalled": 0, "n_paraphrase": 0, "recalled_paraphrase": 0}
     assert c["general"]["n"] == 0
+
+
+def test_study_set_teaches_each_fact_several_ways_including_the_question_and_its_paraphrase():
+    stmt, q, a, p = FACTS_TAUGHT[0]
+    items = study_set(stmt, q, a, p)
+    users = [u for u, _ in items]
+    assert len(items) >= 5 and q in users and p in users and stmt in users
+    assert all(a in reply or reply == stmt for _, reply in items)  # every teacher-side reply states the answer (or restates the fact)
+    assert len(set(users)) == len(users)

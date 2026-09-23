@@ -121,13 +121,26 @@ def test_turn_with_no_chunks_is_excluded_not_guessed(tmp_path):
     assert h.turns[0].reason == "no_chunks" and not h.accepted_turns
 
 
-def test_pack_examples_respects_window_and_masks_padding():
+def test_pack_examples_respects_window_masks_padding_and_carries_weights():
     ex = [([1, 2, 3], [-100, 2, 3]), ([4, 5], [4, 5]), ([6, 7, 8, 9, 10, 11], [6, 7, 8, 9, 10, 11])]
     packed = pack_examples(ex, 6, pad_id=0)
-    assert packed[0] == ([1, 2, 3, 4, 5, 0], [-100, 2, 3, 4, 5, -100])
-    assert packed[1] == ([6, 7, 8, 9, 10, 11], [6, 7, 8, 9, 10, 11])
+    # a (ids, labels) example gets weight 1 on every target and 0 elsewhere; padding is label -100, weight 0
+    assert packed[0] == ([1, 2, 3, 4, 5, 0], [-100, 2, 3, 4, 5, -100], [0.0, 1.0, 1.0, 1.0, 1.0, 0.0])
+    assert packed[1] == ([6, 7, 8, 9, 10, 11], [6, 7, 8, 9, 10, 11], [1.0] * 6)
+    # explicit weights travel with their tokens
+    weighted = pack_examples([([1, 2, 3], [-100, 2, 3], [0.0, 0.2, 1.0])], 4, 0)
+    assert weighted == [([1, 2, 3, 0], [-100, 2, 3, -100], [0.0, 0.2, 1.0, 0.0])]
     # an over-long example is truncated, never dropped
-    assert pack_examples([(list(range(10)), list(range(10)))], 4, 0) == [([0, 1, 2, 3], [0, 1, 2, 3])]
+    assert pack_examples([(list(range(10)), list(range(10)))], 4, 0) == [([0, 1, 2, 3], [0, 1, 2, 3], [1.0] * 4)]
+
+
+def test_session_weights_scale_prompt_tokens_and_zero_unlabeled():
+    from plastic.sleep.ttt import session_weights
+
+    sft = [-100, -100, -100, 41, 2]          # BOS and user tokens masked in SFT; assistant reply and EOS kept
+    labels_all = [-100, 30, 31, 41, 2]        # session_loss="all"
+    assert session_weights(sft, labels_all, 0.2) == [0.0, 0.2, 0.2, 1.0, 1.0]
+    assert session_weights(sft, sft, 0.2) == [0.0, 0.0, 0.0, 1.0, 1.0]  # assistant-only labels: prompt weight irrelevant
 
 
 class _Block(torch.nn.Module):
@@ -184,8 +197,10 @@ def test_recall_scoring_and_probe_loading(tmp_path):
     probes = load_probes(str(p))
     assert len(probes) == 2 and probes[0].paraphrase and probes[1].paraphrase is None
     replies = {"What is my cat's name?": "Marlowe.", "Remind me what I call my cat.": "A cat.", "Where do I live?": "You live in Denver."}
-    rep = run_probes(probes, lambda q: replies[q])
+    rep = run_probes(probes, lambda q: replies[q], lambda q, a: -0.5 if a == "Marlowe" else -2.0)
     d = rep.to_dict()
+    assert d["mean_answer_logprob"] == (-0.5 + -2.0) / 2 and rep.results[1].answer_logprob == -0.5  # paraphrase row carries it too
+    assert run_probes(probes, lambda q: replies[q]).to_dict()["mean_answer_logprob"] is None
     assert d["distinct_ratio"] == 1.0 and d["max_cluster_share"] == 1 / 3
     collapsed = run_probes(probes, lambda q: "A pleasure to meet you, Marlowe. I am glad you asked.").to_dict()
     assert collapsed["distinct_ratio"] == 1 / 3 and collapsed["max_cluster_share"] == 1.0 and collapsed["recalled"] == 1  # one reply for all; only the cat probe "hits"
@@ -283,7 +298,7 @@ def test_sleep_config_validation():
     SleepConfig(session_loss="assistant").validate()
     with pytest.raises(ValueError):
         SleepConfig(session_loss="user").validate()
-    for bad in ({"method": "dream"}, {"target": "lora"}, {"steps": 0}, {"replay_ratio": 1.5}, {"anchor_lambda": -0.1}, {"lr": 0.0}, {"seq_len": 8}, {"provenance": "some"}):
+    for bad in ({"method": "dream"}, {"target": "lora"}, {"steps": 0}, {"replay_ratio": 1.5}, {"anchor_lambda": -0.1}, {"lr": 0.0}, {"seq_len": 8}, {"provenance": "some"}, {"prompt_loss_weight": 1.5}):
         with pytest.raises(ValueError):
             SleepConfig(**bad).validate()
 

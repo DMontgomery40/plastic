@@ -73,6 +73,9 @@ class SleepConfig:
     # which tokens of a SESSION turn carry the loss: "all" (the user's statements are the content to consolidate;
     # default) or "assistant" (SFT-style, which can only teach the model to reproduce its own replies).
     session_loss: Literal["all", "assistant"] = "all"
+    # weight of the user's (prompt) tokens relative to the assistant's when session_loss="all"; 1.0 = equal.
+    # Prompt-loss weights near 0.2 were the optimum for short completions in arXiv 2401.13586.
+    prompt_loss_weight: float = 1.0
     recall_max_new_tokens: int = 48
     seed: int = 0
     device: str = "cpu"
@@ -99,6 +102,8 @@ class SleepConfig:
             raise ValueError(f"unknown provenance rule {self.provenance!r}")
         if self.session_loss not in ("all", "assistant"):
             raise ValueError(f"unknown session_loss {self.session_loss!r}")
+        if not 0.0 <= self.prompt_loss_weight <= 1.0:
+            raise ValueError("prompt_loss_weight must be within [0, 1]")
 
 
 @dataclass
@@ -224,29 +229,43 @@ def session_labels(ids: list[int], labels: list[int], session_loss: str) -> list
     return labels
 
 
-def session_example(tok, prompt: str, completion: str, session_loss: str) -> tuple[list[int], list[int]]:
+def session_weights(sft_labels: list[int], labels: list[int], prompt_loss_weight: float) -> list[float]:
+    """Per-token loss weights: 0 where there is no target, ``prompt_loss_weight`` on tokens the SFT labels
+    masked (the user's turn and tags), 1 on the assistant's tokens."""
+    return [0.0 if l == -100 else (prompt_loss_weight if sft == -100 else 1.0) for sft, l in zip(sft_labels, labels)]
+
+
+def session_example(tok, prompt: str, completion: str, session_loss: str, prompt_loss_weight: float = 1.0) -> tuple[list[int], list[int], list[float]]:
     from plastic.backends.ttt_lm.backend import encode_conversation
 
-    ids, labels = encode_conversation(tok, [{"role": "user", "content": prompt}, {"role": "assistant", "content": completion}])
-    return ids, session_labels(ids, labels, session_loss)
+    ids, sft = encode_conversation(tok, [{"role": "user", "content": prompt}, {"role": "assistant", "content": completion}])
+    labels = session_labels(ids, sft, session_loss)
+    return ids, labels, session_weights(sft, labels, prompt_loss_weight)
 
 
-def pack_examples(examples: list[tuple[list[int], list[int]]], seq_len: int, pad_id: int) -> list[tuple[list[int], list[int]]]:
-    """Greedy packing of whole examples into ``seq_len`` windows; a longer example is truncated."""
-    out: list[tuple[list[int], list[int]]] = []
-    buf_ids: list[int] = []
-    buf_lab: list[int] = []
-    for ids, labels in examples:
-        ids, labels = ids[:seq_len], labels[:seq_len]
-        if buf_ids and len(buf_ids) + len(ids) > seq_len:
-            n = seq_len - len(buf_ids)
-            out.append((buf_ids + [pad_id] * n, buf_lab + [-100] * n))
-            buf_ids, buf_lab = [], []
-        buf_ids += ids
-        buf_lab += labels
-    if buf_ids:
-        n = seq_len - len(buf_ids)
-        out.append((buf_ids + [pad_id] * n, buf_lab + [-100] * n))
+def pack_examples(examples: list[tuple], seq_len: int, pad_id: int) -> list[tuple]:
+    """Greedy packing of whole examples into ``seq_len`` windows; a longer example is truncated. Examples are
+    (ids, labels) or (ids, labels, weights); padding gets label -100 and weight 0."""
+    out: list[tuple] = []
+    buf: list[list] = []
+    def flush():
+        if not buf or not buf[0]:
+            return
+        n = seq_len - len(buf[0])
+        pads = [[pad_id] * n, [-100] * n, [0.0] * n]
+        out.append(tuple(b + pads[i] for i, b in enumerate(buf)))
+    for ex in examples:
+        parts = [list(x)[:seq_len] for x in ex]
+        if len(parts) == 2:
+            parts.append([0.0 if l == -100 else 1.0 for l in parts[1]])
+        if buf and buf[0] and len(buf[0]) + len(parts[0]) > seq_len:
+            flush()
+            buf = []
+        if not buf:
+            buf = [[], [], []]
+        for i in range(3):
+            buf[i] += parts[i]
+    flush()
     return out
 
 
@@ -359,6 +378,23 @@ def fresh_session_answer(backend, *, max_new_tokens: int) -> Callable[[str], str
     return answer
 
 
+def fresh_session_answer_logprob(backend) -> Callable[[str, str], float]:
+    """Mean log-probability per token of ``expected`` after the rendered user turn, from a fresh state (storage;
+    compare with greedy recall for access). Rendering matches training/runtime (render_user_turn)."""
+    def logprob(question: str, expected: str) -> float:
+        prompt_ids = backend.encode_chat(question, first_turn=True)
+        ans_ids = backend.encode(expected)
+        if not ans_ids:
+            return float("nan")
+        ids = prompt_ids + ans_ids
+        logits = backend.logits_full(ids).float()
+        lp = torch.log_softmax(logits[len(prompt_ids) - 1:len(ids) - 1], dim=-1)
+        tgt = torch.tensor(ans_ids, dtype=torch.long, device=lp.device)
+        return float(lp.gather(1, tgt[:, None]).mean())
+
+    return logprob
+
+
 def _canary_scores(store: ArtifactStore, backend, model_id: str) -> dict[str, float] | None:
     from plastic.harness.canary import CanarySuite
 
@@ -439,10 +475,11 @@ def sleep_ttt(
     heldout = load_replay_conversations(cfg.replay_subset, "test", cfg.heldout_rows, cfg.seed + 1, log)
     replay = load_replay_conversations(cfg.replay_subset, "train", cfg.replay_rows, cfg.seed, log) if cfg.replay_ratio > 0 else []
     answer = fresh_session_answer(be, max_new_tokens=cfg.recall_max_new_tokens)
+    answer_lp = fresh_session_answer_logprob(be)
     before = {
         "heldout_nll": heldout_nll(be, heldout, cfg.seq_len) if heldout else None,
         "canary": _canary_scores(store, be, model_id),
-        "recall": run_probes(probes, answer).to_dict() if probes else None,
+        "recall": run_probes(probes, answer, answer_lp).to_dict() if probes else None,
     }
     report["before"] = before
     log(f"[sleep] before: heldout NLL {_fmt(before['heldout_nll'])}; recall {_fmt_recall(before['recall'])}")
@@ -474,7 +511,7 @@ def sleep_ttt(
         log(f"[sleep] anchor: {len(leaves)} session states folded with lambda {cfg.anchor_lambda}")
     else:
         pad_id = int(tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id)
-        session_examples = [session_example(tok, t.prompt, t.completion, cfg.session_loss) for t in accepted]
+        session_examples = [session_example(tok, t.prompt, t.completion, cfg.session_loss, cfg.prompt_loss_weight) for t in accepted]
         session_packed = pack_examples(session_examples, cfg.seq_len, pad_id)
         replay_packed = pack_examples([encode_conversation(tok, m) for m in replay], cfg.seq_len, pad_id) if replay else []
         report["packed"] = {"session": len(session_packed), "replay": len(replay_packed)}
@@ -511,8 +548,10 @@ def sleep_ttt(
                     batch = sess + rep
                     x = torch.tensor([b[0] for b in batch], dtype=torch.long, device=dev)
                     y = torch.tensor([b[1] for b in batch], dtype=torch.long, device=dev)
+                    w = torch.tensor([b[2] for b in batch], dtype=torch.float32, device=dev)[:, 1:]
                     logits = model(x, use_cache=False).logits[:, :-1].float()
-                    loss = F.cross_entropy(logits.reshape(-1, logits.shape[-1]), y[:, 1:].reshape(-1), ignore_index=-100)
+                    per_tok = F.cross_entropy(logits.reshape(-1, logits.shape[-1]), y[:, 1:].reshape(-1), ignore_index=-100, reduction="none").view(w.shape)
+                    loss = (per_tok * w).sum() / w.sum().clamp_min(1.0)
                 else:
                     x = torch.tensor([b[0] for b in sess], dtype=torch.long, device=dev)
                     with torch.no_grad():
@@ -547,7 +586,7 @@ def sleep_ttt(
     after = {
         "heldout_nll": heldout_nll(be, heldout, cfg.seq_len) if heldout else None,
         "canary": _canary_scores(store, be, model_id),
-        "recall": run_probes(probes, answer).to_dict() if probes else None,
+        "recall": run_probes(probes, answer, answer_lp).to_dict() if probes else None,
     }
     report["after"] = after
     log(f"[sleep] after:  heldout NLL {_fmt(after['heldout_nll'])}; recall {_fmt_recall(after['recall'])}")
@@ -555,9 +594,12 @@ def sleep_ttt(
                                   tolerance_collapse=cfg.tolerance_collapse)
     report["gate"] = gate
     if before["recall"] and after["recall"]:
+        lb, la = before["recall"].get("mean_answer_logprob"), after["recall"].get("mean_answer_logprob")
         report["recall_gain"] = {"recalled": after["recall"]["recalled"] - before["recall"]["recalled"],
                                  "recalled_paraphrase": after["recall"]["recalled_paraphrase"] - before["recall"]["recalled_paraphrase"],
-                                 "n_probes": after["recall"]["n_probes"]}
+                                 "n_probes": after["recall"]["n_probes"],
+                                 # storage: how much more likely the expected answers became, independent of greedy access
+                                 "answer_logprob_lift": (la - lb) if (la is not None and lb is not None) else None}
 
     if gate["measured"] and not gate["passed"]:
         report["status"] = "rejected"
@@ -669,4 +711,6 @@ def _fmt_recall(d: dict[str, Any] | None) -> str:
     s = f"{d['recalled']}/{d['n_probes']}"
     if d.get("n_paraphrase"):
         s += f" (paraphrase {d['recalled_paraphrase']}/{d['n_paraphrase']})"
+    if d.get("mean_answer_logprob") is not None:
+        s += f"; answer logprob {d['mean_answer_logprob']:.3f}"
     return s
