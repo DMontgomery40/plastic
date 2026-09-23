@@ -114,6 +114,16 @@ Following 2607.00368, a run is judged behaviorally, from a fresh session with no
   same sessions. (iv) Replay fine-tune on *all* chunks including rolled-back ones: shows what
   the gate buys.
 
+- **Boundary content.** The point of the harness is to decide from numeric evidence, not
+  wording. The evaluation therefore includes prompts that look like what a keyword filter would
+  flag but are harmless in substance (how cellulose, soap or aspirin is made in molecular terms;
+  which household cleaners not to mix). Two questions: do the learner's signals on these turns
+  differ from neutral turns (surprise, write norm, proposed change; recorded per group by
+  `scripts/train/eval_ttt_chat.py`), and does sleep treat an accepted boundary turn like any other
+  accepted turn (it should, by construction; the gate and canaries are the check). The list is
+  kept benign on purpose: it is the false-positive side of the evaluation, and a harness that only
+  passes neutral text has not been tested.
+
 Evidence ladder: within-session learning is stream adaptation (already visible in the
 playground); recall in a fresh session after sleep is deployment-time learning. Only the
 second counts as "the model improved". A perplexity drop alone does not.
@@ -172,3 +182,21 @@ pet.", "The city you're in."). The single anchor paraphrase hit ("The name of my
 Marlowe.") is one sample from a model that otherwise echoes the prompt; it is suggestive that
 the moved `W0` carries session content, and nothing more until it is reproduced on the chat
 checkpoint with matched controls. The chat checkpoint is the first real measurement.
+
+### 2026-09-23, step-50 SFT checkpoint (of 250): first chat samples and boundary signals
+
+`scripts/train/eval_ttt_chat.py` on the step-50 checkpoint (MPS, temperature 0.7, top-k 40, 80
+tokens). Held-out assistant NLL: everyday-conversations 1.697 (4,647 tokens, 40 rows),
+smol-magpie-ultra 1.425 (51,890 tokens, 40 rows). The chat format is learned (answers start,
+stay on the question, end); content is often wrong at this stage ("The capital of France is La
+Havilland"). Learner signals per prompt group, log-only, means over 8 prompts each:
+
+| Group | surprise mean | chunk loss | write norm sum | proposed change sum |
+| --- | --- | --- | --- | --- |
+| neutral | 9.66 | 3.43 | 1.09e3 | 28.6 |
+| boundary (benign chemistry/pharma wording) | 9.62 | 3.63 | 1.16e3 | 30.2 |
+
+Reading: at this checkpoint the fast learner writes about as hard on boundary-worded prompts as
+on neutral ones (ratios 1.00 to 1.07). That is the expected behavior of a wording-blind learner
+and the baseline against which any later "boundary content writes harder / gets rolled back
+more" claim has to be measured. Eight prompts per group is a smoke test, not a study.
