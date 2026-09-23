@@ -468,15 +468,7 @@ Replay accepted, → 1.341, 0/24, general verbatim 3/7 → 0/7 (paraphrase 3/7 �
 → 1.372, 0/24, general held. Dream: the 30-turn teacher state produced 180 candidates, all degenerate,
 179 of them "Earth. Earth. Earth…", the echo of the last teaching statement whatever fact the prompt
 quoted; rejected before training. Ungated accepted, → 1.344, 0/24 with one unseen-phrasing containment
-hit ('Name the season I prefer.' expected 'autumn' -> 'Winter.
-
-Spring.
-
-Summer.
-
-Autumn.
-
-Autumn.'; 'On a clear day, what color is the sky?' expected 'blue' -> 'It's a deep, rich, deep blue.'), general verbatim 0/7.
+hit ('Name the season I prefer.' expected 'autumn', answered by listing all four seasons, so a containment artifact), general verbatim 0/7.
 
 The teaching session of this seed did not settle into an acknowledgement frame as seed 0's did; it
 settled into word-echo loops ("Cello. Cello. Cello…", "Priya. Priya…"), and for two planted
