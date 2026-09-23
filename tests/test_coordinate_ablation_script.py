@@ -32,8 +32,13 @@ def test_run_variant_and_collect_smoke(tmp_path):
         assert r["contract"]["revert"]["ok"] is True
         assert len(r["train"]["log"]) >= 2 and r["train"]["log"][-1]["step"] == 2
         assert (r["train"]["log"][-1]["eta"] is None) == (v == "delta_baseline")
+    assert (tmp_path / "full.pt").exists() and (tmp_path / "delta_baseline.pt").exists()
+    full = json.load(open(tmp_path / "full.json"))
+    assert full["fast_signals"]["stepped_fraction"] == 1.0 and full["checkpoint"] == "full.pt"
+    assert json.load(open(tmp_path / "delta_baseline.json"))["fast_signals"] is None
     readme = collect(str(tmp_path))
     assert "| full |" in readme and "| decay_only |" in readme and "| delta_baseline |" in readme
+    assert "→" in readme  # the inner-loss diagnostic column is filled for coordinate variants
     assert "fast parameters frozen (freeze=True)" in readme and "writes disabled (beta_scale=0)" in readme
     saved = json.load(open(tmp_path / "full.json"))
     assert saved["no_adapt_label"].startswith("fast parameters frozen")

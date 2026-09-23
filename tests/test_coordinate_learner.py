@@ -63,6 +63,22 @@ def test_step_mse_starts_fresh_every_call_and_freeze_differs_from_adapt():
     assert torch.allclose(a1[:, :16], f1[:, :16])
 
 
+def test_fast_signals_summary_reports_proposals_only_when_stepped():
+    learner = CoordinateLearner(_tiny(), mode="frozen")
+    b = _batch(3)
+    assert learner.fast_signals_summary() is None
+    learner.step_mse(b, adapt=True)
+    s = learner.fast_signals_summary()
+    # a 32-step episode with chunk 16 crosses two boundaries, at steps 16 and 32
+    assert s["boundaries"] == 2 and s["stepped_fraction"] == 1.0
+    assert s["inner_loss_before"] is not None and s["inner_loss_after"] is not None
+    assert len(s["dW_norm_by_layer"]) == 2 == len(s["dtheta_norm_by_layer"]) == len(s["eta_by_layer"])
+    assert s["r_peak_inf"] <= s["bound_peak"] + 1e-6
+    learner.step_mse(b, adapt=False)
+    f = learner.fast_signals_summary()
+    assert f["stepped_fraction"] == 0.0 and f["inner_loss_before"] is None and f["dW_norm_by_layer"] is None
+
+
 def test_fast_updates_off_makes_adapt_equal_freeze():
     learner = CoordinateLearner(_tiny(fast_updates=False), mode="frozen")
     b = _batch(1)

@@ -133,17 +133,27 @@ def run_variant(variant: str, args: argparse.Namespace, out: str, *, spec: Contr
         lr=args.lr, seed=args.seed + 1, log_every=args.log_every, device=device,
     )
     train_s = time.time() - t0
+    os.makedirs(out, exist_ok=True)
+    torch.save(model.state_dict(), os.path.join(out, f"{variant}.pt"))
     learner, no_adapt_label = learner_for(variant, model, device)
     report = run_contract(learner, spec, seed=args.seed)
+    # what the fast path proposed on held-out worlds: one adapting pass on the speed batch
+    fast_signals = None
+    if hasattr(learner, "fast_signals_summary"):
+        _, heldout = split_combinations(k=spec.k, n_heldout=spec.n_heldout, seed=spec.split_seed)
+        probe = mechanism_batch(spec.eval_batch, seq_len=spec.seq_len, episodes_per_seq=1, combos=heldout, policy="gaussian", rng=torch.Generator().manual_seed(args.seed * 10_000 + 200))
+        learner.step_mse(probe, adapt=True)
+        fast_signals = learner.fast_signals_summary()
     result = {
         "variant": variant,
         "config": VARIANTS[variant] if VARIANTS[variant] is not None else "PlasticDynamics",
         "size": {"d_model": args.d_model, "n_heads": args.n_heads, "n_layers": args.n_layers, "chunk": args.chunk, "parameters": params},
         "train": {"steps": args.steps, "batch": args.batch, "seq_len": args.seq_len, "episodes": args.episodes, "lr": args.lr, "seed": args.seed, "wall_s": train_s, "s_per_step": train_s / max(1, args.steps), "log": log},
         "no_adapt_label": no_adapt_label,
+        "fast_signals": fast_signals,
+        "checkpoint": f"{variant}.pt",
         "contract": report,
     }
-    os.makedirs(out, exist_ok=True)
     with open(os.path.join(out, f"{variant}.json"), "w", encoding="utf-8") as f:
         json.dump(result, f, indent=1)
     return result
@@ -164,7 +174,7 @@ def collect(out: str) -> str:
         raise SystemExit(f"no variant results in {out}")
     any_r = next(iter(results.values()))
     policies = list(any_r["contract"]["transfer"].keys())
-    head = ["variant", "params", "train loss (last)", "s/step"] + [f"{p}: adapt / no-adapt" for p in policies] + ["train dist: adapt / no-adapt", "speed mean", "half at step", "η per layer"]
+    head = ["variant", "params", "train loss (last)", "s/step"] + [f"{p}: adapt / no-adapt" for p in policies] + ["train dist: adapt / no-adapt", "speed mean", "half at step", "η per layer", "inner loss before → after", "‖ΔW‖, ‖Δθ‖ per layer"]
     lines = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
     for name, r in results.items():
         c = r["contract"]
@@ -177,6 +187,12 @@ def collect(out: str) -> str:
         row.append(f"{_fmt(fb['adapt'])} / {_fmt(fb['no_adapt'])}")
         s = c["speed"]["before"]
         row += [f"{s['area']:.3f}", str(s["steps_to_half"]), ", ".join(f"{e:.3f}" for e in last["eta"]) if last.get("eta") else "n/a"]
+        fs = r.get("fast_signals")
+        if fs and fs.get("inner_loss_before") is not None:
+            row.append(f"{fs['inner_loss_before']:.4f} → {fs['inner_loss_after']:.4f}")
+            row.append(", ".join(f"{w:.3g}/{t:.3g}" for w, t in zip(fs["dW_norm_by_layer"], fs["dtheta_norm_by_layer"])))
+        else:
+            row += ["n/a", "n/a"]
         lines.append("| " + " | ".join(row) + " |")
     table = "\n".join(lines)
     labels = {name: r["no_adapt_label"] for name, r in results.items()}
@@ -189,7 +205,9 @@ def collect(out: str) -> str:
         "is labelled: " + "; ".join(f"{k}: {v}" for k, v in labels.items()) + ".",
         "",
         "`speed mean` is the adapting error as a fraction of the no-adapt error over the first probe steps (lower is faster); "
-        "`half at step` is the first step at which it drops below one half. `η per layer` is the learned inner step size.",
+        "`half at step` is the first step at which it drops below one half. `η per layer` is the learned inner step size. "
+        "`inner loss before → after` re-scores the observed chunk under the proposed step (a support diagnostic, not an "
+        "adaptation score); `‖ΔW‖, ‖Δθ‖` are the proposed changes per layer, averaged over held-out boundaries.",
         "",
         table,
         "",

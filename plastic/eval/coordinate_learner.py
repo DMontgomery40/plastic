@@ -71,6 +71,32 @@ class CoordinateLearner:
         self.model.eval()
         return {"accepted": True, "mode": self.mode, "optimizer": "adam", "lr": self.lr, "loss_first": losses[0], "loss_last": losses[-1], "steps": self.steps, "meta_gradient": self.model.cfg.meta_gradient}
 
+    def fast_signals_summary(self) -> dict[str, Any] | None:
+        """Means over the boundaries of the last ``step_mse`` call: what the fast path proposed
+        (inner loss before and after the proposed step on the observed chunk, the size of the
+        proposed change per layer, the effective step) and the amplitude margin. A support
+        diagnostic, never a score of adaptation; adaptation is scored on later targets."""
+        rep = self.last_report
+        if rep is None or not rep.chunks:
+            return None
+        chunks = rep.chunks
+        stepped = [c for c in chunks if c.stepped]
+
+        def _m(vals: list[Tensor]) -> float | None:
+            return float(torch.stack([v.float().mean() for v in vals]).mean()) if vals else None
+
+        return {
+            "boundaries": len(chunks),
+            "stepped_fraction": len(stepped) / len(chunks),
+            "inner_loss_before": _m([c.inner_loss_before for c in stepped]),
+            "inner_loss_after": _m([c.inner_loss_after for c in stepped]),
+            "dW_norm_by_layer": [float(x) for x in torch.stack([c.dW_norm.float().mean(0) for c in stepped]).mean(0)] if stepped else None,
+            "dtheta_norm_by_layer": [float(x) for x in torch.stack([c.dtheta_norm.float().mean(0) for c in stepped]).mean(0)] if stepped else None,
+            "eta_by_layer": [float(x) for x in stepped[0].eta] if stepped else None,
+            "r_peak_inf": _m([c.r_peak_inf for c in chunks]),
+            "bound_peak": _m([c.bound_peak for c in chunks]),
+        }
+
     @torch.no_grad()
     def step_mse(self, batch: MechanismBatch, *, adapt: bool) -> Tensor:
         x = batch.inputs.to(self.device)
