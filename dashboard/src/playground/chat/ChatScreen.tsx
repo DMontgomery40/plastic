@@ -14,11 +14,11 @@ function TurnCard({ turn }: { turn: Turn }) {
     <article className="rounded border border-edge bg-surface-raised">
       <div className="border-b border-edge px-4 py-3">
         <p className="text-label font-semibold uppercase tracking-wide text-ink-muted">You</p>
-        <p className="mt-1 whitespace-pre-wrap text-base text-ink-primary">{turn.prompt}</p>
+        <p className="mt-1 whitespace-pre-wrap text-base text-ink-primary [overflow-wrap:anywhere]">{turn.prompt}</p>
       </div>
       <div className="px-4 py-3">
         <p className="text-label font-semibold uppercase tracking-wide text-ink-muted">Model</p>
-        <p className="mt-1 whitespace-pre-wrap font-mono text-sm text-ink-primary">{turn.completion || <span className="text-ink-muted">(empty completion)</span>}</p>
+        <p className="mt-1 whitespace-pre-wrap font-mono text-sm text-ink-primary [overflow-wrap:anywhere]">{turn.completion || <span className="text-ink-muted">(empty completion)</span>}</p>
       </div>
       <div className="border-t border-edge px-4 py-3">
         <LearningStrip chunks={turn.chunks} />

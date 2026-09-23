@@ -52,6 +52,16 @@ function typePrompt() {
   return prompt;
 }
 
+describe('turn text', () => {
+  it('wraps a reply with no spaces inside its card', () => {
+    const looped = 'an'.repeat(120);
+    useStore.setState({ detail: { ...useStore.getState().detail!, trace: [{ t_unix: 0, kind: 'chat', prompt: 'x'.repeat(200), completion: looped, pos_end: 10, n_transactions: 0 }] } });
+    render(<ChatScreen />);
+    expect(screen.getByText(looped).className).toContain('[overflow-wrap:anywhere]');
+    expect(screen.getByText('x'.repeat(200)).className).toContain('[overflow-wrap:anywhere]');
+  });
+});
+
 describe('chat request validation and recovery', () => {
   it.each([['Max tokens', '129'], ['Max tokens', '1.5'], ['Temperature', '0'], ['Top-k', '-1'], ['Seed', '-1']])(
     'keeps invalid %s input out of the public request', async (label, value) => {
