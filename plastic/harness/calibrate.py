@@ -399,188 +399,31 @@ def calibrate_model(
     return cal
 
 
-class CalibrationIncomplete(Exception):
-    """Raised when a checkpointed calibration stops at its deadline before finishing. Progress is
-    persisted to the checkpoint; re-invoking ``calibrate_qwen`` with the same ``checkpoint_path``
-    resumes and EXTENDS the collected references rather than restarting."""
-
-    def __init__(self, phase: str, fit_used: int, fit_requested: int, cusum_used: int, cusum_requested: int) -> None:
-        self.phase = phase
-        self.fit_used, self.fit_requested = fit_used, fit_requested
-        self.cusum_used, self.cusum_requested = cusum_used, cusum_requested
-        super().__init__(
-            f"calibration incomplete in {phase}: fit {fit_used}/{fit_requested}, cusum {cusum_used}/{cusum_requested}"
-        )
-
-
-class CalibrationCheckpointError(Exception):
-    """Raised when a checkpoint at ``checkpoint_path`` is present but incompatible (different model,
-    corpus, seed or config), unreadable, or malformed. The existing file is left UNTOUCHED so the
-    incremental work it may hold is never lost to an overwrite; an explicit fresh run must point at a
-    different ``checkpoint_path`` (or remove the stale one deliberately)."""
-
-
-def _stable_hash(obj: Any) -> str:
-    """Order-sensitive digest of a JSON-able structure (lists keep order, dict keys are sorted)."""
-    return hashlib.sha256(json.dumps(obj, sort_keys=True, default=str).encode("utf-8")).hexdigest()
-
-
-def _validate_checkpoint(st: dict[str, Any], path: str, identity: str, fit_requested: int, cusum_requested: int) -> None:
-    """Reject an incompatible or malformed checkpoint BEFORE any write, so a stale/corrupt file is
-    preserved rather than silently overwritten or trusted. Covers identity, phase, counter types and
-    ranges, requested-count consistency, and the carried state a mid-CUSUM resume requires."""
-    def bad(msg: str) -> None:
-        raise CalibrationCheckpointError(
-            f"checkpoint at {path} {msg}; refusing to overwrite it. Use a fresh checkpoint_path "
-            f"(or remove the stale file deliberately).")
-
-    if st.get("identity") != identity:
-        bad("is for a different model/corpus/seed/config (identity mismatch)")
-    if st.get("phase") not in ("fit", "cusum"):
-        bad(f"has an invalid phase {st.get('phase')!r}")
-    if not isinstance(st.get("records"), list):
-        bad("has a malformed records list")
-    for key in ("fit_used", "cusum_used", "n_transactions", "fit_requested", "cusum_requested"):
-        v = st.get(key)
-        if not isinstance(v, int) or isinstance(v, bool) or v < 0:
-            bad(f"has a non-integer/negative {key}={v!r}")
-    if st["fit_requested"] != fit_requested or st["cusum_requested"] != cusum_requested:
-        bad(f"has inconsistent requested counts (fit {st['fit_requested']} vs {fit_requested}, "
-            f"cusum {st['cusum_requested']} vs {cusum_requested})")
-    fit_used, cusum_used, phase = int(st["fit_used"]), int(st["cusum_used"]), st["phase"]
-    if fit_used > fit_requested or cusum_used > cusum_requested:
-        bad(f"has out-of-range counters (fit {fit_used}/{fit_requested}, cusum {cusum_used}/{cusum_requested})")
-    if phase == "fit" and cusum_used != 0:
-        bad(f"is in the fit phase but records cusum_used={cusum_used}")
-    if phase == "cusum" and fit_used != fit_requested:
-        # the CUSUM pass only begins once the fit pass is COMPLETE; a cusum-phase checkpoint with an
-        # unfinished fit would silently skip the missing fit turns (ASTRA-092 cross-phase case)
-        bad(f"is in the CUSUM phase but the fit pass is incomplete (fit {fit_used}/{fit_requested})")
-    if phase == "cusum" and cusum_used > 0 and st.get("runner_state") is None:
-        bad("is mid-CUSUM (cusum_used>0) but is missing the carried runner state")
-
-
-def _calibration_identity(*, model_signature: str, seed: int, gen: dict[str, Any], target_fpr: float,
-                          chunk: int, fit_prompts: list[str], cusum_prompts: list[str],
-                          corpus_hash: str | None, harness_cfg: HarnessConfig, device: str) -> str:
-    """Bind a checkpoint to the exact model, decoding, corpus (ordered), full harness config and compute
-    device, so a checkpoint from any different run -- including the same run on another device, whose
-    kernels need not match numerically -- is rejected rather than silently extended into an invalid mix."""
-    return _stable_hash({
-        "model_signature": model_signature, "seed": int(seed), "gen": gen,
-        "target_fpr": float(target_fpr), "chunk": int(chunk),
-        "fit_prompts": list(fit_prompts), "cusum_prompts": list(cusum_prompts),
-        "corpus_hash": corpus_hash, "harness_cfg": harness_cfg.to_dict(), "device": str(device),
-    })
-
-
-def _ckpt_save(path: str, obj: dict[str, Any]) -> None:
-    """Atomic write: a full torch.save to a temp file in the same directory, then os.replace, so a
-    kill mid-write never leaves a truncated checkpoint at ``path``."""
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    tmp = f"{path}.tmp.{os.getpid()}"
-    torch.save(obj, tmp)
-    os.replace(tmp, path)
-
-
-def _ckpt_load(path: str, *, log=print) -> dict[str, Any] | None:
-    if not path or not os.path.exists(path):
-        return None
-    try:
-        return torch.load(path, weights_only=False)
-    except Exception as e:  # a truncated / unreadable checkpoint is treated as absent, loudly
-        log(f"[calibrate] ignoring unreadable checkpoint {path}: {e}")
-        return None
-
-
 def _collect_calibration_records(runner, tok, prompts: list[str], cusum_prompts: list[str], *, seed: int,
-                                 gen: dict[str, Any], deadline: float | None, checkpoint_path: str | None,
-                                 identity: str, drive, log=print):
-    """Run the fit (reset-between) and continuous-CUSUM passes, resuming from a matching checkpoint.
-
-    Returns ``(records, fit_used, cont, cusum_used, cusum_ran)``. The fit pass is per-prompt
-    independent (``runner.reset()`` is a genuine clean slate: fresh CUSUM accumulator, history and
-    budget), so its checkpoint is just ``(records, fit_used)``. The CUSUM pass is CONTINUOUS, so its
-    checkpoint also carries the runner state at the last completed turn (only once ``cusum_used>0``).
-    With a ``checkpoint_path`` a deadline persists progress and raises ``CalibrationIncomplete``;
-    without one it breaks and returns partial records — the existing un-checkpointed behavior."""
-    fit_requested, cusum_requested = len(prompts), len(cusum_prompts)
-    st = None
-    if checkpoint_path and os.path.exists(checkpoint_path):
-        st = _ckpt_load(checkpoint_path, log=log)
-        if st is None:  # present but unreadable/corrupt: preserve it, never overwrite blindly
-            raise CalibrationCheckpointError(
-                f"checkpoint at {checkpoint_path} is unreadable/corrupt; refusing to overwrite it. "
-                f"Move it aside or use a fresh checkpoint_path.")
-        _validate_checkpoint(st, checkpoint_path, identity, fit_requested, cusum_requested)
-    if st is None:
-        phase, records, fit_used, cont, cusum_used = "fit", [], 0, [], 0
-    else:
-        phase = str(st["phase"])
-        records, fit_used = list(st["records"]), int(st["fit_used"])
-        cont, cusum_used = list(st["cont"]), int(st["cusum_used"])
-        # restore the transaction counter so resumed records keep the SAME global indices as an
-        # uninterrupted run (reset() deliberately does not clear it, so a fresh process starts at 0)
-        runner.n_transactions = int(st["n_transactions"])
+                                 gen: dict[str, Any], drive) -> tuple[list[dict[str, Any]], list[float], bool]:
+    """Run the fit pass (a fresh chat per prompt, reset between) and the continuous CUSUM pass (one
+    multi-turn chat, no reset). Returns ``(records, cusum_values, cusum_ran)``. Short enough to rerun
+    from scratch if interrupted; there is no resume machinery on purpose."""
 
     def _chat(prompt: str, salt: int) -> None:
         runner.transactions = []
         g = torch.Generator().manual_seed(int(seed) + salt)
-        drive(runner, tok, prompt, max_new_tokens=gen["max_new_tokens"], temperature=gen["temperature"],
-              top_k=gen["top_k"], gen=g)
+        drive(runner, tok, prompt, max_new_tokens=gen["max_new_tokens"], temperature=gen["temperature"], top_k=gen["top_k"], gen=g)
 
-    def _save(*, runner_state=None) -> None:
-        if not checkpoint_path:
-            return
-        _ckpt_save(checkpoint_path, {
-            "identity": identity, "phase": phase, "records": records, "fit_used": fit_used,
-            "cont": cont, "cusum_used": cusum_used, "runner_state": runner_state,
-            "n_transactions": int(runner.n_transactions),
-            "fit_requested": fit_requested, "cusum_requested": cusum_requested,
-        })
-
-    def _stop(cur_phase: str, *, runner_state=None) -> bool:
-        # shared deadline handling: checkpoint+raise when resumable, else signal a partial break
-        if deadline is None or time.time() <= deadline:
-            return False
-        if checkpoint_path:
-            _save(runner_state=runner_state)
-            raise CalibrationIncomplete(cur_phase, fit_used, fit_requested, cusum_used, cusum_requested)
-        return True
-
-    # ---- FIT: a fresh chat per prompt (reset between); each turn's records are independent ----
-    if phase == "fit":
-        while fit_used < fit_requested:
-            if _stop("fit"):
-                break
-            runner.reset()
-            _chat(prompts[fit_used], fit_used)
-            records.extend(runner.transactions)
-            fit_used += 1
-            _save()
-        if fit_used == fit_requested:
-            phase, cusum_used = "cusum", 0
-            _save()
-
+    records: list[dict[str, Any]] = []
+    for i, prompt in enumerate(prompts):
+        runner.reset()
+        _chat(prompt, i)
+        records.extend(runner.transactions)
     cusum_ran = any(r["signals"].get("log_delta_norm") is not None for r in records)
-    if not cusum_ran:
-        return records, fit_used, cont, cusum_used, False
+    cont: list[float] = []
+    if cusum_ran:
+        runner.reset()
+        for j, prompt in enumerate(cusum_prompts):
+            _chat(prompt, 1000 + j)
+            cont.extend(float(r["signals"]["log_delta_norm"]) for r in runner.transactions if r["signals"].get("log_delta_norm") is not None)
+    return records, cont, cusum_ran
 
-    # ---- CUSUM: one CONTINUOUS multi-turn chat (no reset); resume restores the runner state ----
-    if phase == "cusum" and cusum_used > 0:
-        runner.load_state_dict(st["runner_state"])  # validated present above; carries n_transactions too
-    else:
-        runner.reset()  # fresh CUSUM (fit just completed, or resuming the phase-transition checkpoint);
-        # reset() preserves n_transactions, so the CONTINUOUS records keep counting on from the fit pass
-    while cusum_used < cusum_requested:
-        if _stop("cusum", runner_state=(runner.state_dict() if cusum_used > 0 else None)):
-            break
-        _chat(cusum_prompts[cusum_used], 1000 + cusum_used)
-        cont.extend(float(r["signals"]["log_delta_norm"]) for r in runner.transactions
-                    if r["signals"].get("log_delta_norm") is not None)
-        cusum_used += 1
-        _save(runner_state=runner.state_dict())
-    return records, fit_used, cont, cusum_used, True
 
 
 def _load_chat_backend(kind: str | None, rec: dict, device: torch.device):
@@ -613,9 +456,6 @@ def calibrate_qwen(
     cusum_prompts: Iterable[str] | None = None,
     harness_cfg: HarnessConfig | None = None,
     device: torch.device | str = "cpu",
-    deadline: float | None = None,
-    checkpoint_path: str | None = None,
-    corpus_hash: str | None = None,
     log=print,
 ) -> "Calibration":
     """Calibrate Qwen harness thresholds on the ACTUAL Session.chat protocol.
@@ -650,18 +490,9 @@ def calibrate_qwen(
     prompts = list(prompts)
     cusum_list = list(cusum_prompts) if cusum_prompts is not None else prompts
     gen = {"max_new_tokens": max_new_tokens, "temperature": temperature, "top_k": top_k}
-    identity = _calibration_identity(
-        model_signature=f"{kind}:{backend.checkpoint_digest}", seed=seed, gen=gen, target_fpr=target_fpr,
-        chunk=cfg.chunk, fit_prompts=prompts, cusum_prompts=cusum_list, corpus_hash=corpus_hash,
-        harness_cfg=hcfg, device=str(device),
-    )
     # per-chunk reference (fresh chat per prompt) and continuous-CUSUM reference (no reset), both
-    # through the real generation path; with a checkpoint_path a deadline persists progress and
-    # raises CalibrationIncomplete so a bounded invocation resumes rather than re-fitting.
-    records, fit_used, cont, cusum_used, cusum_ran = _collect_calibration_records(
-        runner, tok, prompts, cusum_list, seed=seed, gen=gen, deadline=deadline,
-        checkpoint_path=checkpoint_path, identity=identity, drive=drive_chat_turn, log=log,
-    )
+    # through the real generation path
+    records, cont, cusum_ran = _collect_calibration_records(runner, tok, prompts, cusum_list, seed=seed, gen=gen, drive=drive_chat_turn)
     if not records:
         raise ValueError("no chunks observed during calibration")
     signals = [r["signals"] for r in records]
@@ -697,20 +528,12 @@ def calibrate_qwen(
         target_fpr=float(target_fpr),
         created_at_unix=int(time.time()),
     )
-    # reached only when collection COMPLETED (an interrupted checkpointed run raises before here, so a
-    # partial calibration is never saved and never auto-installed by a Session before resume finishes)
     cal.save(store.model_dir(model_id))
-    cusum_complete = (not cusum_ran) or (cusum_used == len(cusum_list))
     store.register_model(model_id, {
         "calibrated_at_unix": cal.created_at_unix, "calibration_chunks": cal.n_chunks,
         "calibration_prompt_chunks": prompt_chunks, "calibration_generation_chunks": gen_chunks,
-        "calibration_fit_prompts_used": fit_used, "calibration_fit_prompts_requested": len(prompts),
-        "calibration_fit_complete": fit_used == len(prompts),
-        "calibration_cusum_prompts_used": cusum_used, "calibration_cusum_prompts_requested": len(cusum_list),
-        "calibration_cusum_complete": cusum_complete,
+        "calibration_fit_prompts": len(prompts), "calibration_cusum_prompts": len(cusum_list) if cusum_ran else 0,
     })
-    if checkpoint_path and os.path.exists(checkpoint_path):
-        os.remove(checkpoint_path)  # a completed calibration no longer needs its resume checkpoint
     log(f"[calibrate] qwen {model_id}: {len(signals)} chunks ({prompt_chunks} prompt, {gen_chunks} generation); "
         + "thresholds: " + ", ".join(f"{k}={v:.4g}" for k, v in thresholds.items()))
     return cal

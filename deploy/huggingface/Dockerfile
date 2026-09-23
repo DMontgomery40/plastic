@@ -14,7 +14,6 @@ RUN pip install --no-cache-dir '.[pretrained]'
 COPY deploy/ ./deploy/
 RUN python -m deploy.huggingface.pretrained --download /opt/qwen
 COPY text/ ./text/
-COPY physics/ ./physics/
 COPY --from=frontend /build/dist ./dashboard/dist
 RUN useradd --uid 1000 --create-home demo
 USER demo

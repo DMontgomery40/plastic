@@ -46,9 +46,11 @@ and session; existing local artifacts are preserved. The unrestricted local API
 and dashboard have no public-mode marker.
 
 The published `text/` and `physics/` folders preserve the original research
-checkpoints, tokenizers, saved
-calibration/canaries/Fisher references, and training logs. `prepare.py` verifies
-manifest checksums before registering them and refuses to overwrite changed files.
+checkpoints, tokenizers, saved calibration/canaries/Fisher references, and training
+logs. The Space registers only the `text/` bundle at boot; the physics checkpoint
+stays published as an internal adaptation benchmark and is not part of the public
+playground. `prepare.py` verifies manifest checksums before registering a bundle and
+refuses to overwrite changed files.
 Saved calibration is an operating point, not a promise of a policy-level false-positive
 rate or adversarial robustness.
 

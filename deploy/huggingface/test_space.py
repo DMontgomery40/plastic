@@ -114,7 +114,7 @@ def test_prepare_checks_integrity_and_preserves_existing_state(tmp_path):
 
     source, target = tmp_path / 'source', tmp_path / 'target'
     original = ArtifactStore(str(tmp_path / 'original'))
-    for sub, mid, domain in [('text', 'lm_wikitext_l4', 'text'), ('physics', 'phys_mps_3k', 'physics')]:
+    for sub, mid, domain in [('text', 'lm_wikitext_l4', 'text')]:
         cfg = ModelConfig(domain=domain, d_model=8, n_heads=1, n_layers=1, chunk=4, vocab_size=32)
         original.save_checkpoint(mid, cfg, build_model(cfg), step=1)
         import shutil
@@ -124,11 +124,11 @@ def test_prepare_checks_integrity_and_preserves_existing_state(tmp_path):
         hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in folder.iterdir()}
         (folder / 'manifest.json').write_text(json.dumps({'files':hashes}))
     store = prepare_store(source, target)
-    assert len(store.list_models()) == 2
+    assert len(store.list_models()) == 1
     store.register_model('lm_wikitext_l4', {'custom': 'preserve me'})
     prepare_store(source, target)
     assert store.load_model_record('lm_wikitext_l4')['custom'] == 'preserve me'
-    (Path(store.model_dir('phys_mps_3k')) / 'config.json').write_text('{}')
+    (Path(store.model_dir('lm_wikitext_l4')) / 'config.json').write_text('{}')
     with pytest.raises(ValueError, match='overwrite'):
         prepare_store(source, target)
     (source / 'text' / 'config.json').write_text('{}')

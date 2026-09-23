@@ -8,7 +8,7 @@ import shutil
 
 from plastic.store import ArtifactStore
 
-PAIRS = (('text', 'lm_wikitext_l4'), ('physics', 'phys_mps_3k'))
+PAIRS = (('text', 'lm_wikitext_l4'),)
 
 
 def prepare_store(source: Path, target: Path, *, seed_sessions: bool = False):
@@ -42,7 +42,7 @@ def prepare_store(source: Path, target: Path, *, seed_sessions: bool = False):
                 'eval': store.read_eval(mid), 'source': 'dmontgomery40/plastic'})
     if seed_sessions:
         from plastic.session.runner import Session
-        for (_, mid), sid in zip(PAIRS, ('demo_text', 'demo_physics')):
+        for (_, mid), sid in zip(PAIRS, ('demo_text',)):
             if not store.session_exists(sid):
                 Session.create(store, model_id=mid, session_id=sid, device='cpu')
     return store
@@ -50,9 +50,9 @@ def prepare_store(source: Path, target: Path, *, seed_sessions: bool = False):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--source', type=Path, default=Path('.'), help='Download directory with text/ and physics/')
+    parser.add_argument('--source', type=Path, default=Path('.'), help='Download directory with text/')
     parser.add_argument('--artifacts-root', type=Path, default=Path('artifacts'))
-    parser.add_argument('--seed-sessions', action='store_true', help='Create the two public demo sessions')
+    parser.add_argument('--seed-sessions', action='store_true', help='Create the public demo session')
     args = parser.parse_args()
     store = prepare_store(args.source, args.artifacts_root, seed_sessions=args.seed_sessions)
     for record in store.list_models():

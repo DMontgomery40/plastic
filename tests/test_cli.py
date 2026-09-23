@@ -8,8 +8,33 @@ def test_help_lists_commands(capsys):
     with pytest.raises(SystemExit):
         build_parser().parse_args(["--help"])
     out = capsys.readouterr().out
-    for cmd in ("data", "train", "models", "bench"):
+    for cmd in ("data", "train", "models", "calibrate", "chat"):
         assert cmd in out
+
+
+def test_calibrate_pretrained_chat_model_requires_prompts(tmp_path, capsys):
+    root = str(tmp_path / "artifacts")
+    store = ArtifactStore(root)
+    store.register_model("chat_m", {"backend": "ttt", "domain": "text"})
+    assert main(["calibrate", "chat_m", "--artifacts-root", root]) == 2
+    assert "--prompts" in capsys.readouterr().err
+    args = build_parser().parse_args(["calibrate", "chat_m", "--prompts", "p.txt", "--cusum-prompts", "c.txt", "--max-new-tokens", "8"])
+    assert (args.prompts, args.cusum_prompts, args.max_new_tokens) == ("p.txt", "c.txt", 8)
+
+
+def test_read_prompts_accepts_lines_or_json_list(tmp_path):
+    from plastic.cli import _read_prompts
+
+    lines = tmp_path / "p.txt"
+    lines.write_text("first prompt\n\n  second prompt  \n", encoding="utf-8")
+    assert _read_prompts(str(lines)) == ["first prompt", "second prompt"]
+    js = tmp_path / "p.json"
+    js.write_text('["a", "b"]', encoding="utf-8")
+    assert _read_prompts(str(js)) == ["a", "b"]
+    bad = tmp_path / "bad.json"
+    bad.write_text('[1, 2]', encoding="utf-8")
+    with pytest.raises(SystemExit):
+        _read_prompts(str(bad))
 
 
 def test_train_physics_via_cli(tmp_path, capsys):

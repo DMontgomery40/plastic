@@ -143,23 +143,41 @@ def cmd_models(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_bench(args: argparse.Namespace) -> int:
-    from scripts.bench_block import main as bench_main  # type: ignore[import-not-found]
-
-    sys.argv = ["bench_block.py", "--device", args.device]
-    bench_main()
-    return 0
+def _read_prompts(path: str) -> list[str]:
+    """One prompt per line, or a JSON list of strings."""
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    if text.lstrip().startswith("["):
+        prompts = json.loads(text)
+        if not isinstance(prompts, list) or not all(isinstance(p, str) for p in prompts):
+            raise SystemExit(f"{path}: expected a JSON list of strings")
+        return prompts
+    return [line.strip() for line in text.splitlines() if line.strip()]
 
 
 def cmd_calibrate(args: argparse.Namespace) -> int:
-    from plastic.harness.calibrate import calibrate_model
+    from plastic.harness.calibrate import calibrate_model, calibrate_qwen
     from plastic.store import ArtifactStore
 
     store = ArtifactStore(args.artifacts_root)
-    cal = calibrate_model(
-        store, args.model_id, data_dir=args.data, n_chunks=args.chunks, fisher_chunks=args.fisher_chunks,
-        target_fpr=args.fpr, device=args.device, seed=args.seed,
-    )
+    record = store.load_model_record(args.model_id)
+    if record.get("backend") in ("qwen", "ttt"):
+        # a pretrained chat backend is calibrated on real chats: the model generates each response
+        # through the transaction path; thresholds come from those records (log-only)
+        if not args.prompts:
+            print("a pretrained chat model is calibrated on real chats: pass --prompts FILE", file=sys.stderr)
+            return 2
+        prompts = _read_prompts(args.prompts)
+        cusum = _read_prompts(args.cusum_prompts) if args.cusum_prompts else None
+        cal = calibrate_qwen(
+            store, args.model_id, prompts, cusum_prompts=cusum, target_fpr=args.fpr, max_new_tokens=args.max_new_tokens,
+            seed=args.seed, device=args.device,
+        )
+    else:
+        cal = calibrate_model(
+            store, args.model_id, data_dir=args.data, n_chunks=args.chunks, fisher_chunks=args.fisher_chunks,
+            target_fpr=args.fpr, device=args.device, seed=args.seed,
+        )
     print(json.dumps({"model_id": args.model_id, "n_chunks": cal.n_chunks, "thresholds": cal.thresholds}, indent=2))
     return 0
 
@@ -311,9 +329,6 @@ def build_parser() -> argparse.ArgumentParser:
     models.add_argument("--artifacts-root", default="artifacts")
     models.set_defaults(fn=cmd_models)
 
-    bench = sub.add_parser("bench", help="throughput check")
-    bench.add_argument("--device", default="auto")
-    bench.set_defaults(fn=cmd_bench)
 
     cal = sub.add_parser("calibrate", help="calibrate harness thresholds, Fisher, and canaries for a model")
     cal.add_argument("model_id")
@@ -321,6 +336,9 @@ def build_parser() -> argparse.ArgumentParser:
     cal.add_argument("--data", default=None, help="text corpus dir with validation.bin")
     cal.add_argument("--chunks", type=int, default=512)
     cal.add_argument("--fisher-chunks", type=int, default=64)
+    cal.add_argument("--prompts", default=None, help="pretrained chat backends: file of calibration prompts (one per line or a JSON list)")
+    cal.add_argument("--cusum-prompts", default=None, help="pretrained chat backends: prompts for the continuous CUSUM reference (default: --prompts)")
+    cal.add_argument("--max-new-tokens", type=int, default=64, help="pretrained chat backends: generated tokens per calibration chat")
     cal.add_argument("--fpr", type=float, default=0.01)
     cal.add_argument("--device", default="cpu")
     cal.add_argument("--seed", type=int, default=0)
