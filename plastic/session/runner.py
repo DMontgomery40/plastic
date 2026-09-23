@@ -49,6 +49,22 @@ class _QwenTextIO:
         return self._backend.tokenizer.decode(ids)
 
 
+class _TTTTextIO:
+    """The same tokenizer-shaped adapter for a TTTBackend. The chat rendering lives in the backend
+    (``encode_chat``) so the SFT recipe and the runtime cannot drift apart; a turn is closed by EOS."""
+
+    def __init__(self, backend: Any) -> None:
+        self._backend = backend
+        self.eos_id = int(backend.tokenizer.eos_token_id)
+        self.assistant_close_ids: list[int] = [self.eos_id]
+
+    def encode(self, text: str, add_bos: bool = False) -> list[int]:
+        return self._backend.encode_chat(text, first_turn=add_bos)
+
+    def decode(self, ids: list[int]) -> str:
+        return self._backend.tokenizer.decode(ids)
+
+
 @dataclass
 class ChatResult:
     prompt: str
@@ -176,6 +192,15 @@ class Session:
             # bind to the ACTUAL loaded checkpoint content, not the (possibly stale) registry digest,
             # so a calibration built for a different checkpoint is refused even if the registry agrees
             model_identity = f"qwen:{self.backend.checkpoint_digest}"
+        elif self.backend_kind == "ttt":
+            # a pretrained TTT-MLP/TTT-Linear model (Sun et al. 2024): genuine inner-loop fast weights, full signals
+            from plastic.backends.ttt_lm.backend import TTTBackend
+
+            self.backend = TTTBackend.load(record["checkpoint_dir"], device=self.device)
+            self.cfg = ModelConfig(domain="text", chunk=int(record.get("chunk", 16)))
+            self.model = None
+            self.tokenizer = _TTTTextIO(self.backend)
+            model_identity = f"ttt:{self.backend.checkpoint_digest}"
         else:
             self.cfg, self.model, _ = store.load_checkpoint(self.model_id, self.device)
             self.backend = None
