@@ -49,6 +49,9 @@ describe('weights and changes', () => {
     expect(rows.length).toBe(27);
     expect(within(table).getAllByText('pulled back').length).toBe(4);
     expect(within(table).getAllByText('not in force').length).toBeGreaterThan(5);
+    // a pulled-back row names the check that failed, including the earlier distinct-ratio rule
+    expect(within(table).getAllByText('distinct-reply ratio (earlier rule)').length).toBe(2);
+    expect(within(table).getAllByText('largest identical-reply share').length).toBe(2);
   });
 
   it('shows the per-layer map of the teaching session and the anchor’s W0 change', async () => {

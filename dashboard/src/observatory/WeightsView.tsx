@@ -283,6 +283,9 @@ function AcrossRuns({ index, onPick }: { index: ObservatoryIndex; onPick: (run: 
                         <OutcomeGlyph outcome={out === 'committed' ? 'committed' : 'pulled back'} size={12} />
                         {out === 'committed' ? 'committed' : 'pulled back'}
                       </span>
+                      {out === 'pulled back' ? (
+                        <span className="block text-micro text-ink-muted">{arm.gate?.checks.filter((c) => c.in_force && c.passed === false).map((c) => c.label).join(', ') || arm.reason}</span>
+                      ) : null}
                     </td>
                   </tr>
                 );

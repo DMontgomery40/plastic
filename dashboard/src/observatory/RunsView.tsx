@@ -450,11 +450,13 @@ export function RunsView({ index, runId, arm, onSelect }: Props) {
         </div>
         <div className="rounded-lg border border-edge bg-surface-raised px-4 py-3">
           <Label>Committed a child</Label>
-          <Big tone="pass">{committed}</Big>
+          <Big>{committed}</Big>
+          <div className="text-micro text-ink-muted">locality checks passed; not a recall gain</div>
         </div>
         <div className="rounded-lg border border-edge bg-surface-raised px-4 py-3">
           <Label>Pulled back by the gate</Label>
-          <Big tone="fail">{sleepArms.length - committed}</Big>
+          <Big>{sleepArms.length - committed}</Big>
+          <div className="text-micro text-ink-muted">a locality check failed</div>
         </div>
       </div>
       <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">

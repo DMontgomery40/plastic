@@ -44,6 +44,11 @@ export default function App() {
   }, [setTab]);
 
   // the Sleep observatory reads archived runs shipped with the page, so it stays available without the service
+  // a #sleep/... link belongs to the Sleep tab; leaving the tab drops it so a reload opens the tab shown
+  useEffect(() => {
+    if (tab !== 'sleep' && window.location.hash.startsWith('#sleep')) window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  }, [tab]);
+
   const offline = healthChecked && health === null && tab !== 'sleep';
   const View = tab === 'chat' ? ChatScreen : tab === 'signals' ? SignalsScreen : tab === 'sleep' ? ObservatoryScreen : SessionsScreen;
 
