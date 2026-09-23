@@ -413,8 +413,14 @@ Findings, per arm:
   "That's great. I've …": all 52 replies shared that prefix after 30 turns of teaching. The
   archived 6-fact ceiling on the step-50 checkpoint was 5/6. Whether the drop is in-context
   capacity under load, the changed checkpoint, or the thirty-versus-six teaching statements
-  is the hypothesis the running single-fact ceiling is meant to separate; it is not
-  established by this run.
+  is the hypothesis the single-fact ceiling was run to separate; it is not established by
+  this run alone. **Single-fact ceiling, same checkpoint and seed
+  ([outputs](results/sleep-2026-09-23/final_step250_seed0_ceiling_single/sleep_controls.json)):**
+  teaching only the probed fact before each probe gives 22/24 verbatim and 18/24 on unseen
+  phrasing (boundary 1/2). So this checkpoint uses a taught fact in context almost every
+  time; it is the 30-statement session that loses them, whether through the number of turns,
+  the sampled replies drifting onto one frame, or both. That is the same mechanism the
+  step-100 Dream runs met: a session teacher that no longer articulates what it was taught.
 - **Selection under the product rule:** 29 of 30 teaching turns were flagged (would-rollback on
   the chunk where each fact arrives), so anchor, replay, distill and Dream selected ONE turn of
   text. Anchor, distill and Dream still loaded the full committed state of the teach session.

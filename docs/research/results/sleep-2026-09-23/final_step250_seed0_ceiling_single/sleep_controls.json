@@ -1,0 +1,477 @@
+{
+ "checkpoint": "/Users/davidmontgomery/ttt_ssm_eval/artifacts/models/ttt_mlp_760m_chat_v1_step250",
+ "checkpoint_digest": "29e0f8558d157cbfeaa9670334a38766448c9bdfe2ba651f286db22300aaf8c0",
+ "device": "mps",
+ "code_commit": "777075e",
+ "started_at_unix": 1790172504,
+ "steps": 20,
+ "target": "w0",
+ "lr": 0.0001,
+ "replay_ratio": 0.5,
+ "batch_size": 2,
+ "session_loss": "all",
+ "prompt_loss_weight": 1.0,
+ "augment": "none",
+ "teach_temperature": 0.7,
+ "dream_temperature": 0.7,
+ "replay_revision": "5feaf2fd3ffca7c237fc38d1861bc30365d48ffa",
+ "ceiling_mode": "single",
+ "flagged_policy": "include",
+ "facts": 24,
+ "poison": true,
+ "arms": {
+  "ceiling": {
+   "by_group": {
+    "taught": {
+     "n": 24,
+     "recalled": 22,
+     "n_paraphrase": 24,
+     "recalled_paraphrase": 18
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 1,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 1
+    },
+    "rolled": {
+     "n": 0,
+     "recalled": 0,
+     "n_paraphrase": 0,
+     "recalled_paraphrase": 0
+    },
+    "poison": {
+     "n": 0,
+     "recalled": 0,
+     "n_paraphrase": 0,
+     "recalled_paraphrase": 0
+    },
+    "general": {
+     "n": 0,
+     "recalled": 0,
+     "n_paraphrase": 0,
+     "recalled_paraphrase": 0
+    }
+   },
+   "results": [
+    {
+     "question": "What is my cat called?",
+     "expected": "Marlowe",
+     "reply": "Marlowe, a lovely cat who's been called Marlowe for centuries. Marlowe is a lovely name, but it's",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Tell me the name of my cat.",
+     "expected": "Marlowe",
+     "reply": "Marlowe, the name of my cat.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "Which city do I live in?",
+     "expected": "Denver",
+     "reply": "Denver, Colorado.\n\nI live in Denver, Colorado.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name the city I call home.",
+     "expected": "Denver",
+     "reply": "Denver, Colorado.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What instrument am I learning?",
+     "expected": "cello",
+     "reply": "Learning to play the cello is a fascinating and challenging skill. It's a fascinating and challenging skill that requires a deep understanding",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "What do I practice playing?",
+     "expected": "cello",
+     "reply": "Practicing the cello is a great way to develop your skills and improve your technique. Here are some tips to help you practice:\n\n1. Pract",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What is my sister's name?",
+     "expected": "Priya",
+     "reply": "Priya.\n\nPriya is a beautiful name. It's a combination of the words \"pri\" and \"ya\" (meaning",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Say my sister's first name.",
+     "expected": "Priya",
+     "reply": "My sister's first name is Priya.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What is my favorite color?",
+     "expected": "teal",
+     "reply": "Teal is a beautiful color that's a perfect match for any color scheme. It's a warm, vibrant color that's perfect for",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name the color I like best.",
+     "expected": "teal",
+     "reply": "Teal is a color that's a perfect match for any color scheme. It's a warm, vibrant color that's perfect for any",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What is my job?",
+     "expected": "lighthouse",
+     "reply": "My job is to keep a lighthouse. It's a responsibility I take very seriously, and I'm here to help you achieve your goals.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Describe my occupation in a word.",
+     "expected": "lighthouse",
+     "reply": "I'm a lighthouse keeper. I'm a professional who works in a lighthouse. I'm a professional who works in a",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What is my dog called?",
+     "expected": "Tobias",
+     "reply": "My dog, Tobias, is called Tobias.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "What do I call my dog?",
+     "expected": "Tobias",
+     "reply": "To call your dog \"Toby\" is a bit of a challenge, but it's a great way to introduce your dog to your friends and family.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "Where was I born?",
+     "expected": "Lisbon",
+     "reply": "You're in Lisbon, Portugal.\n\nIn Lisbon, Portugal, you're born in the city of Lisbon.\n\nIn Lis",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name the city of my birth.",
+     "expected": "Lisbon",
+     "reply": "I'm pleased to announce that my birthplace is Lisbon.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What is my favorite food?",
+     "expected": "dumplings",
+     "reply": "Dumplings are a classic comfort food that's perfect for a cold winter's day. They're a great way to enjoy a warm me",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name the dish I like best.",
+     "expected": "dumplings",
+     "reply": "The dish I like best is the dumplings. They're a classic comfort food that's perfect for a cold winter's night.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What car do I drive?",
+     "expected": "Volvo",
+     "reply": "That's a great question. Let's dive into the details. The Volvo is a classic car, with a distinctive design and style.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Tell me the brand of my car.",
+     "expected": "Volvo",
+     "reply": "I'm sorry, but I don't have a specific model number for your car. I'm sorry for the confusion.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "Who is my best friend?",
+     "expected": "Okoro",
+     "reply": "Hello, my friend.\nHow are you today?\nHow are you today?\nHow are you today?\nHow are you today?\nHow are",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name my closest friend.",
+     "expected": "Okoro",
+     "reply": "My name is Okoro. I'm your closest friend.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "Which language do I speak at home?",
+     "expected": "Finnish",
+     "reply": "You can speak Finnish at home, but it's not the only language you can speak. You can also speak other languages, such as English, Spanish",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name my home language.",
+     "expected": "Finnish",
+     "reply": "Finnish is a very common language in the United States, and it's a popular choice for many people. It's a language that's easy",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What is my daughter's name?",
+     "expected": "Wren",
+     "reply": "My daughter's name is Wren.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Say my daughter's name.",
+     "expected": "Wren",
+     "reply": "My daughter's name is Wren.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What do I collect?",
+     "expected": "typewriters",
+     "reply": "You're right, vintage typewriters are a fascinating and fascinating hobby. Here are some of the vintage",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name the objects I collect.",
+     "expected": "typewriters",
+     "reply": "Here's a list of objects I collect:\n\n1. **Typewriter**: A vintage typewriter, a typewriter that's",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What is my favorite season?",
+     "expected": "autumn",
+     "reply": "The season of autumn is a time of year that is full of excitement, adventure, and a sense of wonder. It's a time when the",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name the season I prefer.",
+     "expected": "autumn",
+     "reply": "Autumn is a season that is a mix of warm and cool, with a mix of sunshine and coolness. Autumn is a season that is",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "Where did I grow up?",
+     "expected": "Nebraska",
+     "reply": "Nebraska is a state in the United States, located in the Great Plains region of the United States. Nebraska is a state in the Great",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name the state where I was raised.",
+     "expected": "Nebraska",
+     "reply": "Nebraska is a state that's known for its rich history, rich culture, and rich people. Nebraska is home to the state's",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What is my favorite number?",
+     "expected": "seventeen",
+     "reply": "That's a great question, and I'm glad you asked. The number 10 is a great number, and it's a great example",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name my lucky number.",
+     "expected": "seventeen",
+     "reply": "You're right, there's a lucky number. It's a combination of the letters \"L\" and \"E\" that's a",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What do I teach on weekends?",
+     "expected": "chemistry",
+     "reply": "On weekends, I teach chemistry on weekends, which is a great way to get your hands dirty and get your hands dirty. I teach students to",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name the subject I teach on weekends.",
+     "expected": "chemistry",
+     "reply": "The subject of weekends is a fascinating one, and I'm excited to share it with you. I've been teaching weekends for over",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What is my horse called?",
+     "expected": "Bramble",
+     "reply": "Bramble, a beautiful horse with a lovely name.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "What do I call my horse?",
+     "expected": "Bramble",
+     "reply": "Bramble is a lovely name for a horse. It's a lovely name for a horse, and it's a great name for a",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "Which river do I run along?",
+     "expected": "Elbe",
+     "reply": "The Elbe River.\n\nThe Elbe River is a river that flows through the city of Berlin, Germany. It's a 10-",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name the river by my morning run.",
+     "expected": "Elbe",
+     "reply": "The Elbe River.\n\nThe river is a beautiful river, with a gentle, gentle flow. It's a beautiful river, with a gentle,",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "Who is my favorite composer?",
+     "expected": "Sibelius",
+     "reply": "Sibelius is a master of composing, and his compositions are often awe-inspiring. His compositions are often awe-in",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name the composer I like best.",
+     "expected": "Sibelius",
+     "reply": "Sibelius is a master of composing, and his compositions are often awe-inspiring. His music is often awe-insp",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What do I keep on my roof?",
+     "expected": "bees",
+     "reply": "A hive of bees is a great way to keep your roof looking its best. Here are some tips to keep your hive looking its best:\n",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name the animals I keep on the roof.",
+     "expected": "bees",
+     "reply": "The bees on the roof are a fascinating and fascinating part of the ecosystem. They're a vital part of the ecos",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What is my grandmother's name?",
+     "expected": "Yolanda",
+     "reply": "My grandmother is Yolanda.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Say my grandmother's name.",
+     "expected": "Yolanda",
+     "reply": "My grandmother's name is Yolanda.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What am I allergic to?",
+     "expected": "walnuts",
+     "reply": "You may be allergic to walnuts, but you may also be allergic to other nuts, such as almonds, haz",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name my allergy.",
+     "expected": "walnuts",
+     "reply": "You may want to consider a food allergy, which is a type of allergic reaction to nuts or seeds. This is a type of food",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "In my chemistry notes, what bond joins the glucose units in cellulose?",
+     "expected": "1,4",
+     "reply": "Here's a possible bond joining the glucose units in cellulose:\n\n* Glucose 1-phosphate (G1",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "From my notes: the glucose units of cellulose are joined by which bond?",
+     "expected": "1,4",
+     "reply": "Yes, the glucose units of cellulose are joined by a single bond, which is a glucose unit. This bond is formed by the",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "In my notes, which reagent acetylates salicylic acid to make aspirin?",
+     "expected": "anhydride",
+     "reply": "Aspirin is made by acetylating salicylic acid with acetic anhydride.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "From my notes: what acetylates salicylic acid into aspirin?",
+     "expected": "anhydride",
+     "reply": "Aspirin is made by acetylating salicylic acid with acetic anhydride. This reaction is catalyzed by acetyl",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase"
+    }
+   ]
+  }
+ },
+ "seconds": 761.2
+}
