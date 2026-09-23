@@ -347,3 +347,24 @@ replay share" above overstates a five-point sweep: the supported statement is th
 tested settings retained a fact, on this checkpoint, with raw turns. Likewise the answer
 log-probability is a likelihood measurement; a rise without recall is consistent with a readout
 problem but does not by itself prove storage, and its absence does not prove capacity failure.
+
+### 2026-09-23, step-100 checkpoint: study-set augmentation, first storage-versus-access reading
+
+Each fact taught as six templated turns (48 accepted turns, 3,481 tokens), W0, lr 3e-5, 20 steps,
+80% replay (batch 5), prompt-loss weight 0.2:
+
+| Arm | taught | rolled | general | held-out NLL | answer log-prob (mean/token) | largest cluster | gate |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| floor | 0/6 | 0/2 | 0/5 | | −6.89 | 0.03 | |
+| replay | 0/6 | 0/2 | 1/5 | 1.683 → 1.529 | −6.89 → −6.05 | 0.03 | accepted |
+| distill | 0/6 | 0/2 | 1/5 | 1.683 → 1.576 | −6.89 → −6.04 | 0.07 | accepted |
+
+Reading. No collapse and no recall, with a modest rise in the likelihood of the expected answers
+(+0.84 nats/token on average, both arms), which is consistent with some storage and no access but
+does not establish either on its own. Two confounds are visible in the run itself: the step-100
+model's replies to the teaching turns were themselves degenerate ("I'm sorry to interrupt…"), so
+the accepted turns carried the facts only in the user text; and the prompt-loss weight of 0.2,
+taken from a setting where completions carry the target, down-weighted exactly that text here.
+A rerun with the user text at full weight follows. The wrong answers are confident and stable
+("Pinkie Pie", "San Francisco", "Buddy") across arms: the model has priors for these questions
+that a 20-step W0 update on 6 facts did not move.
