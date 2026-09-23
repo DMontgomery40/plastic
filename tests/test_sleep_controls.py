@@ -42,3 +42,13 @@ def test_study_set_teaches_each_fact_several_ways_including_the_question_and_its
     assert len(items) >= 5 and q in users and p in users and stmt in users
     assert all(a in reply or reply == stmt for _, reply in items)  # every teacher-side reply states the answer (or restates the fact)
     assert len(set(users)) == len(users)
+
+
+def test_experiment_and_eval_parsers_expose_the_sampling_temperatures():
+    import subprocess
+    import sys
+
+    out = subprocess.run([sys.executable, "-m", "scripts.experiments.sleep_controls", "--help"], capture_output=True, text=True, check=True).stdout
+    assert "--teach-temperature" in out and "--dream-temperature" in out and "--prompt-loss-weight" in out and "--augment" in out
+    out = subprocess.run([sys.executable, "-m", "scripts.train.eval_ttt_chat", "--help"], capture_output=True, text=True, check=True).stdout
+    assert "--temperature" in out and "--top-k" in out and "--skip-nll" in out

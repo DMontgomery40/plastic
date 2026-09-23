@@ -387,6 +387,9 @@ def test_dream_selection_drops_degenerate_and_duplicate_dreams_and_keeps_high_ga
 
 def test_sleep_config_accepts_dream_and_bounds_its_knobs():
     SleepConfig(method="dream").validate()
+    SleepConfig(method="dream", dream_temperature=0.3).validate()
+    with pytest.raises(ValueError):
+        SleepConfig(method="dream", dream_temperature=0.0).validate()
     with pytest.raises(ValueError):
         SleepConfig(method="dream", dream_per_prompt=0).validate()
     with pytest.raises(ValueError):

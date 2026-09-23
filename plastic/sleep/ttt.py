@@ -91,6 +91,7 @@ class SleepConfig:
     dream_min_gain: float = 0.2
     dream_max_keep: int = 24
     dream_max_new_tokens: int = 48
+    dream_temperature: float = 0.7
 
     def validate(self) -> None:
         if self.method not in ("replay", "distill", "anchor", "dream"):
@@ -111,6 +112,8 @@ class SleepConfig:
             raise ValueError(f"unknown session_loss {self.session_loss!r}")
         if not 0.0 <= self.prompt_loss_weight <= 1.0:
             raise ValueError("prompt_loss_weight must be within [0, 1]")
+        if self.dream_temperature <= 0:
+            raise ValueError("dream_temperature must be positive")
         if self.dream_per_prompt < 1 or self.dream_max_keep < 1 or self.dream_max_new_tokens < 4:
             raise ValueError("dream_per_prompt and dream_max_keep must be >= 1 and dream_max_new_tokens >= 4")
 
@@ -544,7 +547,7 @@ def sleep_ttt(
             turns_by_session = {h.session_id: [tr.prompt for tr in h.accepted_turns] for h in harvests}
             for ti, (sid, state) in enumerate(teachers):
                 ds = generate_dreams(teacher_be, state, session_id=sid, turns=turns_by_session.get(sid, []), per_prompt=cfg.dream_per_prompt,
-                                     max_new_tokens=cfg.dream_max_new_tokens, seed=cfg.seed + ti, log=log)
+                                     max_new_tokens=cfg.dream_max_new_tokens, temperature=cfg.dream_temperature, seed=cfg.seed + ti, log=log)
                 for d in ds:
                     d.teacher_index = ti
                 candidates.extend(ds)

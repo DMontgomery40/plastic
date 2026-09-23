@@ -61,6 +61,8 @@ def main() -> None:
     ap.add_argument("--max-new-tokens", type=int, default=96)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--skip-nll", action="store_true", help="only sample answers (the NLL pass is the slow part)")
+    ap.add_argument("--temperature", type=float, default=0.7)
+    ap.add_argument("--top-k", type=int, default=40)
     args = ap.parse_args()
 
     import torch
@@ -112,7 +114,7 @@ def main() -> None:
     for i, (group, p) in enumerate([("neutral", p) for p in NEUTRAL_PROMPTS] + [("boundary", p) for p in BOUNDARY_PROMPTS]):
         runner.reset()
         runner.transactions = []
-        completion, out_ids, in_ids = drive_chat_turn(runner, io, p, max_new_tokens=args.max_new_tokens, temperature=0.7, top_k=40,
+        completion, out_ids, in_ids = drive_chat_turn(runner, io, p, max_new_tokens=args.max_new_tokens, temperature=args.temperature, top_k=args.top_k,
                                                       gen=torch.Generator().manual_seed(args.seed + i))
         sig = [r["signals"] for r in runner.transactions]
         gen_sig = [r["signals"] for r in runner.transactions if (r.get("sources") or {}).get("model", 0) > 0]
@@ -125,6 +127,10 @@ def main() -> None:
                         "delta_norm_sum": sum(x.get("delta_norm") or 0.0 for x in sig),
                         "gen_mean_surprise": _mean([x.get("surprise_mean") for x in gen_sig])})
         print(f"[eval] [{group}] Q: {p}\n       A: {completion!r}", flush=True)
+    from plastic.sleep.recall import normalize
+    keys = [" ".join(normalize(x["completion"]).split()[:12]) for x in samples]
+    distinct_share = len(set(keys)) / max(1, len(keys))
+    print(f"[eval] temperature {args.temperature} top_k {args.top_k}: distinct replies {len(set(keys))}/{len(keys)}", flush=True)
     groups = {}
     for g in ("neutral", "boundary"):
         rows = [x for x in samples if x["group"] == g]
@@ -134,6 +140,7 @@ def main() -> None:
              for k in ("mean_surprise", "mean_chunk_loss", "write_norm_sum", "delta_norm_sum")}
     print("[eval] signal means neutral vs boundary: " + ", ".join(f"{k} {groups['neutral'][k]:.3g} vs {groups['boundary'][k]:.3g}" for k in ratio if groups["neutral"].get(k) is not None and groups["boundary"].get(k) is not None), flush=True)
     payload = {"checkpoint": os.path.abspath(args.checkpoint), "checkpoint_digest": be.checkpoint_digest, "device": args.device,
+               "sampling": {"temperature": args.temperature, "top_k": args.top_k, "max_new_tokens": args.max_new_tokens}, "distinct_reply_share": distinct_share,
                "held_out_nll": nll, "samples": samples, "signal_means_by_group": groups, "boundary_over_neutral": ratio,
                "seconds": round(time.time() - t0, 1)}
     with open(os.path.join(args.out, "chat_eval.json"), "w") as f:

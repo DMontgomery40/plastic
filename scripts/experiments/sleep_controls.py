@@ -127,6 +127,8 @@ def main() -> None:
     ap.add_argument("--session-loss", default="all", choices=["all", "assistant"])
     ap.add_argument("--prompt-loss-weight", type=float, default=1.0, help="weight of user tokens in session turns (0-1)")
     ap.add_argument("--augment", default="none", choices=["none", "study"], help="teach each fact once (none) or as a templated study set")
+    ap.add_argument("--teach-temperature", type=float, default=0.7, help="sampling temperature for the model's replies during teaching")
+    ap.add_argument("--dream-temperature", type=float, default=0.7)
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
@@ -167,7 +169,7 @@ def main() -> None:
     else:
         turns = [stmt for stmt, *_ in FACTS_TAUGHT + FACTS_BOUNDARY]
     for i, stmt in enumerate(turns):
-        r = teach.chat(stmt, max_new_tokens=args.max_new_tokens, temperature=0.7, top_k=40, seed=args.seed + i)
+        r = teach.chat(stmt, max_new_tokens=args.max_new_tokens, temperature=args.teach_temperature, top_k=40, seed=args.seed + i)
         log(f"[teach] {stmt[:50]!r} -> {r.completion[:60]!r} ({len(r.transactions)} chunks)")
     log(f"[teach] {len(turns)} teaching turns (augment={args.augment})")
     # a calibration whose chunk-loss threshold every chunk exceeds: with rollback enabled, every chunk rolls back
@@ -179,7 +181,7 @@ def main() -> None:
     assert rolled.calibration_status == "installed", rolled.calibration_status
     n_rb = 0
     for i, (stmt, *_rest) in enumerate(FACTS_ROLLED):
-        r = rolled.chat(stmt, max_new_tokens=args.max_new_tokens, temperature=0.7, top_k=40, seed=args.seed + 100 + i)
+        r = rolled.chat(stmt, max_new_tokens=args.max_new_tokens, temperature=args.teach_temperature, top_k=40, seed=args.seed + 100 + i)
         kinds = [t["decision"]["kind"] for t in r.transactions]
         n_rb += kinds.count("rollback")
         log(f"[rolled] {stmt[:50]!r} -> decisions {kinds}")
@@ -194,7 +196,7 @@ def main() -> None:
         return group_counts(report_dict["results"], probes)
 
     results: dict[str, Any] = {"checkpoint": os.path.abspath(args.checkpoint), "checkpoint_digest": digest, "device": args.device,
-                               "steps": args.steps, "target": args.target, "lr": args.lr, "replay_ratio": args.replay_ratio, "batch_size": args.batch_size, "session_loss": args.session_loss, "prompt_loss_weight": args.prompt_loss_weight, "augment": args.augment, "arms": {}}
+                               "steps": args.steps, "target": args.target, "lr": args.lr, "replay_ratio": args.replay_ratio, "batch_size": args.batch_size, "session_loss": args.session_loss, "prompt_loss_weight": args.prompt_loss_weight, "augment": args.augment, "teach_temperature": args.teach_temperature, "dream_temperature": args.dream_temperature, "arms": {}}
     arms = [a.strip() for a in args.arms.split(",") if a.strip()]
 
     # 2) floor: the parent from a fresh session
@@ -235,7 +237,7 @@ def main() -> None:
             continue
         method = "replay" if arm == "ungated" else arm
         cfg = SleepConfig(method=method, target=args.target, steps=args.steps, lr=args.lr, seq_len=args.seq_len, batch_size=args.batch_size, replay_ratio=args.replay_ratio,
-                          session_loss=args.session_loss, prompt_loss_weight=args.prompt_loss_weight,
+                          session_loss=args.session_loss, prompt_loss_weight=args.prompt_loss_weight, dream_temperature=args.dream_temperature,
                           replay_rows=args.replay_rows, heldout_rows=args.heldout_rows, tolerance_nll=0.05, device=args.device,
                           recall_max_new_tokens=args.max_new_tokens, seed=args.seed, provenance="all" if arm == "ungated" else "accepted")
         sessions = ["teach", "rolled"]
