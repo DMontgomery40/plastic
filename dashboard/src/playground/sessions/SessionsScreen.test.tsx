@@ -11,15 +11,18 @@ const model: ModelSummary = {
 };
 const initial = useStore.getState();
 let release: () => void = () => {};
+let calibratedOnServer = false;
 
 beforeEach(() => {
+  calibratedOnServer = false;
   vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit = {}) => {
     if (options.method === 'POST' && url.endsWith('/calibrate')) {
       // the real-chat calibration generates every response: it holds the request open for minutes
       await new Promise<void>((resolve) => { release = resolve; });
+      calibratedOnServer = true;
       return new Response(JSON.stringify({ n_chunks: 12, thresholds: {}, achievable_fpr: {}, canary_baseline: {}, reference_sizes: {}, target_fpr: 0.01, created_at_unix: 1 }));
     }
-    if (url.endsWith('/models')) return new Response(JSON.stringify([{ ...model, calibrated: true }]));
+    if (url.endsWith('/models')) return new Response(JSON.stringify([{ ...model, calibrated: calibratedOnServer }]));
     return new Response(JSON.stringify([]));
   }));
   useStore.setState({ ...initial, models: [model], sessions: [],
@@ -27,6 +30,15 @@ beforeEach(() => {
       capabilities: { create_session: true, fork: true, reset: true, delete: true, resume: true, calibrate: true } } }, true);
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); useStore.setState(initial, true); });
+
+describe('sessions screen', () => {
+  it('re-reads the model catalog on entry so a calibration done elsewhere shows up', async () => {
+    calibratedOnServer = true;
+    render(<SessionsScreen />);
+    await waitFor(() => expect(screen.getByText(/· calibrated$/)).toBeTruthy());
+    expect(screen.getByTitle('Fit thresholds on real chats with this model').textContent).toBe('Recalibrate');
+  });
+});
 
 describe('calibrate action', () => {
   it('shows the running calibration as a state, disables mutations, then reports the model as calibrated', async () => {

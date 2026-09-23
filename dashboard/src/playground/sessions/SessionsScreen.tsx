@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Empty } from '../../components/panels/Empty';
 import { Panel } from '../../components/panels/Panel';
 import { ago, backendLabel, fmtInt } from '../format';
@@ -61,6 +61,13 @@ function CreateSession() {
 }
 
 export function SessionsScreen() {
+  const refreshSessions = useStore((s) => s.refreshSessions);
+  const refreshModels = useStore((s) => s.refreshModels);
+  // the catalog can change outside this screen (a chat turn, a CLI calibration, another client)
+  useEffect(() => {
+    void refreshSessions();
+    void refreshModels();
+  }, [refreshSessions, refreshModels]);
   const sessions = useStore((s) => s.sessions).filter((s) => s.domain === 'text');
   const models = useStore((s) => s.models);
   const current = useStore((s) => s.currentSessionId);

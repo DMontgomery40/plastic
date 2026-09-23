@@ -47,6 +47,8 @@ export interface PlaygroundState {
   clearError: () => void;
   bootstrap: () => Promise<void>;
   refreshSessions: () => Promise<void>;
+  /** Re-read the model catalog (calibration can also happen from the CLI or another client). */
+  refreshModels: () => Promise<void>;
   selectSession: (sessionId: string | null) => Promise<void>;
   reloadCurrent: () => Promise<void>;
   sendChat: (prompt: string) => Promise<boolean>;
@@ -104,6 +106,14 @@ export const useStore = create<PlaygroundState>((set, get) => ({
       set({ sessions, stale: false });
     } catch (err) {
       set({ stale: true, error: message(err) });
+    }
+  },
+
+  refreshModels: async () => {
+    try {
+      set({ models: await api.getModels() });
+    } catch (err) {
+      set({ error: message(err) });
     }
   },
 
