@@ -78,6 +78,14 @@ class RecallReport:
     def count(self, *, variant: str | None = None, key: str = "contains") -> int:
         return sum(1 for r in self.results if (variant is None or r.variant == variant) and getattr(r, key))
 
+    def distinct_ratio(self) -> float | None:
+        """Share of distinct replies over all probes (normalized, first 12 words). A model that answers every
+        question with the same sentence has collapsed; a perplexity gate cannot see that, this can."""
+        if not self.results:
+            return None
+        keys = {" ".join(normalize(r.reply).split()[:12]) for r in self.results}
+        return len(keys) / len(self.results)
+
     def to_dict(self) -> dict[str, Any]:
         verbatim = [r for r in self.results if r.variant == "verbatim"]
         para = [r for r in self.results if r.variant == "paraphrase"]
@@ -87,6 +95,7 @@ class RecallReport:
             "recalled_exact": sum(r.exact for r in verbatim),
             "n_paraphrase": len(para),
             "recalled_paraphrase": sum(r.contains for r in para),
+            "distinct_ratio": self.distinct_ratio(),
             "results": [asdict(r) for r in self.results],
         }
 

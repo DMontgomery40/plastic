@@ -58,7 +58,7 @@ export interface SleepOptions {
 export interface SleepMeasurement {
   heldout_nll: { mean: number | null; median: number | null; tokens: number } | null;
   canary: { coherence: number | null; poison: number | null } | null;
-  recall: { n_probes: number; recalled: number; recalled_exact: number; n_paraphrase: number; recalled_paraphrase: number } | null;
+  recall: { n_probes: number; recalled: number; recalled_exact: number; n_paraphrase: number; recalled_paraphrase: number; distinct_ratio?: number | null } | null;
 }
 
 export interface SleepReport {

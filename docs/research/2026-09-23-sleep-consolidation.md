@@ -256,3 +256,31 @@ because their expected strings were too specific; they now expect the distinguis
 This is the null baseline. The chat checkpoint run sweeps steps {10, 40} × target {w0, all} for
 replay and distill with anchor as the control; only a taught-recall gain above the floor with
 rolled-back recall still at the floor and locality within tolerance counts as consolidation.
+
+### 2026-09-23, step-100 SFT checkpoint: the perplexity gate passed a collapsed model
+
+`sleep_controls` with 40 steps on **all** parameters (lr 5e-5), floor / replay / ungated arms:
+
+| Arm | taught | boundary | rolled | general | held-out NLL | gate |
+| --- | --- | --- | --- | --- | --- | --- |
+| floor | 0/6 | 0/2 | 0/2 | 0/5 (p 1/5) | | |
+| replay, all × 40 | 1/6 (p 1/6) | 0/2 | 0/2 | 2/5 (p 2/5) | 1.683 → 1.629 | passed |
+| ungated replay, all × 40 | 1/6 (p 1/6) | 0/2 | 0/2 | 3/5 (p 2/5) | 1.683 → 1.628 | passed |
+
+The 1/6 is not recall. After replay, 6 of 15 fresh-session answers were the same sentence
+("A pleasure to meet you, Marlowe. I'm proud to meet you…") regardless of the question; the cat
+probe "hit" because that sentence contains the name. Session-turn loss fell to 0.02 while the
+held-out NLL still improved (the replay half of each batch keeps training a step-100 model), so
+the perplexity-only locality gate passed a run that visibly damaged the model. This is the failure
+mode Song et al. (2607.00368) describe, reproduced on our own gate. Distinct replies: 15/15
+before, 10/15 after.
+
+Consequence, implemented the same day: recall reports carry `distinct_ratio` (distinct normalized
+12-word reply prefixes over probes), the gate gains `reply_distinct_ratio` (fails when the ratio
+drops below `tolerance_collapse` = 0.5 unless it was already below or improved), and the result
+card shows the before/after percentage. Under this gate the run above is rejected. A perplexity
+drop is now necessary but not sufficient for acceptance.
+
+Standing result after two checkpoints (50, 100) and two configurations (w0 × 10, all × 40): no
+sleep method has retained a taught fact across a reset without collapse, and gated versus ungated
+cannot be separated because nothing was retained either way. The falsifier in this note is live.

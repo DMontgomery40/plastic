@@ -186,6 +186,9 @@ def test_recall_scoring_and_probe_loading(tmp_path):
     replies = {"What is my cat's name?": "Marlowe.", "Remind me what I call my cat.": "A cat.", "Where do I live?": "You live in Denver."}
     rep = run_probes(probes, lambda q: replies[q])
     d = rep.to_dict()
+    assert d["distinct_ratio"] == 1.0
+    collapsed = run_probes(probes, lambda q: "A pleasure to meet you, Marlowe. I am glad you asked.").to_dict()
+    assert collapsed["distinct_ratio"] == 1 / 3 and collapsed["recalled"] == 1  # every reply the same; only the cat probe "hits"
     assert (d["n_probes"], d["recalled"], d["recalled_exact"], d["n_paraphrase"], d["recalled_paraphrase"]) == (2, 2, 1, 1, 0)
     assert isinstance(rep, RecallReport) and rep.count(variant="paraphrase") == 0
     with pytest.raises(ValueError):
@@ -206,6 +209,15 @@ def test_gate_treats_nonfinite_measurements_as_failures():
     none = gate_from_measurements({"heldout_nll": None, "canary": None, "recall": None}, {"heldout_nll": None, "canary": None, "recall": None},
                                   tolerance_nll=0.05, tolerance_canary={})
     assert none["measured"] is False and none["passed"] is None and "exploratory" in none["note"]
+    # behavioral collapse: NLL improves but replies collapse onto one sentence -> the gate fails
+    collapsed = gate_from_measurements({"heldout_nll": {"mean": 1.68, "median": 0.9, "tokens": 800}, "canary": None, "recall": {"distinct_ratio": 1.0}},
+                                       {"heldout_nll": {"mean": 1.63, "median": 0.4, "tokens": 800}, "canary": None, "recall": {"distinct_ratio": 0.4}},
+                                       tolerance_nll=0.05, tolerance_canary={})
+    assert collapsed["passed"] is False and [c["name"] for c in collapsed["checks"] if not c["passed"]] == ["reply_distinct_ratio"]
+    # a model whose replies were already repetitive is not blamed for staying so, and improvement always passes
+    same = gate_from_measurements({"heldout_nll": None, "canary": None, "recall": {"distinct_ratio": 0.3}},
+                                  {"heldout_nll": None, "canary": None, "recall": {"distinct_ratio": 0.35}}, tolerance_nll=0.05, tolerance_canary={})
+    assert same["passed"] is True
 
 
 def test_sleep_config_validation():

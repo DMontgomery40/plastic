@@ -63,6 +63,7 @@ function RunCard({ run }: { run: SleepRun }) {
               {' → '}
               {after?.recall ? `${after.recall.recalled}/${after.recall.n_probes}` : 'n/a'}
               {after?.recall && after.recall.n_paraphrase > 0 ? ` (paraphrase ${before?.recall?.recalled_paraphrase ?? 'n/a'} → ${after.recall.recalled_paraphrase}/${after.recall.n_paraphrase})` : ''}
+              {typeof after?.recall?.distinct_ratio === 'number' ? ` · distinct replies ${fmt((before?.recall?.distinct_ratio ?? 0) * 100, 2)}% → ${fmt(after.recall.distinct_ratio * 100, 2)}%` : ''}
             </dd>
           </div>
           <div>
