@@ -257,14 +257,41 @@ def anchor_update(rep: dict[str, Any]) -> dict[str, Any] | None:
     raw = rep.get("anchor_relative_update")
     if not raw:
         return None
+    return {"quantity": "relative change of W0 per tensor, ||W0_child - W0_parent|| / ||W0_parent||", "tensors": list(TENSORS),
+            "values": _per_tensor(raw)}
+
+
+def _per_tensor(raw: dict[str, Any]) -> list[list[float | None]]:
     layers: dict[int, dict[str, float | None]] = {}
     for key, value in raw.items():
         m = re.search(r"layers\.(\d+)\..*\.(W1|b1|W2|b2)$", key)
         if m:
             layers.setdefault(int(m.group(1)), {})[m.group(2)] = num(value, 4)
     n = max(layers) + 1 if layers else 0
-    return {"quantity": "relative change of W0 per tensor, ||W0_child - W0_parent|| / ||W0_parent||", "tensors": list(TENSORS),
-            "values": [[layers.get(i, {}).get(t) for t in TENSORS] for i in range(n)]}
+    return [[layers.get(i, {}).get(t) for t in TENSORS] for i in range(n)]
+
+
+def w0_change(rep: dict[str, Any]) -> dict[str, Any] | None:
+    """Per-tensor child-vs-parent relative W0 change, recorded for every method (and before a pull-back) since aae9b70."""
+    raw = rep.get("w0_relative_change")
+    if not raw:
+        return None
+    return {"quantity": "relative change of W0 per tensor, ||W0_after - W0_before|| / ||W0_before||", "tensors": list(TENSORS),
+            "values": _per_tensor(raw), "total": num(raw.get("total"), 4)}
+
+
+def grad_norms_view(rep: dict[str, Any]) -> dict[str, Any] | None:
+    """Per-step gradient norms of the trained parameters, before clipping: total, per decoder layer, and 'other'."""
+    rows = rep.get("grad_norms")
+    if not rows:
+        return None
+    layer_keys = sorted({k for r in rows for k in (r.get("per_layer") or {}) if k.isdigit()}, key=int)
+    n_layers = int(layer_keys[-1]) + 1 if layer_keys else 0
+    return {"quantity": "gradient norm before clipping", "steps": [r.get("step") for r in rows],
+            "total": [num(r.get("total"), 4) for r in rows],
+            "per_layer": [[num((r.get("per_layer") or {}).get(str(i)), 4) for r in rows] for i in range(n_layers)],
+            "other": [num((r.get("per_layer") or {}).get("other"), 4) for r in rows]
+            if any("other" in (r.get("per_layer") or {}) for r in rows) else None}
 
 
 def dreams_view(d: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -329,14 +356,15 @@ def sleep_arm(arm: str, summary: dict[str, Any] | None, rep: dict[str, Any] | No
         "loss_terms": (summary.get("batch") or rep.get("batch") or {}).get("loss_terms"),
         "dreams": dreams_view(summary.get("dreams") or rep.get("dreams")),
         "anchor_relative_update": anchor_update(rep),
-        "w0_relative_update": None,  # requested from the Sleep report for every method (OPUS-OBS-001 F2); absent until recorded
-        "gradient_norms": None,      # requested (F3); absent until recorded
+        "w0_relative_update": w0_change(rep),     # every method, in reports written after aae9b70; absent before
+        "gradient_norms": grad_norms_view(rep),   # per step, before clipping, in reports written after aae9b70
         "config": {k: cfg.get(k) for k in ("steps", "lr", "batch_size", "seq_len", "replay_ratio", "replay_rows", "heldout_rows", "anchor_lambda",
                                            "tolerance_nll", "tolerance_collapse", "session_loss", "prompt_loss_weight", "provenance",
                                            "flagged_policy", "dream_temperature", "dream_min_gain", "dream_token_weighting") if k in cfg} or None,
         "probes": probe_rows(after_results, probes),
         "report": ({"file": rel(rep_path), "sha256": sha256(rep_path), "run_id": rep.get("run_id"),
-                    "head_at_arm_start": rep.get("code_commit"), "seconds": num(rep.get("seconds"), 5)} if rep_path else None),
+                    "head_at_arm_start": rep.get("code_commit"), "code_at_import": rep.get("code_commit_at_import"),
+                    "seconds": num(rep.get("seconds"), 5)} if rep_path else None),
     }
 
 
@@ -440,16 +468,22 @@ def _flags(reasons: list[str]) -> list[str]:
     return [r for r in reasons if r != "log_only"]
 
 
-def extract_sessions(run_id: str, store: Path, archive_run: Path) -> dict[str, Any]:
-    """Per-chunk trajectories of a run's teaching and rolled-back sessions, from a local experiment store. Extracted only
-    when the store provably belongs to the archived run (identical sleep_controls.json, matching position and model
-    signature). The store path is not recorded; the file digests are."""
-    store = store.resolve()
-    run_out = store.parent
+def extract_sessions(run_id: str, store: Path | None, archive_run: Path) -> dict[str, Any]:
+    """Per-chunk trajectories of a run's teaching and rolled-back sessions. Read from the public results archive
+    (``<run>/sessions/``) when it holds them; otherwise from a local experiment store, only when that store provably
+    belongs to the archived run (identical sleep_controls.json). Both paths check the position and model signature.
+    A local store's path is not recorded; the file digests are."""
     archived = archive_run / "sleep_controls.json"
-    local = run_out / "sleep_controls.json"
-    if not local.exists() or sha256(local) != sha256(archived):
-        raise ValueError(f"{run_id}: the store's sleep_controls.json is not byte-identical to the archived run")
+    public = store is None
+    if public:
+        store = archive_run
+        if not (store / "sessions").is_dir():
+            raise ValueError(f"{run_id}: the archive holds no session files")
+    else:
+        store = store.resolve()
+        local = store.parent / "sleep_controls.json"
+        if not local.exists() or sha256(local) != sha256(archived):
+            raise ValueError(f"{run_id}: the store's sleep_controls.json is not byte-identical to the archived run")
     c = read_json(archived)
     digest = c.get("checkpoint_digest") or ""
     harvest = next((a["harvest"] for a in c["arms"].values() if isinstance(a, dict) and a.get("harvest")), None)
@@ -491,14 +525,15 @@ def extract_sessions(run_id: str, store: Path, archive_run: Path) -> dict[str, A
             "turns": [{"i": i, "prompt": tr.get("prompt"), "completion": str(tr.get("completion", ""))[:MAX_REPLY_CHARS],
                        "tx": [tr.get("tx_start"), tr.get("tx_end")]} for i, tr in enumerate(trace)],
             "chunks": chunks,
-            "source": {"transactions_sha256": sha256(tx_path), "trace_sha256": sha256(trace_path) if trace_path.exists() else None},
+            "source": {"transactions": rel(tx_path) if public else None, "transactions_sha256": sha256(tx_path),
+                       "trace_sha256": sha256(trace_path) if trace_path.exists() else None},
         })
     n_leaves = max((len(ch["per_layer"] or []) for s in sessions for ch in s["chunks"]), default=0)
     return {"run_id": run_id, "schema": SCHEMA,
-            "provenance": {"kind": "local experiment store; these session files are not in the public results archive",
-                           "controls_sha256": sha256(archived), "checks": ["sleep_controls.json byte-identical to the archive",
-                                                                          "teach position equals the harvest's accepted tokens",
-                                                                          "model signature matches the checkpoint digest"]},
+            "provenance": {"kind": "public results archive" if public else "local experiment store; these session files are not in the public results archive",
+                           "controls_sha256": sha256(archived),
+                           "checks": ([] if public else ["sleep_controls.json byte-identical to the archive"])
+                           + ["teach position equals the harvest's accepted tokens", "model signature matches the checkpoint digest"]},
             "per_layer": {"quantity": "proposed fast-weight change per tensor in effective coordinates (norm of working minus committed)",
                           "layers": n_leaves // len(TENSORS), "tensors": list(TENSORS), "order": "layer-major: layer 0 W1, b1, W2, b2, layer 1 ..."},
             "sessions": sessions}
@@ -520,8 +555,10 @@ def build(out: Path, stores: dict[str, Path]) -> dict[str, Any]:
 
     (out / "runs").mkdir(parents=True, exist_ok=True)
     (out / "sessions").mkdir(parents=True, exist_ok=True)
-    for run_id, store in stores.items():
-        (out / "sessions" / f"{run_id}.json").write_text(dump(extract_sessions(run_id, store, ARCHIVE / run_id)), encoding="utf-8")
+    archived_sessions = {r["id"] for r in runs if (ARCHIVE / r["id"] / "sessions").is_dir()}
+    for run_id in sorted(archived_sessions | set(stores)):
+        source = None if run_id in archived_sessions else stores[run_id]  # the public archive wins over a local store
+        (out / "sessions" / f"{run_id}.json").write_text(dump(extract_sessions(run_id, source, ARCHIVE / run_id)), encoding="utf-8")
     session_ids = sorted(p.stem for p in (out / "sessions").glob("*.json"))
     run_ids = {r["id"] for r in runs}
     for stale in (out / "runs").glob("*.json"):

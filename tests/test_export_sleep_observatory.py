@@ -240,3 +240,29 @@ def test_session_extraction_refuses_a_store_that_is_not_the_archived_run(tmp_pat
         (store / "sessions" / "teach" / "meta.json").write_text(json.dumps(meta))
     with pytest.raises(ValueError, match=re.escape("run")):
         ex.extract_sessions("run", store, archive_run)
+
+
+def test_archived_sessions_are_read_from_the_public_archive(export):
+    seed0 = json.loads((export / "sessions" / f"{SEED0}.json").read_text())
+    assert seed0["provenance"]["kind"] == "public results archive"
+    teach, rolled = seed0["sessions"]
+    assert teach["counts"]["commits"] == 165 and len(teach["turns"]) == 30 and len(teach["chunks"]) == 165
+    assert sum(1 for c in teach["chunks"] if c["flags"]) >= 29  # advisory flags; every chunk was still committed
+    assert {c["applied"] for c in teach["chunks"]} == {"commit"}
+    assert {c["applied"] for c in rolled["chunks"]} == {"rollback"} and rolled["counts"]["rollbacks"] == 12
+    assert all(c["accepted"] == 0.0 for c in rolled["chunks"])  # proposed changes were not retained
+    assert seed0["per_layer"]["layers"] == 24 and all(len(c["per_layer"]) == 96 for c in teach["chunks"])
+    assert run(export, SEED0)["session_trajectory"] == f"sessions/{SEED0}.json"
+
+
+def test_newer_report_fields_map_per_tensor_and_per_step():
+    rep = {"w0_relative_change": {"model.layers.0.seq_modeling_block.W1": 0.01, "model.layers.0.seq_modeling_block.b2": 0.3,
+                                  "model.layers.1.seq_modeling_block.W2": 0.02, "total": 0.015},
+           "grad_norms": [{"step": 1, "total": 2.0, "per_layer": {"0": 1.5, "1": 1.0, "other": 0.5}},
+                          {"step": 2, "total": 1.0, "per_layer": {"0": 0.5, "1": 0.8}}]}
+    w0 = ex.w0_change(rep)
+    assert w0["values"] == [[0.01, None, None, 0.3], [None, None, 0.02, None]] and w0["total"] == 0.015
+    g = ex.grad_norms_view(rep)
+    assert g["steps"] == [1, 2] and g["total"] == [2.0, 1.0]
+    assert g["per_layer"] == [[1.5, 0.5], [1.0, 0.8]] and g["other"] == [0.5, None]
+    assert ex.w0_change({}) is None and ex.grad_norms_view({"grad_norms": []}) is None
