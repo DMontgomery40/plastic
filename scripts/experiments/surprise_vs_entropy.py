@@ -28,7 +28,6 @@ honest baseline and a surprise-driven sampler adds nothing on this checkpoint.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 import os
@@ -201,16 +200,6 @@ def _git_head() -> str:
         return "unknown"
 
 
-def _digest(checkpoint: str) -> str:
-    h = hashlib.sha256()
-    for name in sorted(os.listdir(checkpoint)):
-        if name.endswith((".safetensors", ".bin", ".json")):
-            with open(os.path.join(checkpoint, name), "rb") as f:
-                for block in iter(lambda: f.read(1 << 20), b""):
-                    h.update(block)
-    return h.hexdigest()
-
-
 def _token_signals(signals) -> dict[str, np.ndarray]:
     """Per-token reductions of the per-layer MemorySignals of one chunk (each err/beta/write_norm is (1, H, T))."""
     import torch
@@ -346,7 +335,7 @@ def main() -> None:
         for r in tf_rows:
             f.write(json.dumps(r) + "\n")
 
-    results: dict[str, Any] = {"checkpoint": os.path.abspath(args.checkpoint), "checkpoint_digest": _digest(args.checkpoint), "device": args.device,
+    results: dict[str, Any] = {"checkpoint": os.path.abspath(args.checkpoint), "checkpoint_digest": backend.checkpoint_digest, "device": args.device,
                                "code_commit": _git_head(), "started_at_unix": int(t0), "replay_revision": args.replay_revision or None,
                                "rows": len(convs), "max_len": args.max_len, "chunk": args.chunk, "seed": args.seed,
                                "teacher_forced": {}}

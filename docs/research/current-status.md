@@ -10,9 +10,13 @@ For reproduction commands, available checkpoints and ways to help, see
 ## Active investigation
 
 Build useful chat on a pretrained, gradient-updated TTT-MLP model, with its own
-inner-learning signals available to the transactional harness. The 760M base model
-is undergoing chat fine-tuning. Evaluation will compare held-out assistant loss
-and sampled answers through the transaction path. The backend implementation and
+inner-learning signals available to the transactional harness. Chat fine-tuning of
+the 760M base model is complete (250 steps, 23 September 2026); the final checkpoint
+is a release candidate undergoing evaluation: held-out assistant loss, sampled answers
+through the transaction path, calibration, and the Sleep controls. The first record, the
+[chat evaluation at three temperatures](results/chat-eval-2026-09-23/README.md), shows the chat
+format learned, no looping at temperature 0.7, and frequent factual errors. Qwen remains the
+hosted model until the evaluation is complete. The backend implementation and
 recorded checks are described in the [TTT backend note](2026-09-23-ttt-backend.md).
 
 The backend can process and persist base-model sessions. That is distinct from a

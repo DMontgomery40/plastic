@@ -1,0 +1,44 @@
+[setup] 60 held-out conversations; chunk 64; max_len 384
+[tf] conversation 1/60: 170 tokens, 169 rows so far
+[tf] conversation 11/60: 226 tokens, 2460 rows so far
+[tf] conversation 21/60: 234 tokens, 4847 rows so far
+[tf] conversation 31/60: 360 tokens, 7267 rows so far
+[tf] conversation 41/60: 166 tokens, 9645 rows so far
+[tf] conversation 51/60: 261 tokens, 12120 rows so far
+[tf] assistant_tokens: n=7367 miss 0.403 | spearman entropy~nll 0.857 surprise~nll 0.156 surprise~entropy 0.172 | AUC(miss) entropy 0.851 surprise 0.570 | R2(nll) entropy 0.422 +surprise 0.422 | bootstrap dR2 {'mean': 0.00011467089785740736, 'lo': 7.934612839821665e-08, 'hi': 0.000521152201819131, 'reps': 200} dAUC {'mean': 0.0002496585333449597, 'lo': -7.428875603632255e-05, 'hi': 0.0009317512836195835, 'reps': 200}
+[tf] all_tokens: n=14148 miss 0.403 | spearman entropy~nll 0.882 surprise~nll 0.155 surprise~entropy 0.163 | AUC(miss) entropy 0.882 surprise 0.585 | R2(nll) entropy 0.434 +surprise 0.435 | bootstrap dR2 {'mean': 0.0002761438668696042, 'lo': 9.021741143049045e-05, 'hi': 0.00048591168143963525, 'reps': 200} dAUC {'mean': 0.0007157234551554681, 'lo': 0.000312286107247528, 'hi': 0.0012548745943428503, 'reps': 200}
+[gen] T=0.3 neutral #0: 34 tokens, repeated-4gram share 0.444
+[gen] T=0.3 neutral #1: 64 tokens, repeated-4gram share 0.021
+[gen] T=0.3 neutral #2: 64 tokens, repeated-4gram share 0.000
+[gen] T=0.3 neutral #3: 64 tokens, repeated-4gram share 0.383
+[gen] T=0.3 neutral #4: 64 tokens, repeated-4gram share 0.000
+[gen] T=0.3 neutral #5: 64 tokens, repeated-4gram share 0.000
+[gen] T=0.3 neutral #6: 64 tokens, repeated-4gram share 0.000
+[gen] T=0.3 neutral #7: 64 tokens, repeated-4gram share 0.089
+[gen] T=0.3 boundary #8: 64 tokens, repeated-4gram share 0.000
+[gen] T=0.3 boundary #9: 64 tokens, repeated-4gram share 0.000
+[gen] T=0.3 boundary #10: 64 tokens, repeated-4gram share 0.000
+[gen] T=0.3 boundary #11: 64 tokens, repeated-4gram share 0.000
+[gen] T=0.3 boundary #12: 64 tokens, repeated-4gram share 0.000
+[gen] T=0.3 boundary #13: 64 tokens, repeated-4gram share 0.051
+[gen] T=0.3 boundary #14: 64 tokens, repeated-4gram share 0.162
+[gen] T=0.3 boundary #15: 64 tokens, repeated-4gram share 0.342
+[gen] T=0.7 neutral #0: 12 tokens, repeated-4gram share 0.000
+[gen] T=0.7 neutral #1: 64 tokens, repeated-4gram share 0.000
+[gen] T=0.7 neutral #2: 64 tokens, repeated-4gram share 0.000
+[gen] T=0.7 neutral #3: 52 tokens, repeated-4gram share 0.000
+[gen] T=0.7 neutral #4: 64 tokens, repeated-4gram share 0.024
+[gen] T=0.7 neutral #5: 64 tokens, repeated-4gram share 0.000
+[gen] T=0.7 neutral #6: 64 tokens, repeated-4gram share 0.000
+[gen] T=0.7 neutral #7: 64 tokens, repeated-4gram share 0.000
+[gen] T=0.7 boundary #8: 64 tokens, repeated-4gram share 0.000
+[gen] T=0.7 boundary #9: 64 tokens, repeated-4gram share 0.000
+[gen] T=0.7 boundary #10: 64 tokens, repeated-4gram share 0.000
+[gen] T=0.7 boundary #11: 64 tokens, repeated-4gram share 0.000
+[gen] T=0.7 boundary #12: 64 tokens, repeated-4gram share 0.024
+[gen] T=0.7 boundary #13: 64 tokens, repeated-4gram share 0.000
+[gen] T=0.7 boundary #14: 64 tokens, repeated-4gram share 0.000
+[gen] T=0.7 boundary #15: 64 tokens, repeated-4gram share 0.000
+[gen] T=0.3: {'tokens': 994, 'loop_token_share': 0.13682092555331993, 'separation': {'n': 610, 'loop_share': 0.22295081967213115, 'mean_in_loop': {'entropy': 1.4189893938744396, 'surprise': 8.132880273987265}, 'mean_fresh': {'entropy': 1.8129484968178329, 'surprise': 8.201423290912611}, 'auc_in_loop': {'entropy': 0.42333705634152397, 'surprise': 0.4951600893521966}}}
+[gen] T=0.7: {'tokens': 960, 'loop_token_share': 0.05, 'separation': {'n': 512, 'loop_share': 0.09375, 'mean_in_loop': {'entropy': 1.3721106534318703, 'surprise': 7.948858618736267}, 'mean_fresh': {'entropy': 1.8396420784089327, 'surprise': 8.154304736647113}, 'auc_in_loop': {'entropy': 0.38945761494252873, 'surprise': 0.3803430316091954}}}
+[done] 223.5 s -> /private/tmp/claude-501/-Users-davidmontgomery-ttt-ssm-eval/41b763a8-b6b3-46be-881a-ee202540dbbc/scratchpad/sve_step250

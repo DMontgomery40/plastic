@@ -88,3 +88,70 @@ def test_parser_help_lists_the_measurement_controls():
 
     out = subprocess.run([sys.executable, "-m", "scripts.experiments.surprise_vs_entropy", "--help"], capture_output=True, text=True, check=True).stdout
     assert "--replay-revision" in out and "--temperatures" in out and "--skip-generation" in out and "--bootstrap" in out
+
+
+@pytest.mark.parametrize("device,skip_generation,replay_revision", [
+    ("cpu", True, ""),
+    ("mps", False, "pinned-test-revision"),
+])
+def test_cli_output_preserves_backend_identity_and_run_provenance(
+    tmp_path, monkeypatch, device, skip_generation, replay_revision,
+):
+    """Exercise saved results without model, accelerator or dataset access."""
+    import json
+    import sys
+    from types import ModuleType, SimpleNamespace
+
+    from scripts.experiments import surprise_vs_entropy as experiment
+
+    checkpoint = tmp_path / "checkpoint"
+    checkpoint.mkdir()
+    (checkpoint / "sft_meta.json").write_text(json.dumps({"device": device}))
+    backend = SimpleNamespace(checkpoint_digest="a" * 64)
+    loaded = []
+
+    def load(path, *, device):
+        loaded.append((path, device))
+        return backend
+
+    replay_calls = []
+    conversations = [[{"role": "user", "content": "test"}]]
+
+    def load_replay(subset, split, rows, seed, log, *, revision):
+        replay_calls.append((subset, split, rows, seed, revision))
+        return conversations
+
+    modules = {
+        "plastic.backends.ttt_lm.backend": {"TTTBackend": SimpleNamespace(load=load)},
+        "plastic.sleep.ttt": {"load_replay_conversations": load_replay},
+        "scripts.train.eval_ttt_chat": {"BOUNDARY_PROMPTS": [], "NEUTRAL_PROMPTS": ["test"]},
+    }
+    for name, values in modules.items():
+        module = ModuleType(name)
+        module.__dict__.update(values)
+        monkeypatch.setitem(sys.modules, name, module)
+
+    token_rows = [{"conv": 0, "assistant": False}, {"conv": 0, "assistant": True}]
+    monkeypatch.setattr(experiment, "teacher_forced_pass", lambda *a, **kw: token_rows)
+    monkeypatch.setattr(experiment, "generation_pass", lambda *a, **kw: [])
+    monkeypatch.setattr(experiment, "_git_head", lambda: "test-source+dirty")
+    output = tmp_path / "output"
+    argv = ["surprise_vs_entropy", "--checkpoint", str(checkpoint), "--out", str(output),
+            "--device", device, "--rows", "3", "--seed", "7", "--max-len", "48", "--chunk", "16",
+            "--replay-revision", replay_revision, "--bootstrap", "2", "--temperatures", "0.3"]
+    if skip_generation:
+        argv.append("--skip-generation")
+    monkeypatch.setattr(sys, "argv", argv)
+
+    experiment.main()
+
+    result = json.loads((output / "surprise_vs_entropy.json").read_text())
+    expected = {"checkpoint": str(checkpoint.resolve()), "checkpoint_digest": backend.checkpoint_digest,
+                "device": device, "code_commit": "test-source+dirty", "replay_revision": replay_revision or None,
+                "rows": 1, "max_len": 48, "chunk": 16, "seed": 7}
+    assert {key: result[key] for key in expected} == expected
+    assert isinstance(result["started_at_unix"], int) and result["seconds"] >= 0
+    assert loaded == [(str(checkpoint), device)]
+    assert replay_calls == [("everyday-conversations", "test", 3, 8, replay_revision or None)]
+    assert ("generation" in result) is not skip_generation
+    assert [json.loads(line) for line in (output / "teacher_forced_tokens.jsonl").read_text().splitlines()] == token_rows
