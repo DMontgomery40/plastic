@@ -132,6 +132,8 @@ def main() -> None:
     # explicit safetensors load with every key checked (from_pretrained silently left uninitialized memory on CUDA)
     model, cfg = load_ttt_model(args.checkpoint, dtype=dtype, scan_checkpoint_groups=int(args.grad_checkpoint_groups))
     model = model.to(dev)
+    if dev.type == "cuda":
+        print(f"[sft] mem after model load: allocated {torch.cuda.memory_allocated()/1e9:.1f} GB", flush=True)
     print(f"[sft] torch {torch.__version__} transformers {transformers.__version__} device {dev} params {sum(p.numel() for p in model.parameters())/1e6:.0f}M", flush=True)
     if args.layer_checkpoint:
         model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
@@ -219,6 +221,8 @@ def main() -> None:
             (loss / args.grad_accum).backward()
             loss_acc += float(loss) / args.grad_accum
             seen += x.numel()
+            if dev.type == "cuda" and step < 2:
+                print(f"[sft] mem step {step} microbatch: allocated {torch.cuda.memory_allocated()/1e9:.1f} GB reserved {torch.cuda.memory_reserved()/1e9:.1f} GB peak {torch.cuda.max_memory_allocated()/1e9:.1f} GB", flush=True)
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         opt.step()
         opt.zero_grad(set_to_none=True)
