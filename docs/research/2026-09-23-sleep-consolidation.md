@@ -448,9 +448,11 @@ accepted turn selected** ([outputs](results/sleep-2026-09-23/final_step250_seed0
 `--flagged-policy include`, 30 of 30 turns): replay accepted, 0/24, NLL 1.612 → 1.485; distill
 accepted, 0/24, → 1.474; Dream generated 180 candidates from the 30-turn teacher state of which
 178 were duplicates of one acknowledgement ("That's great. I'm glad to hear that you're enjoying
-your notes…"), kept 2, and was rejected by the collapse gate (0.31 > 0.25). So the one-turn text
-selection was not what hid retention, and the saved teacher state itself, prompted with each fact,
-produces the same sentence for every fact: an output failure observed at the Sleep teacher
+your notes…"), kept 2, and was rejected by the collapse gate (0.31 > 0.25). The two kept dreams score about
++2.2 nats per token above the reset model under the session state with the quoted turn and, within
+0.05, the same without it: the gain is the session state's own frame, not the fact. So the one-turn
+text selection was not what hid retention, and the saved teacher state itself, prompted with each
+fact, produces the same sentence for every fact: an output failure observed at the Sleep teacher
 directly, with storage versus retrieval still formally open. The product rule
 turned the gated arms into one-turn runs, which is a finding about the rule in observational
 sessions (see Provenance), not about the methods; the ungated control, which consumed every
