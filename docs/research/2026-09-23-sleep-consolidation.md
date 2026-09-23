@@ -417,10 +417,15 @@ Findings, per arm:
   this run alone. **Single-fact ceiling, same checkpoint and seed
   ([outputs](results/sleep-2026-09-23/final_step250_seed0_ceiling_single/sleep_controls.json)):**
   teaching only the probed fact before each probe gives 22/24 verbatim and 18/24 on unseen
-  phrasing (boundary 1/2). So this checkpoint uses a taught fact in context almost every
-  time; it is the 30-statement session that loses them, whether through the number of turns,
-  the sampled replies drifting onto one frame, or both. That is the same mechanism the
-  step-100 Dream runs met: a session teacher that no longer articulates what it was taught.
+  phrasing (boundary 1/2). So this checkpoint answers from one taught fact in context almost
+  every time, and greedy recall fails under the 30-statement session. Whether the stored
+  information is lost from the state or present but blocked at retrieval or response is
+  unresolved by these greedy answers. Two protocol differences also keep this from being a
+  direct probe of the saved Sleep teacher state: the ceiling re-teaches with 8-token
+  acknowledgements while the Sleep teach session generates up to 32 tokens per turn, and
+  replay consumes the selected raw user text rather than anything the teacher articulates.
+  The step-100 Dream runs showed a similar output failure (a teacher repeating one greeting);
+  whether the mechanism is shared is not established.
 - **Selection under the product rule:** 29 of 30 teaching turns were flagged (would-rollback on
   the chunk where each fact arrives), so anchor, replay, distill and Dream selected ONE turn of
   text. Anchor, distill and Dream still loaded the full committed state of the teach session.
