@@ -96,7 +96,7 @@ class TurnRecord:
     n_chunks: int
     n_tokens: int
     accepted: bool
-    reason: str  # "accepted" | "rolled_back" | "read_only" | "no_chunks" | "empty_completion"
+    reason: str  # accepted | rolled_back | read_only | no_chunks | missing_chunks | ambiguous_provenance | empty_completion
 
 
 @dataclass
@@ -125,18 +125,34 @@ def harvest_sessions(store: ArtifactStore, model_id: str, session_ids: list[str]
     for meta in metas:
         sid = meta["session_id"]
         trace = [t for t in store.read_trace(sid) if t.get("kind") == "chat"]
-        trace.sort(key=lambda t: int(t.get("pos_end", 0)))
-        txs = sorted(store.read_transactions(sid), key=lambda r: int(r.get("pos_start", 0)))
+        txs = store.read_transactions(sid)
+        by_index = {int(r["index"]): r for r in txs if "index" in r}
+        # legacy traces (no tx_start/tx_end) can only be grouped by position, and only when positions never
+        # restart: a reset mid-session makes two turns share an interval, so those turns are marked ambiguous
+        legacy_ok = all(int(a.get("pos_end", 0)) < int(b.get("pos_end", 0)) for a, b in zip(trace, trace[1:])) and \
+            all(int(a.get("pos_start", 0)) < int(b.get("pos_start", 0)) or int(a.get("pos_end", 0)) <= int(b.get("pos_start", 0))
+                for a, b in zip(txs, txs[1:]))
         turns: list[TurnRecord] = []
         start = 0
         for t in trace:
-            end = int(t.get("pos_end", 0))
-            chunks = [r for r in txs if int(r.get("pos_start", 0)) >= start and int(r.get("pos_end", 0)) <= end]
-            start = end
             prompt, completion = str(t.get("prompt", "")), str(t.get("completion", ""))
+            if t.get("tx_start") is not None and t.get("tx_end") is not None:
+                chunks = [by_index[i] for i in range(int(t["tx_start"]), int(t["tx_end"])) if i in by_index]
+                covered = len(chunks) == int(t["tx_end"]) - int(t["tx_start"])
+            elif legacy_ok:
+                end = int(t.get("pos_end", 0))
+                chunks = [r for r in txs if int(r.get("pos_start", 0)) >= start and int(r.get("pos_end", 0)) <= end]
+                start = end
+                covered = True
+            else:
+                chunks, covered = [], False
             n_tokens = sum(int((r.get("signals") or {}).get("n_tokens", 0)) for r in chunks)
-            if not chunks:
+            if not chunks and not covered:
+                reason, ok = ("ambiguous_provenance" if t.get("tx_start") is None else "missing_chunks"), False
+            elif not chunks:
                 reason, ok = "no_chunks", False
+            elif not covered:
+                reason, ok = "missing_chunks", False
             elif any(bool(r.get("read_only")) or (r.get("decision") or {}).get("kind") == "readonly" for r in chunks):
                 reason, ok = "read_only", False
             elif any((r.get("decision") or {}).get("kind") not in ACCEPTED_KINDS for r in chunks):
@@ -396,7 +412,12 @@ def sleep_ttt(
             st = store.load_runner_state(h.session_id).get("committed")
             if st is None:
                 continue
-            state = be.load_state_dict(st)
+            try:
+                state = be.load_state_dict(st)
+            except ValueError as e:  # saved against another checkpoint: not this model's fast weights
+                report.setdefault("skipped_states", []).append({"session_id": h.session_id, "reason": str(e)})
+                log(f"[sleep] skipping {h.session_id}: {e}")
+                continue
             leaves.append([t.detach().clone() for t in state.effective_leaves(be._c15)])
         if not leaves:
             report["status"] = "rejected"
@@ -414,7 +435,7 @@ def sleep_ttt(
         report["packed"] = {"session": len(session_packed), "replay": len(replay_packed)}
         teachers = None
         if cfg.method == "distill":
-            teachers = _teacher_states(store, be, harvests)
+            teachers = _teacher_states(store, be, harvests, report, log)
             if not teachers:
                 report["status"] = "rejected"
                 report["reason"] = "distill needs committed session states"
@@ -478,29 +499,14 @@ def sleep_ttt(
     }
     report["after"] = after
     log(f"[sleep] after:  heldout NLL {_fmt(after['heldout_nll'])}; recall {_fmt_recall(after['recall'])}")
-    gate: dict[str, Any] = {"passed": True, "checks": []}
-    if before["heldout_nll"] and after["heldout_nll"]:
-        rise = after["heldout_nll"]["mean"] - before["heldout_nll"]["mean"]
-        ok = rise <= cfg.tolerance_nll
-        gate["checks"].append({"name": "heldout_nll_mean_rise", "value": rise, "limit": cfg.tolerance_nll, "passed": ok})
-        gate["passed"] &= ok
-    if before["canary"] and after["canary"]:
-        d_coh = after["canary"]["coherence"] - before["canary"]["coherence"]
-        d_poi = after["canary"]["poison"] - before["canary"]["poison"]
-        ok_c = not (d_coh > cfg.tolerance_canary.get("coherence", 0.1))
-        ok_p = not (d_poi < -cfg.tolerance_canary.get("poison", 0.1))
-        gate["checks"].append({"name": "canary_coherence_rise", "value": d_coh, "limit": cfg.tolerance_canary.get("coherence", 0.1), "passed": ok_c})
-        gate["checks"].append({"name": "canary_poison_drop", "value": d_poi, "limit": cfg.tolerance_canary.get("poison", 0.1), "passed": ok_p})
-        gate["passed"] &= ok_c and ok_p
-    if not gate["checks"]:
-        gate["note"] = "no locality measurement available (no replay corpus, no canary suite); gate passed by default"
+    gate = gate_from_measurements(before, after, tolerance_nll=cfg.tolerance_nll, tolerance_canary=cfg.tolerance_canary)
     report["gate"] = gate
     if before["recall"] and after["recall"]:
         report["recall_gain"] = {"recalled": after["recall"]["recalled"] - before["recall"]["recalled"],
                                  "recalled_paraphrase": after["recall"]["recalled_paraphrase"] - before["recall"]["recalled_paraphrase"],
                                  "n_probes": after["recall"]["n_probes"]}
 
-    if not gate["passed"]:
+    if gate["measured"] and not gate["passed"]:
         report["status"] = "rejected"
         report["reason"] = "locality gate failed"
         report["seconds"] = round(time.time() - t0, 1)
@@ -519,7 +525,7 @@ def sleep_ttt(
         src = os.path.join(ckpt, name)
         if os.path.exists(src) and not os.path.exists(os.path.join(child_ckpt, name)):
             shutil.copy2(src, child_ckpt)
-    report["status"] = "accepted"
+    report["status"] = "accepted" if gate["measured"] else "accepted_unmeasured"
     report["model_id"] = child
     report["seconds"] = round(time.time() - t0, 1)
     save_report()
@@ -532,13 +538,39 @@ def sleep_ttt(
         "checkpoint_digest": _checkpoint_digest(child_ckpt),
         "sleep": {k: report[k] for k in ("run_id", "config", "harvest", "gate", "recall_gain", "seconds") if k in report},
     })
-    log(f"[sleep] accepted -> {child} ({report['seconds']} s)")
+    log(f"[sleep] {report['status']} -> {child} ({report['seconds']} s)")
     return report
 
 
-def _teacher_states(store: ArtifactStore, be, harvests: list[SessionHarvest]) -> list[Any]:
-    """Disposable folded caches, one per source session with accepted turns: the teacher reads with
-    the pending gradient committed and the inner step disabled, the same fixed function the canaries use."""
+def gate_from_measurements(before: dict[str, Any], after: dict[str, Any], *, tolerance_nll: float, tolerance_canary: dict[str, float]) -> dict[str, Any]:
+    """The locality gate. ``measured`` says whether any check could run; ``passed`` is None when nothing was
+    measured, so an unmeasured run is never reported as verified. A nonfinite measurement fails its check."""
+    gate: dict[str, Any] = {"passed": None, "measured": False, "checks": []}
+
+    def check(name: str, value: float, limit: float, ok: bool) -> None:
+        finite = isinstance(value, (int, float)) and math.isfinite(value)
+        gate["checks"].append({"name": name, "value": float(value) if finite else None, "limit": limit, "passed": bool(ok and finite)})
+
+    if before.get("heldout_nll") and after.get("heldout_nll"):
+        rise = after["heldout_nll"]["mean"] - before["heldout_nll"]["mean"]
+        check("heldout_nll_mean_rise", rise, tolerance_nll, rise <= tolerance_nll)
+    if before.get("canary") and after.get("canary"):
+        d_coh = after["canary"]["coherence"] - before["canary"]["coherence"]
+        d_poi = after["canary"]["poison"] - before["canary"]["poison"]
+        lim_c, lim_p = tolerance_canary.get("coherence", 0.1), tolerance_canary.get("poison", 0.1)
+        check("canary_coherence_rise", d_coh, lim_c, d_coh <= lim_c)
+        check("canary_poison_drop", d_poi, lim_p, d_poi >= -lim_p)
+    gate["measured"] = bool(gate["checks"])
+    gate["passed"] = all(c["passed"] for c in gate["checks"]) if gate["checks"] else None
+    if not gate["measured"]:
+        gate["note"] = "no locality measurement was available (no replay corpus and no canary suite): this run is exploratory, not verified"
+    return gate
+
+
+def _teacher_states(store: ArtifactStore, be, harvests: list[SessionHarvest], report: dict[str, Any], log: Callable[[str], None]) -> list[Any]:
+    """Committed states, one per source session with accepted turns; the teacher reads each through a
+    folded cache with the inner step disabled, the same fixed function the canaries use. A state saved
+    against another checkpoint is skipped and recorded."""
     out = []
     for h in harvests:
         if not h.accepted_turns:
@@ -546,7 +578,11 @@ def _teacher_states(store: ArtifactStore, be, harvests: list[SessionHarvest]) ->
         st = store.load_runner_state(h.session_id).get("committed")
         if st is None:
             continue
-        out.append(be.load_state_dict(st))
+        try:
+            out.append(be.load_state_dict(st))
+        except ValueError as e:
+            report.setdefault("skipped_states", []).append({"session_id": h.session_id, "reason": str(e)})
+            log(f"[sleep] skipping {h.session_id}: {e}")
     return out
 
 

@@ -42,7 +42,7 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
   useStore.setState({ ...initial, detail, currentSessionId: 'demo_text',
     health: { ok: true, artifacts_root: '', device: 'cpu', n_models: 1, n_sessions: 1, public: true,
-      capabilities: { create_session: false, fork: false, reset: true, delete: false, resume: true, calibrate: false } } }, true);
+      capabilities: { create_session: false, fork: false, reset: true, delete: false, resume: true, calibrate: false, sleep: false } } }, true);
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); useStore.setState(initial, true); });
 

@@ -62,11 +62,18 @@ handled by calibrating the chat model before the sleep runs.
 | Outer gradient path | Ordinary backprop through the full model from a reset fast-weight state; the inner loop runs inside the forward as in SFT. |
 | Carried state | None across sleep; sleep consumes committed session states and traces, and emits a child checkpoint with a lineage record. Sessions of the parent are untouched. |
 | Causal target availability | All targets are past data (accepted traces, saved committed fast weights, replay corpus). |
-| Transaction boundary | Sleep is one transaction: canaries and held-out metrics are scored before and after from a zero state; the child is registered only if the gate passes. Rejected runs leave a report and nothing else. |
+| Transaction boundary | Sleep is one transaction: canaries and held-out metrics are scored before and after from a zero state. A run whose locality checks pass is `accepted`; one whose checks fail is `rejected` and leaves only a report; one with no locality measurement available (no replay corpus, no canary suite) registers its child as `accepted_unmeasured`, an exploratory result that is never presented as verified. Nonfinite measurements fail their check. |
 
-Provenance rule: sleep reads only chunks whose transaction decision was `commit`, `scale` or
-`project` (accepted metrics nonzero), never rolled-back or read-only chunks. The report states
-how many tokens were excluded and why.
+Provenance rule: sleep reads only chat turns whose every chunk's decision was `commit`,
+`scale` or `project`; turns with a rolled-back or read-only chunk are excluded, and the report
+states how many tokens were excluded and why. Turns are keyed by their transaction-index range
+(positions restart after a reset; indices do not); traces without that range are grouped by
+position only when positions never restart, otherwise marked ambiguous and excluded. Exclusion
+is a deterministic input rule. It is not a guarantee that rolled-back content cannot surface
+after sleep: a rollback replays the chunk frozen, so activation and conv state still carried
+it, and later accepted chunks (and the committed fast weights that `anchor` and `distill`
+read) can depend on that influence. Recall of rolled-back content after sleep is therefore
+measured against the parent and matched controls as a contamination outcome.
 
 ## Three methods (the options exposed in the UI)
 
@@ -99,8 +106,9 @@ Following 2607.00368, a run is judged behaviorally, from a fresh session with no
 - **Locality.** Held-out SmolTalk assistant NLL (median per-token CE as well as mean, per
   2605.24657) and the coherence canary must not degrade beyond tolerance; the poison canary
   must not improve toward the poison.
-- **Provenance.** A source session with rolled-back chunks: their content must not be
-  recalled after sleep. This is the harness contract carried into sleep.
+- **Provenance.** A source session with rolled-back chunks: recall of their content after
+  sleep is measured against the parent floor. Direct replay of rolled-back turns is excluded
+  by construction; indirect carry-over through activation state is the quantity reported.
 - **Matched baselines.** (i) Parent model, fresh session: the floor. (ii) Parent model with
   the trace pasted into context: the explicit-memory ceiling. (iii) The three methods on the
   same sessions. (iv) Replay fine-tune on *all* chunks including rolled-back ones: shows what
@@ -139,3 +147,28 @@ Copy stays as state labels; the explanation lives in this note and the README.
 
 Cost: methods 1 and 2 on the 760M model over MPS at a few hundred steps are minutes to an
 hour; an A100 job is not needed for the first measurement.
+
+## Measured so far
+
+### 2026-09-23, dry run on the 760M base (not chat-tuned): mechanics only
+
+Setup: local MPS, disposable store, one teaching session (3 turns, 172 accepted tokens, log-only)
+stating a cat's name, a city and an instrument; 3 recall probes with paraphrases; `w0` target;
+20 steps, seq 256, batch 2, replay ratio 0.5 from 16 SmolTalk conversations; held-out 8
+conversations (887 assistant tokens); tolerance 0.5 nats so nothing would be rejected.
+
+| Method | Time | Held-out NLL mean / median before → after | Recall verbatim | Recall paraphrase |
+| --- | --- | --- | --- | --- |
+| anchor λ=0.5 | 92 s | 2.085 / 1.422 → 2.051 / 1.379 | 0/3 → 0/3 | 0/3 → 1/3 |
+| replay | 125 s | 2.085 / 1.422 → 1.605 / 0.829 | 0/3 → 0/3 | 0/3 → 0/3 |
+| distill | 182 s | 2.085 / 1.422 → 1.626 / 0.875 | 0/3 → 0/3 | 0/3 → 0/3 |
+
+Reading. This run verifies that all three methods execute end to end, register a loadable
+child with lineage, and produce the report; it does not measure consolidation. The base model
+cannot chat, so "recall" before is zero by construction and the large held-out NLL drop under
+replay and distill is the model learning the chat *format* from the replay corpus, not the
+facts. The replies after replay moved to the topic without the content ("The name of your
+pet.", "The city you're in."). The single anchor paraphrase hit ("The name of my cat is named
+Marlowe.") is one sample from a model that otherwise echoes the prompt; it is suggestive that
+the moved `W0` carries session content, and nothing more until it is reproduced on the chat
+checkpoint with matched controls. The chat checkpoint is the first real measurement.

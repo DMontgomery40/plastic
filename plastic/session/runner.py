@@ -288,10 +288,13 @@ class Session:
         )
         transactions = list(self.runner.transactions)
         self._persist(transactions)
+        # the transaction-index range is the turn's provenance key: positions restart after a reset, indices do not
+        idx = [int(r["index"]) for r in transactions if "index" in r]
         self.store.append_trace(
             self.session_id,
             {"t_unix": int(time.time()), "kind": "chat", "prompt": prompt, "completion": completion,
-             "pos_end": self.runner.pos, "n_transactions": len(transactions)},
+             "pos_end": self.runner.pos, "n_transactions": len(transactions),
+             "tx_start": (min(idx) if idx else None), "tx_end": (max(idx) + 1 if idx else None)},
         )
         return ChatResult(prompt, completion, transactions, len(ids), len(out_ids), self.summary())
 

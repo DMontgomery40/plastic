@@ -4,6 +4,7 @@ import { Panel } from '../../components/panels/Panel';
 import { ago, backendLabel, fmtInt } from '../format';
 import { useStore } from '../store';
 import { Button, Field, Select, StateChip } from '../ui';
+import { SleepPanel } from './SleepPanel';
 
 function CreateSession() {
   const models = useStore((s) => s.models).filter((m) => m.domain === 'text' && m.status === 'completed');
@@ -27,7 +28,7 @@ function CreateSession() {
             model
               ? `${backendLabel(model.backend)} · ${fmtInt(model.params)} params · ${
                   calibrating === model.model_id ? 'calibrating on real chats, a few minutes' : model.calibrated ? 'calibrated' : 'no calibration'
-                }`
+                }${model.parent_model_id ? ` · slept from ${model.parent_model_id}` : ''}`
               : undefined
           }
         >
@@ -83,6 +84,7 @@ export function SessionsScreen() {
   return (
     <div className="space-y-4">
       <CreateSession />
+      <SleepPanel models={models} />
       <Panel title="Text sessions" subtitle={`${sessions.length} session${sessions.length === 1 ? '' : 's'}`}>
         {sessions.length === 0 ? (
           <Empty title="No text sessions." detail={caps.create_session ? 'Create one above.' : 'None available in this deployment.'} />

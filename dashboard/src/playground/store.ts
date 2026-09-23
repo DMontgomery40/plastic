@@ -13,6 +13,8 @@ import type {
   SessionDetail,
   SessionState,
   SessionSummary,
+  SleepOptions,
+  SleepRun,
   TransactionRecord,
 } from './types';
 
@@ -20,7 +22,7 @@ export const TABS = ['chat', 'signals', 'sessions'] as const;
 export type Tab = (typeof TABS)[number];
 export const TAB_LABELS: Record<Tab, string> = { chat: 'Chat', signals: 'Signals', sessions: 'Sessions' };
 
-const NO_CAPABILITIES: Capabilities = { create_session: false, fork: false, reset: false, delete: false, resume: false, calibrate: false };
+const NO_CAPABILITIES: Capabilities = { create_session: false, fork: false, reset: false, delete: false, resume: false, calibrate: false, sleep: false };
 
 export interface PlaygroundState {
   health: Health | null;
@@ -39,6 +41,8 @@ export interface PlaygroundState {
   busy: { chat: boolean; session: boolean; mutation: boolean };
   /** model id whose real-chat calibration is running (it generates every response, so it takes minutes) */
   calibrating: string | null;
+  /** sleep runs known to the server, newest first; a running one is polled by the Sessions screen */
+  sleepRuns: SleepRun[];
   error: string | null;
 
   capabilities: () => Capabilities;
@@ -58,6 +62,8 @@ export interface PlaygroundState {
   forkSession: (sessionId: string) => Promise<string | null>;
   deleteSession: (sessionId: string) => Promise<void>;
   calibrate: (modelId: string) => Promise<void>;
+  refreshSleep: () => Promise<void>;
+  startSleep: (modelId: string, options: SleepOptions) => Promise<void>;
 }
 
 function message(err: unknown): string {
@@ -80,6 +86,7 @@ export const useStore = create<PlaygroundState>((set, get) => ({
   tab: 'chat',
   busy: { chat: false, session: false, mutation: false },
   calibrating: null,
+  sleepRuns: [],
   error: null,
 
   capabilities: () => get().health?.capabilities ?? NO_CAPABILITIES,
@@ -222,6 +229,31 @@ export const useStore = create<PlaygroundState>((set, get) => ({
         const next = sessions.find((s) => s.domain === 'text')?.session_id ?? null;
         await get().selectSession(next);
       }
+    } catch (err) {
+      set({ error: message(err) });
+    } finally {
+      set({ busy: { ...get().busy, mutation: false } });
+    }
+  },
+
+  refreshSleep: async () => {
+    if (!get().capabilities().sleep) return;
+    try {
+      const runs = await api.listSleep();
+      const wasRunning = get().sleepRuns.some((r) => r.status === 'running');
+      set({ sleepRuns: runs });
+      // a run just finished: the catalog may hold a new child model
+      if (wasRunning && !runs.some((r) => r.status === 'running')) await get().refreshModels();
+    } catch (err) {
+      set({ error: message(err) });
+    }
+  },
+
+  startSleep: async (modelId, options) => {
+    set({ busy: { ...get().busy, mutation: true }, error: null });
+    try {
+      const run = await api.startSleep(modelId, options);
+      set({ sleepRuns: [run, ...get().sleepRuns.filter((r) => r.run_id !== run.run_id)] });
     } catch (err) {
       set({ error: message(err) });
     } finally {

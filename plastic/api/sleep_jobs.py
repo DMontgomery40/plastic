@@ -107,7 +107,7 @@ class SleepJobs:
         report = self._report(run_dir)
         exit_code = proc.poll() if proc is not None else None
         running = proc is not None and exit_code is None
-        if report and report.get("status") in ("accepted", "rejected"):
+        if report and report.get("status") in ("accepted", "accepted_unmeasured", "rejected"):
             status = report["status"]
         elif running:
             status = "running"

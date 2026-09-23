@@ -2,6 +2,8 @@
 // page or a stack trace never reaches the banner raw.
 
 import type {
+  SleepOptions,
+  SleepRun,
   CalibrationSummary,
   ChatResult,
   Health,
@@ -97,3 +99,8 @@ export const forkSession = (sessionId: string) =>
 export const resetSession = (sessionId: string) => fetchJson<unknown>(`/api/sessions/${encodeURIComponent(sessionId)}/reset`, { method: 'POST' });
 export const resumeSession = (sessionId: string) => fetchJson<unknown>(`/api/sessions/${encodeURIComponent(sessionId)}/resume`, { method: 'POST' });
 export const deleteSession = (sessionId: string) => fetchJson<unknown>(`/api/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
+
+export const startSleep = (modelId: string, options: SleepOptions) =>
+  fetchJson<SleepRun>(`/api/models/${encodeURIComponent(modelId)}/sleep`, { method: 'POST', body: options });
+export const listSleep = () => fetchJson<SleepRun[]>('/api/sleep');
+export const getSleep = (runId: string) => fetchJson<SleepRun>(`/api/sleep/${encodeURIComponent(runId)}`);

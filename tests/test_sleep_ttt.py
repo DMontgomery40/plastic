@@ -30,19 +30,28 @@ def _tx(index, start, end, kind="commit", *, read_only=False):
             "accepted": {"delta_norm": 0.0 if kind == "rollback" else 1.0}, "read_only": read_only, "read_only_reason": None, "t_unix": 0}
 
 
-def _session(store, sid, model_id, turns, *, log_only=False):
-    """turns: list of (prompt, completion, [chunk kinds]) laid out consecutively in 8-token chunks."""
+def _session(store, sid, model_id, turns, *, log_only=False, legacy=False):
+    """turns: list of (prompt, completion, [chunk kinds]) laid out consecutively in 8-token chunks; a kind of
+    "reset" restarts the position (the runner's transaction counter keeps counting). ``legacy`` writes traces
+    without the transaction-index range, as sessions recorded before that field existed."""
     store.register_model(model_id, {"backend": "ttt", "domain": "text"}) if model_id not in {r["model_id"] for r in store.list_models()} else None
     store.create_session(sid, model_id=model_id, domain="text", harness_cfg=HarnessConfig(log_only=log_only))
     pos = 0
     idx = 0
     for prompt, completion, kinds in turns:
+        if kinds == ["reset"]:
+            pos = 0
+            continue
+        first = idx
         for kind in kinds:
             ro = kind == "readonly"
             store.append_transaction(sid, _tx(idx, pos, pos + 8, kind, read_only=ro))
             pos += 8
             idx += 1
-        store.append_trace(sid, {"t_unix": 0, "kind": "chat", "prompt": prompt, "completion": completion, "pos_end": pos, "n_transactions": len(kinds)})
+        rec = {"t_unix": 0, "kind": "chat", "prompt": prompt, "completion": completion, "pos_end": pos, "n_transactions": len(kinds)}
+        if not legacy:
+            rec.update(tx_start=first if kinds else None, tx_end=idx if kinds else None)
+        store.append_trace(sid, rec)
 
 
 def test_harvest_keeps_only_fully_accepted_turns_and_counts_exclusions(tmp_path):
@@ -71,11 +80,43 @@ def test_harvest_keeps_only_fully_accepted_turns_and_counts_exclusions(tmp_path)
     assert [h.session_id for h in harvest_sessions(store, "m", ["b"])] == ["b"]
 
 
+def test_reset_between_turns_keeps_each_epoch_apart(tmp_path):
+    """Positions restart after a reset while transaction indices keep counting: the second epoch's committed
+    turn must be accepted on its own, not merged with the first epoch's rolled-back one (ASTRA-156 #1)."""
+    store = ArtifactStore(str(tmp_path))
+    _session(store, "s", "m", [
+        ("first epoch", "rolled back", ["commit", "rollback"]),
+        ("", "", ["reset"]),
+        ("after reset", "kept", ["commit", "commit"]),
+    ])
+    turns = harvest_sessions(store, "m")[0].turns
+    assert [(t.prompt, t.reason, t.n_chunks, t.n_tokens) for t in turns] == [("first epoch", "rolled_back", 2, 16), ("after reset", "accepted", 2, 16)]
+
+
+def test_legacy_traces_group_by_position_only_when_positions_never_restart(tmp_path):
+    store = ArtifactStore(str(tmp_path))
+    _session(store, "mono", "m", [("a", "kept a", ["commit"]), ("b", "kept b", ["commit", "scale"])], legacy=True)
+    _session(store, "reset", "m", [("a", "x", ["commit"]), ("", "", ["reset"]), ("b", "y", ["commit"])], legacy=True)
+    by = {h.session_id: h for h in harvest_sessions(store, "m")}
+    assert [(t.reason, t.n_chunks) for t in by["mono"].turns] == [("accepted", 1), ("accepted", 2)]
+    assert [t.reason for t in by["reset"].turns] == ["ambiguous_provenance", "ambiguous_provenance"]
+    assert harvest_summary([by["reset"]])["turns_by_reason"] == {"ambiguous_provenance": 2}
+
+
+def test_trace_whose_transactions_are_missing_is_not_accepted(tmp_path):
+    store = ArtifactStore(str(tmp_path))
+    store.register_model("m", {"backend": "ttt", "domain": "text"})
+    store.create_session("s", model_id="m", domain="text", harness_cfg=HarnessConfig())
+    store.append_transaction("s", _tx(0, 0, 8))
+    store.append_trace("s", {"t_unix": 0, "kind": "chat", "prompt": "p", "completion": "c", "pos_end": 16, "n_transactions": 2, "tx_start": 0, "tx_end": 2})
+    assert harvest_sessions(store, "m")[0].turns[0].reason == "missing_chunks"
+
+
 def test_turn_with_no_chunks_is_excluded_not_guessed(tmp_path):
     store = ArtifactStore(str(tmp_path))
     store.register_model("m", {"backend": "ttt", "domain": "text"})
     store.create_session("s", model_id="m", domain="text", harness_cfg=HarnessConfig())
-    store.append_trace("s", {"t_unix": 0, "kind": "chat", "prompt": "p", "completion": "c", "pos_end": 0, "n_transactions": 0})
+    store.append_trace("s", {"t_unix": 0, "kind": "chat", "prompt": "p", "completion": "c", "pos_end": 0, "n_transactions": 0, "tx_start": 0, "tx_end": 0})
     h = harvest_sessions(store, "m")[0]
     assert h.turns[0].reason == "no_chunks" and not h.accepted_turns
 
@@ -151,6 +192,22 @@ def test_recall_scoring_and_probe_loading(tmp_path):
         RecallProbe.from_dict({"question": "", "answer": "x"})
 
 
+def test_gate_treats_nonfinite_measurements_as_failures():
+    """The gate logic is a closure inside sleep_ttt; this pins the same rule through the module's helper."""
+    from plastic.sleep.ttt import gate_from_measurements
+
+    before = {"heldout_nll": {"mean": 2.0, "median": 1.5, "tokens": 10}, "canary": {"coherence": 3.0, "poison": 5.0}, "recall": None}
+    ok = gate_from_measurements(before, {"heldout_nll": {"mean": 2.01, "median": 1.5, "tokens": 10}, "canary": {"coherence": 3.05, "poison": 5.0}, "recall": None},
+                                tolerance_nll=0.05, tolerance_canary={"coherence": 0.1, "poison": 0.1})
+    assert ok["measured"] and ok["passed"] is True and [c["passed"] for c in ok["checks"]] == [True, True, True]
+    nan = gate_from_measurements(before, {"heldout_nll": {"mean": float("nan"), "median": 1.5, "tokens": 10}, "canary": {"coherence": float("inf"), "poison": 5.0}, "recall": None},
+                                 tolerance_nll=0.05, tolerance_canary={"coherence": 0.1, "poison": 0.1})
+    assert nan["passed"] is False and [c["passed"] for c in nan["checks"]] == [False, False, True] and nan["checks"][0]["value"] is None
+    none = gate_from_measurements({"heldout_nll": None, "canary": None, "recall": None}, {"heldout_nll": None, "canary": None, "recall": None},
+                                  tolerance_nll=0.05, tolerance_canary={})
+    assert none["measured"] is False and none["passed"] is None and "exploratory" in none["note"]
+
+
 def test_sleep_config_validation():
     SleepConfig().validate()
     for bad in ({"method": "dream"}, {"target": "lora"}, {"steps": 0}, {"replay_ratio": 1.5}, {"anchor_lambda": -0.1}, {"lr": 0.0}, {"seq_len": 8}):
@@ -212,5 +269,7 @@ def test_sleep_end_to_end_on_the_base_model(tmp_path):
     cfg2 = SleepConfig(method="replay", target="w0", steps=2, batch_size=1, seq_len=64, device=dev, heldout_rows=0, replay_rows=0,
                        replay_ratio=0.0, recall_max_new_tokens=4, scan_checkpoint_groups=4)
     rep2 = sleep_ttt(store, "base", cfg2, log=lambda m: None)
-    assert rep2["status"] == "accepted" and len(rep2["losses"]) == 2 and all(l == l for l in rep2["losses"])
-    assert rep2["gate"].get("note", "").startswith("no locality measurement")
+    # no held-out rows and no canary suite: the child exists but the run is marked unmeasured, never verified
+    assert rep2["status"] == "accepted_unmeasured" and len(rep2["losses"]) == 2 and all(l == l for l in rep2["losses"])
+    assert rep2["gate"]["measured"] is False and rep2["gate"]["passed"] is None and "exploratory" in rep2["gate"]["note"]
+    assert rep["gate"]["measured"] is True and rep["gate"]["passed"] is True

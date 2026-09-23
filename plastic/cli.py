@@ -292,7 +292,7 @@ def cmd_sleep(args: argparse.Namespace) -> int:
         probes = load_probes(args.recall) if args.recall else None
         report = sleep_mod.sleep_ttt(store, args.model_id, cfg, session_ids=(args.sessions or None), probes=probes, run_dir=args.out)
         print(json.dumps({k: v for k, v in report.items() if k not in ("losses",)}, indent=2, default=str))
-        return 0 if report.get("status") == "accepted" else 3
+        return 0 if report.get("status") in ("accepted", "accepted_unmeasured") else 3
     if record.get("backend") not in (None, "plastic"):
         print(f"sleep is not implemented for backend {record.get('backend')!r}", file=sys.stderr)
         return 2

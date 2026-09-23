@@ -11,6 +11,7 @@ export interface Capabilities {
   delete: boolean;
   resume: boolean;
   calibrate: boolean;
+  sleep: boolean;
 }
 
 export interface Health {
@@ -36,6 +37,62 @@ export interface ModelSummary {
   eval?: { heldout_loss?: number | null; memory_value?: number | null } | null;
   /** Set on a chat-tuned checkpoint's record; absent on a base model. */
   chat_tuned?: boolean | null;
+  /** Lineage: set on a model produced by sleep from another model. */
+  parent_model_id?: string | null;
+  type?: string | null;
+}
+
+// ---- sleep: consolidation of accepted session learning into a child model (plastic/sleep/ttt.py)
+export type SleepMethod = 'replay' | 'distill' | 'anchor';
+export type SleepTarget = 'w0' | 'all';
+export type SleepStatus = 'running' | 'accepted' | 'accepted_unmeasured' | 'rejected' | 'failed' | 'unknown';
+
+export interface SleepOptions {
+  method: SleepMethod;
+  target: SleepTarget;
+  steps?: number;
+  sessions?: string[];
+  probes?: { question: string; answer: string; paraphrase?: string }[];
+}
+
+export interface SleepMeasurement {
+  heldout_nll: { mean: number | null; median: number | null; tokens: number } | null;
+  canary: { coherence: number | null; poison: number | null } | null;
+  recall: { n_probes: number; recalled: number; recalled_exact: number; n_paraphrase: number; recalled_paraphrase: number } | null;
+}
+
+export interface SleepReport {
+  run_id: string;
+  parent_model_id: string;
+  status: SleepStatus;
+  model_id?: string | null;
+  reason?: string | null;
+  harvest?: {
+    sessions: { session_id: string; log_only: boolean; turns: number; accepted_turns: number; has_committed_state: boolean }[];
+    turns_by_reason: Record<string, number>;
+    accepted_tokens: number;
+    excluded_tokens: number;
+  };
+  before?: SleepMeasurement | null;
+  after?: SleepMeasurement | null;
+  gate?: { passed: boolean | null; measured?: boolean; checks: { name: string; value: number | null; limit: number; passed: boolean }[]; note?: string } | null;
+  recall_gain?: { recalled: number; recalled_paraphrase: number; n_probes: number } | null;
+  losses?: number[];
+  seconds?: number;
+}
+
+export interface SleepRun {
+  run_id: string;
+  model_id: string | null;
+  status: SleepStatus;
+  exit_code: number | null;
+  started_at_unix: number | null;
+  options: SleepOptions | null;
+  sessions: string[] | null;
+  n_probes: number | null;
+  report: SleepReport | null;
+  log_tail?: string[];
+  stderr_tail?: string[];
 }
 
 export interface Decision {

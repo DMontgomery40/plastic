@@ -27,7 +27,7 @@ beforeEach(() => {
   }));
   useStore.setState({ ...initial, models: [model], sessions: [],
     health: { ok: true, artifacts_root: '', device: 'cpu', n_models: 1, n_sessions: 0, public: false,
-      capabilities: { create_session: true, fork: true, reset: true, delete: true, resume: true, calibrate: true } } }, true);
+      capabilities: { create_session: true, fork: true, reset: true, delete: true, resume: true, calibrate: true, sleep: false } } }, true);
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); useStore.setState(initial, true); });
 
