@@ -108,7 +108,8 @@ def main() -> None:
     ap.add_argument("--warmup", type=int, default=100)
     ap.add_argument("--weight-decay", type=float, default=0.0)
     ap.add_argument("--device", default="cuda")
-    ap.add_argument("--dtype", default="bf16", choices=["bf16", "fp32"])
+    ap.add_argument("--dtype", default="bf16", choices=["bf16", "fp32", "bf16-weights"],
+                    help="bf16 = fp32 master weights with bf16 autocast (default); bf16-weights = pure bf16 (NaN-prone in the inner loop); fp32 = no autocast")
     ap.add_argument("--seed", type=int, default=20260923)
     ap.add_argument("--measure", type=int, default=0, help="only time N optimizer steps and exit")
     ap.add_argument("--save-every", type=int, default=500)
@@ -123,7 +124,8 @@ def main() -> None:
 
     torch.manual_seed(args.seed)
     dev = torch.device(args.device)
-    dtype = torch.bfloat16 if args.dtype == "bf16" else torch.float32
+    dtype = torch.bfloat16 if args.dtype == "bf16-weights" else torch.float32
+    autocast = args.dtype == "bf16"
     raw = json.loads(open(os.path.join(args.checkpoint, "config.json")).read())
     cfg = M.TTTConfig(**{k: v for k, v in raw.items() if k not in ("architectures", "auto_map", "transformers_version", "dtype", "model_type")})
     cfg.scan_checkpoint_group_size = int(args.grad_checkpoint_groups)
@@ -176,9 +178,12 @@ def main() -> None:
             i += args.batch
             x = torch.tensor([b[0] for b in batch], dtype=torch.long, device=dev)
             y = torch.tensor([b[1] for b in batch], dtype=torch.long, device=dev)
-            out = model(x, use_cache=False)
+            with torch.autocast(dev.type, dtype=torch.bfloat16, enabled=autocast):
+                out = model(x, use_cache=False)
             logits = out.logits[:, :-1].float()
             loss = torch.nn.functional.cross_entropy(logits.reshape(-1, logits.shape[-1]), y[:, 1:].reshape(-1), ignore_index=-100)
+            if not torch.isfinite(loss):
+                raise RuntimeError(f"non-finite loss at step {step}; dtype mode {args.dtype}")
             (loss / args.grad_accum).backward()
             loss_acc += float(loss) / args.grad_accum
             seen += x.numel()
@@ -189,6 +194,8 @@ def main() -> None:
         if step % 10 == 0 or step == total or args.measure:
             el = time.time() - t0
             rec = {"step": step, "loss": round(loss_acc, 4), "lr": lr_at(step - 1), "tokens_seen": seen, "seconds": round(el, 1), "tok_per_s": round(seen / el, 1)}
+            if dev.type == "cuda":
+                rec["peak_mem_gb"] = round(torch.cuda.max_memory_allocated() / 1e9, 1)
             meta["log"].append(rec)
             print("[sft]", json.dumps(rec), flush=True)
         if not args.measure and (step % args.save_every == 0 or step == total):
