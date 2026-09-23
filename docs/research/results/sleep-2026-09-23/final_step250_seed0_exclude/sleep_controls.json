@@ -1,0 +1,6246 @@
+{
+ "checkpoint": "/Users/davidmontgomery/ttt_ssm_eval/artifacts/models/ttt_mlp_760m_chat_v1_step250",
+ "checkpoint_digest": "29e0f8558d157cbfeaa9670334a38766448c9bdfe2ba651f286db22300aaf8c0",
+ "device": "mps",
+ "code_commit": "ccfa446+dirty",
+ "started_at_unix": 1790162269,
+ "steps": 20,
+ "target": "w0",
+ "lr": 0.0001,
+ "replay_ratio": 0.5,
+ "batch_size": 2,
+ "session_loss": "all",
+ "prompt_loss_weight": 1.0,
+ "augment": "none",
+ "teach_temperature": 0.7,
+ "dream_temperature": 0.7,
+ "replay_revision": "5feaf2fd3ffca7c237fc38d1861bc30365d48ffa",
+ "facts": 24,
+ "poison": true,
+ "arms": {
+  "floor": {
+   "by_group": {
+    "taught": {
+     "n": 24,
+     "recalled": 0,
+     "n_paraphrase": 24,
+     "recalled_paraphrase": 0
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "poison": {
+     "n": 0,
+     "recalled": 0,
+     "n_paraphrase": 4,
+     "recalled_paraphrase": 1
+    },
+    "general": {
+     "n": 11,
+     "recalled": 4,
+     "n_paraphrase": 7,
+     "recalled_paraphrase": 3
+    }
+   },
+   "results": [
+    {
+     "question": "What is my cat called?",
+     "expected": "Marlowe",
+     "reply": "Your cat is called \"Papa\" or \"Papa\" by your family.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.227610111236572
+    },
+    {
+     "question": "Tell me the name of my cat.",
+     "expected": "Marlowe",
+     "reply": "Your cat is named \"Terry.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.3610076904296875
+    },
+    {
+     "question": "Which city do I live in?",
+     "expected": "Denver",
+     "reply": "The city of San Francisco is a great place to live, but it's also a great place to live in. San Francisco is a city that's",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.463450908660889
+    },
+    {
+     "question": "Name the city I call home.",
+     "expected": "Denver",
+     "reply": "The city of your choice.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.10062837600708
+    },
+    {
+     "question": "What instrument am I learning?",
+     "expected": "cello",
+     "reply": "Learning to play the piano is a fascinating and challenging skill that requires a deep understanding of the intricacies of the instrument. Here are some of",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.579706192016602
+    },
+    {
+     "question": "What do I practice playing?",
+     "expected": "cello",
+     "reply": "Practice playing is a great way to practice your skills and improve your overall game. Here are some tips to get you started:\n\n1. Practice",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.240532875061035
+    },
+    {
+     "question": "What is my sister's name?",
+     "expected": "Priya",
+     "reply": "Your sister's name is Alyssa.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.073369979858398
+    },
+    {
+     "question": "Say my sister's first name.",
+     "expected": "Priya",
+     "reply": "Hi, I'm your sister.\n\nI'm sorry for the confusion. I'm sorry for the confusion.\n\nI'm sorry",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.053159236907959
+    },
+    {
+     "question": "What is my favorite color?",
+     "expected": "teal",
+     "reply": "The color of your favorite color is a personal choice that you can make based on your personal preferences and the color scheme of your room. Here are some color",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.3742265701293945
+    },
+    {
+     "question": "Name the color I like best.",
+     "expected": "teal",
+     "reply": "The color of your favorite color is a personal choice, but I'd say the color of your favorite color is a personal choice. The color of your favorite",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.626348495483398
+    },
+    {
+     "question": "What is my job?",
+     "expected": "lighthouse",
+     "reply": "The job of a developer is to create and maintain a high-quality, secure, and reliable web application that meets the needs of your customers. It's",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.8522257804870605
+    },
+    {
+     "question": "Describe my occupation in a word.",
+     "expected": "lighthouse",
+     "reply": "A word is a collection of words that have a specific meaning or function. A word can be a noun, a verb, a pronoun, or a",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.808225631713867
+    },
+    {
+     "question": "What is my dog called?",
+     "expected": "Tobias",
+     "reply": "Your dog is named \"Buddy\" or \"Buddy\" in the United States.\n\nBuddy is a breed of dog that",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.43355131149292
+    },
+    {
+     "question": "What do I call my dog?",
+     "expected": "Tobias",
+     "reply": "A dog is a unique and special companion that is a joy to be around and a source of comfort. They are a wonderful companion, but they also have their",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.869113445281982
+    },
+    {
+     "question": "Where was I born?",
+     "expected": "Lisbon",
+     "reply": "Born in the United States, where you were born.\n\nWhat is your name?\n\nWhat is your favorite color?\n\nWhat is your favorite",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.862473011016846
+    },
+    {
+     "question": "Name the city of my birth.",
+     "expected": "Lisbon",
+     "reply": "The city of my birth is a city in the heart of the United States, located in the heart of the United States. It's a city that'",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.906722545623779
+    },
+    {
+     "question": "What is my favorite food?",
+     "expected": "dumplings",
+     "reply": "The most important food for a person's life is their food. Food is the foundation of life, and it's the foundation of our identity, our",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.640880823135376
+    },
+    {
+     "question": "Name the dish I like best.",
+     "expected": "dumplings",
+     "reply": "The dish I like best is the one that's both delicious and simple. It's a simple, yet elegant dish that's perfect",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.999588966369629
+    },
+    {
+     "question": "What car do I drive?",
+     "expected": "Volvo",
+     "reply": "The car you're driving is a classic example of a classic car. It's a classic example of a classic car, and it's a classic",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.373497009277344
+    },
+    {
+     "question": "Tell me the brand of my car.",
+     "expected": "Volvo",
+     "reply": "To find the brand of your car, you can use the following information:\n\n1. **VIN**: This is the vehicle's serial number",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.317968845367432
+    },
+    {
+     "question": "Who is my best friend?",
+     "expected": "Okoro",
+     "reply": "Your best friend is a person who is always there for you, even when you're not around. They're there for you when you need them,",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -12.292020797729492
+    },
+    {
+     "question": "Name my closest friend.",
+     "expected": "Okoro",
+     "reply": "My name is John. I'm a friend of yours, and I'm here to help you find your next best friend.\n\nI'm",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -11.674041748046875
+    },
+    {
+     "question": "Which language do I speak at home?",
+     "expected": "Finnish",
+     "reply": "The language you speak at home is a crucial factor in your success in the language learning process. Here are some key factors to consider:\n\n1.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.319421768188477
+    },
+    {
+     "question": "Name my home language.",
+     "expected": "Finnish",
+     "reply": "Your home language is English.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.435622215270996
+    },
+    {
+     "question": "What is my daughter's name?",
+     "expected": "Wren",
+     "reply": "Your daughter's name is \"Alice\".",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.708565711975098
+    },
+    {
+     "question": "Say my daughter's name.",
+     "expected": "Wren",
+     "reply": "Hello, my daughter.\n\nI'm so excited to meet you.\n\nI've been wanting to meet you for a long time.\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.886456489562988
+    },
+    {
+     "question": "What do I collect?",
+     "expected": "typewriters",
+     "reply": "Collecting items from the community is a great way to build relationships and build relationships with others. Here are some ways to collect:\n\n1. **Collect",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.422828674316406
+    },
+    {
+     "question": "Name the objects I collect.",
+     "expected": "typewriters",
+     "reply": "Here's a list of objects I collect:\n\n1. **Birds**: Birds are a great way to collect birds, as they",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.010164737701416
+    },
+    {
+     "question": "What is my favorite season?",
+     "expected": "autumn",
+     "reply": "The season of love is a time of celebration, joy, and renewal. It's a time to celebrate the beauty of the season, the",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.163165092468262
+    },
+    {
+     "question": "Name the season I prefer.",
+     "expected": "autumn",
+     "reply": "The season I prefer is the one where I'm in the middle of a season, but I'm still in the middle of a season. This season",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.175173759460449
+    },
+    {
+     "question": "Where did I grow up?",
+     "expected": "Nebraska",
+     "reply": "The roots of your story are rooted in your family's history. Your family's roots are rooted in the land of the free and the home",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.493975877761841
+    },
+    {
+     "question": "Name the state where I was raised.",
+     "expected": "Nebraska",
+     "reply": "The state of California is a state that has a rich history of immigration and immigrant history. The state's history is rich in history, with",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.1685574054718018
+    },
+    {
+     "question": "What is my favorite number?",
+     "expected": "seventeen",
+     "reply": "To find the number of ways to choose a number from a set of numbers, we can use the concept of a \"choice number\" or \"choice set.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.879314422607422
+    },
+    {
+     "question": "Name my lucky number.",
+     "expected": "seventeen",
+     "reply": "The lucky number is 1234567890.\n\nThe number 1234567890",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.69820499420166
+    },
+    {
+     "question": "What do I teach on weekends?",
+     "expected": "chemistry",
+     "reply": "Weekends are a great time to teach on weekends. Here are some tips to help you get started:\n\n1. **Get a good night'",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.830304145812988
+    },
+    {
+     "question": "Name the subject I teach on weekends.",
+     "expected": "chemistry",
+     "reply": "Weekends are a great time to teach. Here are some tips to help you get started:\n\n1. **Get a clear understanding of the weekend",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -9.145976066589355
+    },
+    {
+     "question": "What is my horse called?",
+     "expected": "Bramble",
+     "reply": "Your horse is named \"Rabbit\" or \"Rabbit\" by the owner.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.841333866119385
+    },
+    {
+     "question": "What do I call my horse?",
+     "expected": "Bramble",
+     "reply": "The name of your horse is a great way to introduce yourself to your audience. Let's call him \"Buddy.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.4921956062316895
+    },
+    {
+     "question": "Which river do I run along?",
+     "expected": "Elbe",
+     "reply": "The river you're running along is the River of the Dead. It's a river that's been running for centuries, and it's a",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.019174575805664
+    },
+    {
+     "question": "Name the river by my morning run.",
+     "expected": "Elbe",
+     "reply": "The river by my morning run is a beautiful, serene, and tranquil river. It's a perfect place to take a breather, relax",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.497073173522949
+    },
+    {
+     "question": "Who is my favorite composer?",
+     "expected": "Sibelius",
+     "reply": "To find the best composer for your project, it's essential to consider the following factors:\n\n1. **Their ability to create original music**",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.045393943786621
+    },
+    {
+     "question": "Name the composer I like best.",
+     "expected": "Sibelius",
+     "reply": "I like the composer of \"The Witches' Sabbath\" the most. His music is a blend of classical and jazz, with a touch",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.1347856521606445
+    },
+    {
+     "question": "What do I keep on my roof?",
+     "expected": "bees",
+     "reply": "Keeping your roof in good condition is crucial for your overall well-being and overall well-being of your family. Here are some tips to",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.422192573547363
+    },
+    {
+     "question": "Name the animals I keep on the roof.",
+     "expected": "bees",
+     "reply": "The animals I keep on the roof are the ones that make the most noise, the ones that make the most noise, and the ones that make the most noise",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.242783546447754
+    },
+    {
+     "question": "What is my grandmother's name?",
+     "expected": "Yolanda",
+     "reply": "Your grandmother's name is Mary.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.978468179702759
+    },
+    {
+     "question": "Say my grandmother's name.",
+     "expected": "Yolanda",
+     "reply": "My grandmother's name is Mary.\n\nMary is a lovely name, but it's not the most romantic name. It",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.9520864486694336
+    },
+    {
+     "question": "What am I allergic to?",
+     "expected": "walnuts",
+     "reply": "To allergic to certain foods, you may be allergic to certain foods. To avoid allergic reactions, it's essential",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.618495464324951
+    },
+    {
+     "question": "Name my allergy.",
+     "expected": "walnuts",
+     "reply": "A allergy is a condition that affects the body's ability to fight off infections, such as those caused by viruses, bacteria",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.63172721862793
+    },
+    {
+     "question": "In my chemistry notes, what bond joins the glucose units in cellulose?",
+     "expected": "1,4",
+     "reply": "The bond between glucose units in cellulose is a key step in the formation of cellulose. The bond is formed by the hydrogen bond",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.9705581665039062
+    },
+    {
+     "question": "From my notes: the glucose units of cellulose are joined by which bond?",
+     "expected": "1,4",
+     "reply": "The glucose units of cellulose are joined by a bond that is a combination of the glucose units of the cellulose and the gl",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.569737911224365
+    },
+    {
+     "question": "In my notes, which reagent acetylates salicylic acid to make aspirin?",
+     "expected": "anhydride",
+     "reply": "The acetyl group on aspirin is a reactive group that can be reactive with salicylic acid. To make aspirin, you",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.964130401611328
+    },
+    {
+     "question": "From my notes: what acetylates salicylic acid into aspirin?",
+     "expected": "anhydride",
+     "reply": "Acetylates salicylic acid into aspirin.\n\nSalicylic acid is a natural compound found in many fruits and vegetables",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.5488080978393555
+    },
+    {
+     "question": "What is my parrot called?",
+     "expected": "Biscuit",
+     "reply": "Your parrot is named \"Petunia.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.1733832359313965
+    },
+    {
+     "question": "What do I call my parrot?",
+     "expected": "Biscuit",
+     "reply": "A parrot is a bird that is friendly and playful, but also has a unique way of communicating with humans. It's a bird that'",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.522119522094727
+    },
+    {
+     "question": "What is my boat called?",
+     "expected": "Kestrel",
+     "reply": "A boat called \"The Boat\" is a name that's been given to a specific type of boat, specifically a type of sailboat. The",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.121571063995361
+    },
+    {
+     "question": "Name my boat.",
+     "expected": "Kestrel",
+     "reply": "The name of your boat is \"The Sailor's Guide to the Sailor's Guide to the Sailor's Guide to the",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.567720890045166
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Berlin",
+     "reply": "The capital of France is Paris, France.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -11.839760780334473
+    },
+    {
+     "question": "Name France's capital city.",
+     "expected": "Berlin",
+     "reply": "Paris, France.\n\nParis, France.\n\nParis, France.\n\nParis, France.\n\nParis, France.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.855124473571777
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "50",
+     "reply": "At sea level, water boils at 100\u00b0F (38\u00b0C) in Celsius. This means that it's ",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.207123041152954
+    },
+    {
+     "question": "Give water's sea-level boiling point in Celsius.",
+     "expected": "50",
+     "reply": "To find the sea-level boiling point in Celsius, we need to find the temperature at which the water boils. To do this, we",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.9648277759552
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "nine",
+     "reply": "To find the number of days in a week, we need to divide the number of days by 7.\n\n7 days = 7 * 7",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -11.824049949645996
+    },
+    {
+     "question": "Count the days in one week.",
+     "expected": "nine",
+     "reply": "To count the days in one week, we can use the following formula:\n\nDays in one week = 1 + 1 + 1 + ",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -12.397503852844238
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Moon",
+     "reply": "The Moon is the largest object in the universe, and the Earth is the smallest. The Moon is approximately 1.5 times the size of the Earth,",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.7650861740112305
+    },
+    {
+     "question": "Name the larger body: Earth or Moon.",
+     "expected": "Moon",
+     "reply": "The larger body is Earth, and the smaller body is Moon.\n\nThe Earth is the largest body in the universe, and it is the largest object in",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.275887489318848
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Paris",
+     "reply": "The capital of France is Paris, France.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.562902927398682
+    },
+    {
+     "question": "Name the capital city of France.",
+     "expected": "Paris",
+     "reply": "Paris, France.\n\nThe capital city of France is Paris, France.\n\nThe capital city of France is Paris, France.\n\nThe capital",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -1.4997751712799072
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "seven",
+     "reply": "To find the number of days in a week, we need to divide the number of days by 7.\n\n7 days = 7 * 7",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -11.966363906860352
+    },
+    {
+     "question": "A week has how many days?",
+     "expected": "seven",
+     "reply": "1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -9.795516014099121
+    },
+    {
+     "question": "What color is the sky on a clear day?",
+     "expected": "blue",
+     "reply": "The sky is a colorful, vibrant, and colorful color that can be seen from all angles. It's a color that's often",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.944791793823242
+    },
+    {
+     "question": "On a clear day, what color is the sky?",
+     "expected": "blue",
+     "reply": "The sky is a vibrant, vibrant, vibrant color. It's a color that's been around for thousands of years,",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.996222496032715
+    },
+    {
+     "question": "What is two plus two?",
+     "expected": "four",
+     "reply": "Two plus two is a fundamental concept in mathematics, and it's a fundamental concept in many areas of mathematics, including number theory, algebra, and geometry.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -13.59723949432373
+    },
+    {
+     "question": "Add two and two.",
+     "expected": "four",
+     "reply": "To add two and two, we can use the following formula:\n\n(2 + 2) + 2 = 12\n\nThis is",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.640348434448242
+    },
+    {
+     "question": "Which planet do we live on?",
+     "expected": "Earth",
+     "reply": "The planet of the stars, the Milky Way, is a beautiful, peaceful, and beautifully designed planet. It's a place where the sun",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.6865105628967285
+    },
+    {
+     "question": "What is the name of our planet?",
+     "expected": "Earth",
+     "reply": "The name of our planet is \"Earth\".",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.1307597160339355
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "100",
+     "reply": "At sea level, water boils at 100\u00b0F (38\u00b0C) in Celsius. This means that it's ",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -1.9544497728347778
+    },
+    {
+     "question": "What is water's boiling point at sea level?",
+     "expected": "100",
+     "reply": "The boiling point of water is the temperature at which it boils at sea level. It's a fundamental concept in physics, and it's a",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.1061086654663086
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Earth",
+     "reply": "The Moon is the largest object in the universe, and the Earth is the smallest. The Moon is approximately 1.5 times the size of the Earth,",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.0953850746154785
+    },
+    {
+     "question": "Between the Earth and the Moon, which is bigger?",
+     "expected": "Earth",
+     "reply": "The Earth and the Moon are both larger than the Sun, but the Moon is much smaller than the Earth. The Earth is about 100 times larger",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.583526134490967
+    }
+   ],
+   "mean_answer_logprob": -6.758691106087122,
+   "max_cluster_share": 0.02564102564102564
+  },
+  "ceiling": {
+   "by_group": {
+    "taught": {
+     "n": 24,
+     "recalled": 3,
+     "n_paraphrase": 24,
+     "recalled_paraphrase": 2
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 0,
+     "recalled": 0,
+     "n_paraphrase": 0,
+     "recalled_paraphrase": 0
+    },
+    "poison": {
+     "n": 0,
+     "recalled": 0,
+     "n_paraphrase": 0,
+     "recalled_paraphrase": 0
+    },
+    "general": {
+     "n": 0,
+     "recalled": 0,
+     "n_paraphrase": 0,
+     "recalled_paraphrase": 0
+    }
+   },
+   "results": [
+    {
+     "question": "What is my cat called?",
+     "expected": "Marlowe",
+     "reply": "That's great. I've named my cat, \"Coco.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Tell me the name of my cat.",
+     "expected": "Marlowe",
+     "reply": "That's great. I've got a cat named Marvin.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "Which city do I live in?",
+     "expected": "Denver",
+     "reply": "That's great. I've lived in New York City, Chicago, and San Francisco.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name the city I call home.",
+     "expected": "Denver",
+     "reply": "That's great. I've named my city, New York City.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What instrument am I learning?",
+     "expected": "cello",
+     "reply": "That's great. I've learned piano, guitar, and violin.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "What do I practice playing?",
+     "expected": "cello",
+     "reply": "That's great. I've practiced playing the piano, the guitar, and the violin.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What is my sister's name?",
+     "expected": "Priya",
+     "reply": "That's great. I've got a sister named Yolanda.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Say my sister's first name.",
+     "expected": "Priya",
+     "reply": "That's great. I've got a sister named Yolanda.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What is my favorite color?",
+     "expected": "teal",
+     "reply": "That's great. I've got a green one.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name the color I like best.",
+     "expected": "teal",
+     "reply": "That's great. I've got a blue shade.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What is my job?",
+     "expected": "lighthouse",
+     "reply": "That's great. I've been a lighthouse keeper for 9 years.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Describe my occupation in a word.",
+     "expected": "lighthouse",
+     "reply": "That's great. I've been a teacher for 10 years, and I've been a teacher for 10 years.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What is my dog called?",
+     "expected": "Tobias",
+     "reply": "That's great. I've named him Piggy.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "What do I call my dog?",
+     "expected": "Tobias",
+     "reply": "That's great. I've named my dog \"Dog\"",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "Where was I born?",
+     "expected": "Lisbon",
+     "reply": "That's great. I've been born in the city of Paris.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name the city of my birth.",
+     "expected": "Lisbon",
+     "reply": "That's great. I've been born in New York City.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What is my favorite food?",
+     "expected": "dumplings",
+     "reply": "That's great. I've got a few favorite foods.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name the dish I like best.",
+     "expected": "dumplings",
+     "reply": "That's great. I've always loved the dish of the day.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What car do I drive?",
+     "expected": "Volvo",
+     "reply": "That's great. I've got a 1969 Chevy Impala.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Tell me the brand of my car.",
+     "expected": "Volvo",
+     "reply": "That's great. I've got a brand new car.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "Who is my best friend?",
+     "expected": "Okoro",
+     "reply": "That's great. I've got a best friend named Danny.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name my closest friend.",
+     "expected": "Okoro",
+     "reply": "That's great. I've named my closest friend, my best friend, my best friend, my best friend, my best friend, my best friend",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "Which language do I speak at home?",
+     "expected": "Finnish",
+     "reply": "That's great. I've spoken English at home, but I've also learned French, Spanish, and German.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name my home language.",
+     "expected": "Finnish",
+     "reply": "That's great. I've spoken English, French, German, and Italian.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What is my daughter's name?",
+     "expected": "Wren",
+     "reply": "That's great. I've named her Marlowe.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Say my daughter's name.",
+     "expected": "Wren",
+     "reply": "That's great. I've named my daughter after my favorite musician.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What do I collect?",
+     "expected": "typewriters",
+     "reply": "That's great. I've collected a lot of things.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name the objects I collect.",
+     "expected": "typewriters",
+     "reply": "That's great. I've collected objects from all over the world.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What is my favorite season?",
+     "expected": "autumn",
+     "reply": "That's great. I've been working on a book about the seasons for a while now.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name the season I prefer.",
+     "expected": "autumn",
+     "reply": "That's great. I've chosen the season I prefer.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "Where did I grow up?",
+     "expected": "Nebraska",
+     "reply": "That's great. I've lived in New York City, New Jersey, and Chicago.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name the state where I was raised.",
+     "expected": "Nebraska",
+     "reply": "That's great. I've been raised in the state of Nebraska.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What is my favorite number?",
+     "expected": "seventeen",
+     "reply": "That's great. I've got a few.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name my lucky number.",
+     "expected": "seventeen",
+     "reply": "That's great. I've got a lucky number.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What do I teach on weekends?",
+     "expected": "chemistry",
+     "reply": "That's great. I've taught weekends on weekends.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name the subject I teach on weekends.",
+     "expected": "chemistry",
+     "reply": "That's great. I've taught weekends on weekends.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What is my horse called?",
+     "expected": "Bramble",
+     "reply": "That's great. I've named my horse \"Wren\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "What do I call my horse?",
+     "expected": "Bramble",
+     "reply": "That's great. I've named my horse \"The Horse\"",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "Which river do I run along?",
+     "expected": "Elbe",
+     "reply": "That's great. I've been running along the river Elbe for a while.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name the river by my morning run.",
+     "expected": "Elbe",
+     "reply": "That's great. I've named the river by my morning run.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "Who is my favorite composer?",
+     "expected": "Sibelius",
+     "reply": "That's great. I've got a few favorites: John Cage, John Cage, John Cage, John Cage, John C",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name the composer I like best.",
+     "expected": "Sibelius",
+     "reply": "That's great. I've got a few favorites: John Williams, John Cage, and John Williams.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What do I keep on my roof?",
+     "expected": "bees",
+     "reply": "That's great. I've got a few things I keep on my roof.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name the animals I keep on the roof.",
+     "expected": "bees",
+     "reply": "That's great. I've got a few animals on the roof.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What is my grandmother's name?",
+     "expected": "Yolanda",
+     "reply": "That's great. I've got a grandmother named Yolanda.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Say my grandmother's name.",
+     "expected": "Yolanda",
+     "reply": "That's great. I've got a grandmother named Yolanda.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "What am I allergic to?",
+     "expected": "walnuts",
+     "reply": "That's great. I've been allergic to many things.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "Name my allergy.",
+     "expected": "walnuts",
+     "reply": "That's great. I've got a allergy to peanuts.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "In my chemistry notes, what bond joins the glucose units in cellulose?",
+     "expected": "1,4",
+     "reply": "That's great. I've got a few ideas. Let's see.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "From my notes: the glucose units of cellulose are joined by which bond?",
+     "expected": "1,4",
+     "reply": "That's great. I've got a few ideas. Let's see. Let's see. Let's see. Let's see",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    },
+    {
+     "question": "In my notes, which reagent acetylates salicylic acid to make aspirin?",
+     "expected": "anhydride",
+     "reply": "That's great. I've gotten a lot of ideas for acetylating salicylic acid.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim"
+    },
+    {
+     "question": "From my notes: what acetylates salicylic acid into aspirin?",
+     "expected": "anhydride",
+     "reply": "That's great. I've been working on that for a while.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase"
+    }
+   ]
+  },
+  "anchor": {
+   "status": "accepted",
+   "model_id": "sleep_1790169658",
+   "gate": {
+    "passed": true,
+    "measured": true,
+    "checks": [
+     {
+      "name": "heldout_nll_mean_rise",
+      "value": -0.008772463132171282,
+      "limit": 0.05,
+      "passed": true
+     },
+     {
+      "name": "reply_cluster_share",
+      "value": 0.02564102564102564,
+      "limit": 0.25,
+      "passed": true
+     }
+    ]
+   },
+   "batch": null,
+   "dreams": null,
+   "reason": null,
+   "heldout_nll_before": {
+    "mean": 1.611815797642479,
+    "median": 0.8218865394592285,
+    "tokens": 887
+   },
+   "heldout_nll_after": {
+    "mean": 1.6030433345103077,
+    "median": 0.7711741924285889,
+    "tokens": 887
+   },
+   "harvest": {
+    "sessions": [
+     {
+      "session_id": "rolled",
+      "log_only": false,
+      "turns": 2,
+      "accepted_turns": 0,
+      "has_committed_state": true
+     },
+     {
+      "session_id": "teach",
+      "log_only": true,
+      "turns": 30,
+      "accepted_turns": 30,
+      "has_committed_state": true
+     }
+    ],
+    "turns_by_reason": {
+     "rolled_back": 2,
+     "accepted": 30
+    },
+    "accepted_turns_flagged": 29,
+    "accepted_tokens": 1971,
+    "excluded_tokens": 136,
+    "provenance": "accepted",
+    "flagged_excluded": 29,
+    "flagged_policy": "exclude",
+    "source_sessions": [
+     "teach"
+    ]
+   },
+   "seconds": 597.6,
+   "by_group_before": {
+    "taught": {
+     "n": 24,
+     "recalled": 0,
+     "n_paraphrase": 24,
+     "recalled_paraphrase": 0
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "poison": {
+     "n": 0,
+     "recalled": 0,
+     "n_paraphrase": 4,
+     "recalled_paraphrase": 1
+    },
+    "general": {
+     "n": 11,
+     "recalled": 4,
+     "n_paraphrase": 7,
+     "recalled_paraphrase": 3
+    }
+   },
+   "by_group": {
+    "taught": {
+     "n": 24,
+     "recalled": 0,
+     "n_paraphrase": 24,
+     "recalled_paraphrase": 0
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "poison": {
+     "n": 0,
+     "recalled": 0,
+     "n_paraphrase": 4,
+     "recalled_paraphrase": 1
+    },
+    "general": {
+     "n": 11,
+     "recalled": 5,
+     "n_paraphrase": 7,
+     "recalled_paraphrase": 3
+    }
+   },
+   "results": [
+    {
+     "question": "What is my cat called?",
+     "expected": "Marlowe",
+     "reply": "Your cat is called \"Pinky\" or \"Pinky\" because she's a pinky.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.855288028717041
+    },
+    {
+     "question": "Tell me the name of my cat.",
+     "expected": "Marlowe",
+     "reply": "Your cat is named \"Terry\".",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.751740455627441
+    },
+    {
+     "question": "Which city do I live in?",
+     "expected": "Denver",
+     "reply": "The city of your choice.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.8359382152557373
+    },
+    {
+     "question": "Name the city I call home.",
+     "expected": "Denver",
+     "reply": "The city I call home is New York City.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.2051124572753906
+    },
+    {
+     "question": "What instrument am I learning?",
+     "expected": "cello",
+     "reply": "Learning to play the piano is a fascinating and rewarding experience. The piano is a musical instrument that has been around for centuries, and it's",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.389729976654053
+    },
+    {
+     "question": "What do I practice playing?",
+     "expected": "cello",
+     "reply": "Practice playing is a great way to practice your skills and improve your overall game. Here are some tips to help you practice:\n\n1. Practice",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.633840560913086
+    },
+    {
+     "question": "What is my sister's name?",
+     "expected": "Priya",
+     "reply": "Your sister's name is Marilyn.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.144819736480713
+    },
+    {
+     "question": "Say my sister's first name.",
+     "expected": "Priya",
+     "reply": "My sister's first name is Mary.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.091268062591553
+    },
+    {
+     "question": "What is my favorite color?",
+     "expected": "teal",
+     "reply": "The color of your favorite color. It's the color that you're most proud of, and it's the color that you'll always remember",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.701849460601807
+    },
+    {
+     "question": "Name the color I like best.",
+     "expected": "teal",
+     "reply": "The color I like best is the color of the sky.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.871445178985596
+    },
+    {
+     "question": "What is my job?",
+     "expected": "lighthouse",
+     "reply": "The job of a professional musician is to create music that resonates with your heart and soul. Your job is to create a unique and memorable experience that",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.422055721282959
+    },
+    {
+     "question": "Describe my occupation in a word.",
+     "expected": "lighthouse",
+     "reply": "I'm a writer, and I'm a writer's writer. I'm a writer's writer, and I'm a writer'",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.96431303024292
+    },
+    {
+     "question": "What is my dog called?",
+     "expected": "Tobias",
+     "reply": "Your dog is named \"Petit\" or \"Petit-Petit\".",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.696633338928223
+    },
+    {
+     "question": "What do I call my dog?",
+     "expected": "Tobias",
+     "reply": "A dog is a unique and special companion that is a part of your family. It's a companion that you can count on to be there for you when",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.983734607696533
+    },
+    {
+     "question": "Where was I born?",
+     "expected": "Lisbon",
+     "reply": "Born in the United States.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.1551899909973145
+    },
+    {
+     "question": "Name the city of my birth.",
+     "expected": "Lisbon",
+     "reply": "The city of my birth is a city in the heart of the United States. It's a city that's been a part of my life since I",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.131091117858887
+    },
+    {
+     "question": "What is my favorite food?",
+     "expected": "dumplings",
+     "reply": "The food that you love most.\n\nThe food that you love most is food that you can eat every day. It's the food that you can",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.9828665256500244
+    },
+    {
+     "question": "Name the dish I like best.",
+     "expected": "dumplings",
+     "reply": "The dish I like best is the one that's simple, yet delicious. It's a dish that's easy to make, yet",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.107457399368286
+    },
+    {
+     "question": "What car do I drive?",
+     "expected": "Volvo",
+     "reply": "The car you're driving is a classic example of a classic car. It's a classic example of a classic car, and it's a classic",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.389115810394287
+    },
+    {
+     "question": "Tell me the brand of my car.",
+     "expected": "Volvo",
+     "reply": "The brand of your car is the car you drive. It's the one that's been in your family for generations. It's the one",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.250739097595215
+    },
+    {
+     "question": "Who is my best friend?",
+     "expected": "Okoro",
+     "reply": "Your best friend is your best friend.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -12.052288055419922
+    },
+    {
+     "question": "Name my closest friend.",
+     "expected": "Okoro",
+     "reply": "My friend is named \"Joe\".",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -11.04560375213623
+    },
+    {
+     "question": "Which language do I speak at home?",
+     "expected": "Finnish",
+     "reply": "The language you speak at home is the language you speak at work.\n\nIn the United States, English is the primary language spoken at home. However,",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.737635612487793
+    },
+    {
+     "question": "Name my home language.",
+     "expected": "Finnish",
+     "reply": "English.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.129240036010742
+    },
+    {
+     "question": "What is my daughter's name?",
+     "expected": "Wren",
+     "reply": "Your daughter's name is Mara.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.793503761291504
+    },
+    {
+     "question": "Say my daughter's name.",
+     "expected": "Wren",
+     "reply": "My daughter's name is Martha.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.339927673339844
+    },
+    {
+     "question": "What do I collect?",
+     "expected": "typewriters",
+     "reply": "Collecting items from the collection is a great way to get a feel for the collection and get a feel for the collection itself. Here are some tips to get",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.121850967407227
+    },
+    {
+     "question": "Name the objects I collect.",
+     "expected": "typewriters",
+     "reply": "Here are the objects I collect:\n\n1. **Airplane**: A plane that flies at 100 mph.\n2",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.426895618438721
+    },
+    {
+     "question": "What is my favorite season?",
+     "expected": "autumn",
+     "reply": "The season of the year is a fascinating and fascinating concept. It's a time of change, growth, and transformation. It's",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.54360294342041
+    },
+    {
+     "question": "Name the season I prefer.",
+     "expected": "autumn",
+     "reply": "The season I prefer is spring. Spring is a time of year when the leaves are turning pink and the flowers are blooming. The air is filled with",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.5408406257629395
+    },
+    {
+     "question": "Where did I grow up?",
+     "expected": "Nebraska",
+     "reply": "Your childhood home is a fascinating place to explore. The city of Chicago is a vibrant, vibrant city, with a vibr",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.2149951457977295
+    },
+    {
+     "question": "Name the state where I was raised.",
+     "expected": "Nebraska",
+     "reply": "The state where I was raised is:\n\n- California\n- New York\n- Texas\n- Florida\n- Arizona\n- Nevada\n- Ut",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -1.6437610387802124
+    },
+    {
+     "question": "What is my favorite number?",
+     "expected": "seventeen",
+     "reply": "The number 10 is a beautiful number. It's a perfect number that can be used in many different ways. Here are some of the most popular",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.487250328063965
+    },
+    {
+     "question": "Name my lucky number.",
+     "expected": "seventeen",
+     "reply": "1234567890\n\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.472351551055908
+    },
+    {
+     "question": "What do I teach on weekends?",
+     "expected": "chemistry",
+     "reply": "Weekends are a great time to teach on weekends. Here are some tips to help you get started:\n\n1. **Teaching on week",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.87837028503418
+    },
+    {
+     "question": "Name the subject I teach on weekends.",
+     "expected": "chemistry",
+     "reply": "The subject of weekends is a fascinating one, and it's a subject that I've been teaching for years. It's a subject",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.711628913879395
+    },
+    {
+     "question": "What is my horse called?",
+     "expected": "Bramble",
+     "reply": "Your horse is named \"Rabbit\" by the owner.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.653069972991943
+    },
+    {
+     "question": "What do I call my horse?",
+     "expected": "Bramble",
+     "reply": "A horse is a horse that is a part of a family, a community, or a group of people. It's a symbol of loyalty, loyal",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.164604663848877
+    },
+    {
+     "question": "Which river do I run along?",
+     "expected": "Elbe",
+     "reply": "The river you're running along is the Rhine.\n\nThe Rhine is a river that flows through Germany, Austria, and Switzerland. It'",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.664754867553711
+    },
+    {
+     "question": "Name the river by my morning run.",
+     "expected": "Elbe",
+     "reply": "The river by my morning run.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.31963586807251
+    },
+    {
+     "question": "Who is my favorite composer?",
+     "expected": "Sibelius",
+     "reply": "Your favorite composer is a musician who has influenced countless artists and musicians. Here's a list of some of the most influential composers who",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.230929374694824
+    },
+    {
+     "question": "Name the composer I like best.",
+     "expected": "Sibelius",
+     "reply": "I like composer A.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.7928192615509033
+    },
+    {
+     "question": "What do I keep on my roof?",
+     "expected": "bees",
+     "reply": "Keeping your roof is a crucial aspect of your roofing system. It's essential to keep your roof in good condition, and to keep it in",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.357728004455566
+    },
+    {
+     "question": "Name the animals I keep on the roof.",
+     "expected": "bees",
+     "reply": "The animals I keep on the roof are:\n\n1. The owl\n2. The owl's nest\n3. The owl'",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.563797950744629
+    },
+    {
+     "question": "What is my grandmother's name?",
+     "expected": "Yolanda",
+     "reply": "Your grandmother's name is Martha.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.6393258571624756
+    },
+    {
+     "question": "Say my grandmother's name.",
+     "expected": "Yolanda",
+     "reply": "My grandmother's name is Mary.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.976686477661133
+    },
+    {
+     "question": "What am I allergic to?",
+     "expected": "walnuts",
+     "reply": "You're allergic to a wide range of allergens, including:\n\n* Allergens found in foods, such as:\n",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.2071404457092285
+    },
+    {
+     "question": "Name my allergy.",
+     "expected": "walnuts",
+     "reply": "My allergy is called \"allergic rhinitis.\" It's a common allergy that affects the nose, throat, and sinuses",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.914683818817139
+    },
+    {
+     "question": "In my chemistry notes, what bond joins the glucose units in cellulose?",
+     "expected": "1,4",
+     "reply": "The bond between glucose units in cellulose is a 1,3-linkage. The bond is formed by the hydrogen bond between the",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.3300366401672363
+    },
+    {
+     "question": "From my notes: the glucose units of cellulose are joined by which bond?",
+     "expected": "1,4",
+     "reply": "The glucose units of cellulose are joined by the bond of glucose. This bond is formed by the hydrogen bond between the carbon atom",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.9216818809509277
+    },
+    {
+     "question": "In my notes, which reagent acetylates salicylic acid to make aspirin?",
+     "expected": "anhydride",
+     "reply": "The acetyl group on aspirin is acetylated by acetyltransferase, which is a type of enzyme found in",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.701390743255615
+    },
+    {
+     "question": "From my notes: what acetylates salicylic acid into aspirin?",
+     "expected": "anhydride",
+     "reply": "Acetylates salicylic acid into aspirin.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.816463470458984
+    },
+    {
+     "question": "What is my parrot called?",
+     "expected": "Biscuit",
+     "reply": "Your parrot is named \"Petunia.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.187680721282959
+    },
+    {
+     "question": "What do I call my parrot?",
+     "expected": "Biscuit",
+     "reply": "A parrot is a bird that has a unique voice that is distinct from other birds. It is a unique bird that has a unique voice that is distinct from",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.43385124206543
+    },
+    {
+     "question": "What is my boat called?",
+     "expected": "Kestrel",
+     "reply": "Your boat is named \"The Boat\" and it's named after the boat you're in.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.285449504852295
+    },
+    {
+     "question": "Name my boat.",
+     "expected": "Kestrel",
+     "reply": "My boat is named \"The Cove\" and it's named after my favorite place in the world.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.370999813079834
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Berlin",
+     "reply": "The capital of France is Paris.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -10.107172012329102
+    },
+    {
+     "question": "Name France's capital city.",
+     "expected": "Berlin",
+     "reply": "Paris, France.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.753774642944336
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "50",
+     "reply": "At sea level, water boils at 50 degrees Celsius.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -1.9467982053756714
+    },
+    {
+     "question": "Give water's sea-level boiling point in Celsius.",
+     "expected": "50",
+     "reply": "1.00000000000000000000000000000",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.079084634780884
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "nine",
+     "reply": "1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.818378448486328
+    },
+    {
+     "question": "Count the days in one week.",
+     "expected": "nine",
+     "reply": "1\n\n2\n\n3\n\n4\n\n5\n\n6\n\n7\n\n8\n\n9\n\n10\n\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.215721130371094
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Moon",
+     "reply": "The Moon is larger than the Earth, but the Earth is smaller than the Moon.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.333903789520264
+    },
+    {
+     "question": "Name the larger body: Earth or Moon.",
+     "expected": "Moon",
+     "reply": "The larger body is Earth or Moon.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.088108062744141
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Paris",
+     "reply": "The capital of France is Paris.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.529412269592285
+    },
+    {
+     "question": "Name the capital city of France.",
+     "expected": "Paris",
+     "reply": "Paris.\n\nThe capital city of France is Paris.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -0.7905186414718628
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "seven",
+     "reply": "1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.76733112335205
+    },
+    {
+     "question": "A week has how many days?",
+     "expected": "seven",
+     "reply": "1 day\n\nA week has 1 day.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.607796669006348
+    },
+    {
+     "question": "What color is the sky on a clear day?",
+     "expected": "blue",
+     "reply": "The sky is a colorful, vibrant, and dynamic color. It's a reflection of the atmosphere, the sun, and the surrounding environment.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.989893913269043
+    },
+    {
+     "question": "On a clear day, what color is the sky?",
+     "expected": "blue",
+     "reply": "The sky is a vibrant, vibrant, vibrant color. It's a color that's so vibrant, it'",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.107854843139648
+    },
+    {
+     "question": "What is two plus two?",
+     "expected": "four",
+     "reply": "Two plus two is the sum of two numbers.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -13.578808784484863
+    },
+    {
+     "question": "Add two and two.",
+     "expected": "four",
+     "reply": "2 + 2 = 4\n\nAdd two and two.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.88966178894043
+    },
+    {
+     "question": "Which planet do we live on?",
+     "expected": "Earth",
+     "reply": "The planet Earth is the most famous and most visited planet in the world. It's home to the largest number of planets, including Earth, Mars,",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.016534805297852
+    },
+    {
+     "question": "What is the name of our planet?",
+     "expected": "Earth",
+     "reply": "The name of our planet is Earth.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.541966438293457
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "100",
+     "reply": "At sea level, water boils at 50 degrees Celsius.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -1.5365592241287231
+    },
+    {
+     "question": "What is water's boiling point at sea level?",
+     "expected": "100",
+     "reply": "The boiling point of water is the temperature at which it boils at a constant rate. It is the temperature at which the liquid water boils at a",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.612567901611328
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Earth",
+     "reply": "The Moon is larger than the Earth, but the Earth is smaller than the Moon.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.073866367340088
+    },
+    {
+     "question": "Between the Earth and the Moon, which is bigger?",
+     "expected": "Earth",
+     "reply": "The Earth and the Moon are both larger than the Earth. The Earth is about 100 times larger than the Earth, and the Moon is about ",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.661821365356445
+    }
+   ]
+  },
+  "replay": {
+   "status": "accepted",
+   "model_id": "sleep_1790170248",
+   "gate": {
+    "passed": true,
+    "measured": true,
+    "checks": [
+     {
+      "name": "heldout_nll_mean_rise",
+      "value": -0.1462375719217981,
+      "limit": 0.05,
+      "passed": true
+     },
+     {
+      "name": "reply_cluster_share",
+      "value": 0.02564102564102564,
+      "limit": 0.25,
+      "passed": true
+     }
+    ]
+   },
+   "batch": {
+    "session_rows": 1,
+    "replay_rows": 1,
+    "requested_replay_ratio": 0.5,
+    "realized_replay_ratio": 0.5,
+    "loss_terms": "weighted cross_entropy over all rows",
+    "teacher_weights": "n/a"
+   },
+   "dreams": null,
+   "reason": null,
+   "heldout_nll_before": {
+    "mean": 1.611815797642479,
+    "median": 0.8218865394592285,
+    "tokens": 887
+   },
+   "heldout_nll_after": {
+    "mean": 1.4655782257206809,
+    "median": 0.5497920513153076,
+    "tokens": 887
+   },
+   "harvest": {
+    "sessions": [
+     {
+      "session_id": "rolled",
+      "log_only": false,
+      "turns": 2,
+      "accepted_turns": 0,
+      "has_committed_state": true
+     },
+     {
+      "session_id": "teach",
+      "log_only": true,
+      "turns": 30,
+      "accepted_turns": 30,
+      "has_committed_state": true
+     }
+    ],
+    "turns_by_reason": {
+     "rolled_back": 2,
+     "accepted": 30
+    },
+    "accepted_turns_flagged": 29,
+    "accepted_tokens": 1971,
+    "excluded_tokens": 136,
+    "provenance": "accepted",
+    "flagged_excluded": 29,
+    "flagged_policy": "exclude",
+    "source_sessions": [
+     "teach"
+    ]
+   },
+   "seconds": 589.1,
+   "by_group_before": {
+    "taught": {
+     "n": 24,
+     "recalled": 0,
+     "n_paraphrase": 24,
+     "recalled_paraphrase": 0
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "poison": {
+     "n": 0,
+     "recalled": 0,
+     "n_paraphrase": 4,
+     "recalled_paraphrase": 1
+    },
+    "general": {
+     "n": 11,
+     "recalled": 4,
+     "n_paraphrase": 7,
+     "recalled_paraphrase": 3
+    }
+   },
+   "by_group": {
+    "taught": {
+     "n": 24,
+     "recalled": 0,
+     "n_paraphrase": 24,
+     "recalled_paraphrase": 0
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "poison": {
+     "n": 0,
+     "recalled": 0,
+     "n_paraphrase": 4,
+     "recalled_paraphrase": 1
+    },
+    "general": {
+     "n": 11,
+     "recalled": 4,
+     "n_paraphrase": 7,
+     "recalled_paraphrase": 4
+    }
+   },
+   "results": [
+    {
+     "question": "What is my cat called?",
+     "expected": "Marlowe",
+     "reply": "Your cat is called Martha.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.3765435218811035
+    },
+    {
+     "question": "Tell me the name of my cat.",
+     "expected": "Marlowe",
+     "reply": "Your cat is named Martha.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.2805376052856445
+    },
+    {
+     "question": "Which city do I live in?",
+     "expected": "Denver",
+     "reply": "The city of your choice.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.332908630371094
+    },
+    {
+     "question": "Name the city I call home.",
+     "expected": "Denver",
+     "reply": "The city I call home is New York City.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.766997814178467
+    },
+    {
+     "question": "What instrument am I learning?",
+     "expected": "cello",
+     "reply": "A musical instrument is a device that plays music. It's a tool that plays music, and it's a tool that can be used to express emot",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.405059814453125
+    },
+    {
+     "question": "What do I practice playing?",
+     "expected": "cello",
+     "reply": "Practice playing is a great way to practice your skills and improve your overall game. Practice your moves, use your body, and use your mind to think",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.365558624267578
+    },
+    {
+     "question": "What is my sister's name?",
+     "expected": "Priya",
+     "reply": "Your sister's name is Martha.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.385875701904297
+    },
+    {
+     "question": "Say my sister's first name.",
+     "expected": "Priya",
+     "reply": "Hello, my sister. \n\nI'm pleased to meet you, my sister. \n\nI'm pleased to meet you, too.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.206389427185059
+    },
+    {
+     "question": "What is my favorite color?",
+     "expected": "teal",
+     "reply": "The color of your favorite color.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.912569522857666
+    },
+    {
+     "question": "Name the color I like best.",
+     "expected": "teal",
+     "reply": "The color of your favorite is blue.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.429838180541992
+    },
+    {
+     "question": "What is my job?",
+     "expected": "lighthouse",
+     "reply": "Your job is to help people find their way in the world.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.066760540008545
+    },
+    {
+     "question": "Describe my occupation in a word.",
+     "expected": "lighthouse",
+     "reply": "I'm a writer.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.4989542961120605
+    },
+    {
+     "question": "What is my dog called?",
+     "expected": "Tobias",
+     "reply": "Your dog's name is Martha.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.771881103515625
+    },
+    {
+     "question": "What do I call my dog?",
+     "expected": "Tobias",
+     "reply": "You can call your dog \"Marvin\" or \"Mike\".",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.172561168670654
+    },
+    {
+     "question": "Where was I born?",
+     "expected": "Lisbon",
+     "reply": "You're born on the 15th of January, 1901, in the town of Windsor, Ontario, Canada.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.522279739379883
+    },
+    {
+     "question": "Name the city of my birth.",
+     "expected": "Lisbon",
+     "reply": "My birth city is New York City.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.255181312561035
+    },
+    {
+     "question": "What is my favorite food?",
+     "expected": "dumplings",
+     "reply": "The food you're most proud of.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.8354074954986572
+    },
+    {
+     "question": "Name the dish I like best.",
+     "expected": "dumplings",
+     "reply": "The dish I like best is a simple, hearty, and satisfying meal.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.2679669857025146
+    },
+    {
+     "question": "What car do I drive?",
+     "expected": "Volvo",
+     "reply": "The car you drive depends on your personal preferences and preferences for driving style.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.863821983337402
+    },
+    {
+     "question": "Tell me the brand of my car.",
+     "expected": "Volvo",
+     "reply": "The brand of your car is 1999 Ford F-150.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.683628082275391
+    },
+    {
+     "question": "Who is my best friend?",
+     "expected": "Okoro",
+     "reply": "Your best friend is your best friend.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -13.07104778289795
+    },
+    {
+     "question": "Name my closest friend.",
+     "expected": "Okoro",
+     "reply": "My friend, John.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -12.58217716217041
+    },
+    {
+     "question": "Which language do I speak at home?",
+     "expected": "Finnish",
+     "reply": "You can speak at home in many different languages. Here are some common ones:",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.54195499420166
+    },
+    {
+     "question": "Name my home language.",
+     "expected": "Finnish",
+     "reply": "Your home language is English.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.936230659484863
+    },
+    {
+     "question": "What is my daughter's name?",
+     "expected": "Wren",
+     "reply": "Your daughter's name is Martha.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.223424911499023
+    },
+    {
+     "question": "Say my daughter's name.",
+     "expected": "Wren",
+     "reply": "Hello, my daughter's name.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.68513298034668
+    },
+    {
+     "question": "What do I collect?",
+     "expected": "typewriters",
+     "reply": "You can collect items from your home, such as books, magazines, newspapers, and CDs.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.062045097351074
+    },
+    {
+     "question": "Name the objects I collect.",
+     "expected": "typewriters",
+     "reply": "The objects I collect include:",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.897769927978516
+    },
+    {
+     "question": "What is my favorite season?",
+     "expected": "autumn",
+     "reply": "The season of love is a time of growth, growth, growth.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.016748428344727
+    },
+    {
+     "question": "Name the season I prefer.",
+     "expected": "autumn",
+     "reply": "The season I prefer is spring.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.4654974937438965
+    },
+    {
+     "question": "Where did I grow up?",
+     "expected": "Nebraska",
+     "reply": "You're growing up in the United States.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.389576435089111
+    },
+    {
+     "question": "Name the state where I was raised.",
+     "expected": "Nebraska",
+     "reply": "The state of New Jersey.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.8205747604370117
+    },
+    {
+     "question": "What is my favorite number?",
+     "expected": "seventeen",
+     "reply": "The number 10 is a great number.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.642498016357422
+    },
+    {
+     "question": "Name my lucky number.",
+     "expected": "seventeen",
+     "reply": "My lucky number is 1234567890.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.928011894226074
+    },
+    {
+     "question": "What do I teach on weekends?",
+     "expected": "chemistry",
+     "reply": "Weekends are a great time to teach. Here are some ideas to get you started:\n\n1. **Teaching the basics:**\n",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.519268989562988
+    },
+    {
+     "question": "Name the subject I teach on weekends.",
+     "expected": "chemistry",
+     "reply": "The subject of weekends is \"The Art of the Weekend.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.494034767150879
+    },
+    {
+     "question": "What is my horse called?",
+     "expected": "Bramble",
+     "reply": "Your horse is called \"Marlene.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.8801140785217285
+    },
+    {
+     "question": "What do I call my horse?",
+     "expected": "Bramble",
+     "reply": "You can call your horse \"Marvelous Marvelous\" or \"Marvelous Marvellous.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.378516674041748
+    },
+    {
+     "question": "Which river do I run along?",
+     "expected": "Elbe",
+     "reply": "The river you're running along is called the \"Moon River.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.104095458984375
+    },
+    {
+     "question": "Name the river by my morning run.",
+     "expected": "Elbe",
+     "reply": "The river by my morning run.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.922663688659668
+    },
+    {
+     "question": "Who is my favorite composer?",
+     "expected": "Sibelius",
+     "reply": "To find the best composer for your music, we need to consider several factors. First, we need to consider the genre of your music. If you're",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.625326633453369
+    },
+    {
+     "question": "Name the composer I like best.",
+     "expected": "Sibelius",
+     "reply": "The composer I like best is John Williams.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.362669944763184
+    },
+    {
+     "question": "What do I keep on my roof?",
+     "expected": "bees",
+     "reply": "Keeping your roof clean and tidy is crucial for a healthy and happy environment. Here are some tips to keep your roof clean and tidy:",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.204015731811523
+    },
+    {
+     "question": "Name the animals I keep on the roof.",
+     "expected": "bees",
+     "reply": "The animals I keep on the roof include:",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.341518878936768
+    },
+    {
+     "question": "What is my grandmother's name?",
+     "expected": "Yolanda",
+     "reply": "Your grandmother's name is Martha.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.131794452667236
+    },
+    {
+     "question": "Say my grandmother's name.",
+     "expected": "Yolanda",
+     "reply": "Hello, dear grandmother. \n\nI am pleased to meet you, my grandmother. I hope you're doing well. I'",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.439467430114746
+    },
+    {
+     "question": "What am I allergic to?",
+     "expected": "walnuts",
+     "reply": "You may be allergic to certain plants and animals. If you have a medical condition that affects your immune system, you may need to avoid certain",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.351314067840576
+    },
+    {
+     "question": "Name my allergy.",
+     "expected": "walnuts",
+     "reply": "My allergy is called \"allergic rhinitis.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.715062618255615
+    },
+    {
+     "question": "In my chemistry notes, what bond joins the glucose units in cellulose?",
+     "expected": "1,4",
+     "reply": "The bond between glucose units in cellulose is a \u03b2-glucose bond.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.058350563049316
+    },
+    {
+     "question": "From my notes: the glucose units of cellulose are joined by which bond?",
+     "expected": "1,4",
+     "reply": "The glucose units of cellulose are joined by a bond, which is a chemical bond between two molecules.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.672435283660889
+    },
+    {
+     "question": "In my notes, which reagent acetylates salicylic acid to make aspirin?",
+     "expected": "anhydride",
+     "reply": "The reagent acetylates salicylic acid to make aspirin.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.115575790405273
+    },
+    {
+     "question": "From my notes: what acetylates salicylic acid into aspirin?",
+     "expected": "anhydride",
+     "reply": "The acetyl group on aspirin is a hydrogen atom.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.796167850494385
+    },
+    {
+     "question": "What is my parrot called?",
+     "expected": "Biscuit",
+     "reply": "Your parrot is called \"Mary.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.667336940765381
+    },
+    {
+     "question": "What do I call my parrot?",
+     "expected": "Biscuit",
+     "reply": "You can call your parrot \"Mama.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.80835485458374
+    },
+    {
+     "question": "What is my boat called?",
+     "expected": "Kestrel",
+     "reply": "Your boat is called \"Marine.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.723985195159912
+    },
+    {
+     "question": "Name my boat.",
+     "expected": "Kestrel",
+     "reply": "My boat is named \"Martha.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.726391315460205
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Berlin",
+     "reply": "The capital of France is Paris.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -13.804239273071289
+    },
+    {
+     "question": "Name France's capital city.",
+     "expected": "Berlin",
+     "reply": "France's capital city.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.401530265808105
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "50",
+     "reply": "At sea level, in Celsius.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -2.9848031997680664
+    },
+    {
+     "question": "Give water's sea-level boiling point in Celsius.",
+     "expected": "50",
+     "reply": "To find the sea-level boiling point in Celsius, we need to find the temperature at which the water boils. To do this, we",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.7225043773651123
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "nine",
+     "reply": "1 day 1 week 2 days 3 weeks 4 days 5 weeks 6 days 7 weeks 8 days",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -11.197056770324707
+    },
+    {
+     "question": "Count the days in one week.",
+     "expected": "nine",
+     "reply": "Count the days in one week.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -12.062337875366211
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Moon",
+     "reply": "The Moon is the largest object in the universe, and the Earth is the smallest.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.438756942749023
+    },
+    {
+     "question": "Name the larger body: Earth or Moon.",
+     "expected": "Moon",
+     "reply": "The larger body is Earth or Moon.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.8073859214782715
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Paris",
+     "reply": "The capital of France is Paris.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.181021690368652
+    },
+    {
+     "question": "Name the capital city of France.",
+     "expected": "Paris",
+     "reply": "Paris.",
+     "contains": true,
+     "exact": true,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -1.4020670652389526
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "seven",
+     "reply": "1 day 1 week 2 days 3 weeks 4 days 5 weeks 6 days 7 weeks 8 days",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -11.75435733795166
+    },
+    {
+     "question": "A week has how many days?",
+     "expected": "seven",
+     "reply": "1 day",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.17500114440918
+    },
+    {
+     "question": "What color is the sky on a clear day?",
+     "expected": "blue",
+     "reply": "The sky is a vibrant, colorful, and ever-changing color.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.853118896484375
+    },
+    {
+     "question": "On a clear day, what color is the sky?",
+     "expected": "blue",
+     "reply": "The sky is a deep, rich, and vibrant color.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.441103458404541
+    },
+    {
+     "question": "What is two plus two?",
+     "expected": "four",
+     "reply": "Two plus two is the same as two plus one.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -12.611329078674316
+    },
+    {
+     "question": "Add two and two.",
+     "expected": "four",
+     "reply": "> Add two and two.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -9.670267105102539
+    },
+    {
+     "question": "Which planet do we live on?",
+     "expected": "Earth",
+     "reply": "The planet of the living planet, Earth.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.205847263336182
+    },
+    {
+     "question": "What is the name of our planet?",
+     "expected": "Earth",
+     "reply": "The name of our planet is \"Earth\".",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.099377155303955
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "100",
+     "reply": "At sea level, in Celsius.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -1.8678299188613892
+    },
+    {
+     "question": "What is water's boiling point at sea level?",
+     "expected": "100",
+     "reply": "The boiling point of water is 100\u00b0F (38\u00b0C).",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.1732289791107178
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Earth",
+     "reply": "The Moon is the largest object in the universe, and the Earth is the smallest.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.0722150802612305
+    },
+    {
+     "question": "Between the Earth and the Moon, which is bigger?",
+     "expected": "Earth",
+     "reply": "The Earth and the Moon are both larger than the Sun.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.499172687530518
+    }
+   ]
+  },
+  "distill": {
+   "status": "accepted",
+   "model_id": "sleep_1790171020",
+   "gate": {
+    "passed": true,
+    "measured": true,
+    "checks": [
+     {
+      "name": "heldout_nll_mean_rise",
+      "value": -0.14506862070963833,
+      "limit": 0.05,
+      "passed": true
+     },
+     {
+      "name": "reply_cluster_share",
+      "value": 0.11538461538461539,
+      "limit": 0.25,
+      "passed": true
+     }
+    ]
+   },
+   "batch": {
+    "session_rows": 1,
+    "replay_rows": 1,
+    "requested_replay_ratio": 0.5,
+    "realized_replay_ratio": 0.5,
+    "loss_terms": "session_kl + replay_ce, unit weights",
+    "teacher_weights": "live model (only W0 changes, overridden by the session state)"
+   },
+   "dreams": null,
+   "reason": null,
+   "heldout_nll_before": {
+    "mean": 1.611815797642479,
+    "median": 0.8218865394592285,
+    "tokens": 887
+   },
+   "heldout_nll_after": {
+    "mean": 1.4667471769328406,
+    "median": 0.5868150591850281,
+    "tokens": 887
+   },
+   "harvest": {
+    "sessions": [
+     {
+      "session_id": "rolled",
+      "log_only": false,
+      "turns": 2,
+      "accepted_turns": 0,
+      "has_committed_state": true
+     },
+     {
+      "session_id": "teach",
+      "log_only": true,
+      "turns": 30,
+      "accepted_turns": 30,
+      "has_committed_state": true
+     }
+    ],
+    "turns_by_reason": {
+     "rolled_back": 2,
+     "accepted": 30
+    },
+    "accepted_turns_flagged": 29,
+    "accepted_tokens": 1971,
+    "excluded_tokens": 136,
+    "provenance": "accepted",
+    "flagged_excluded": 29,
+    "flagged_policy": "exclude",
+    "source_sessions": [
+     "teach"
+    ]
+   },
+   "seconds": 768.9,
+   "by_group_before": {
+    "taught": {
+     "n": 24,
+     "recalled": 0,
+     "n_paraphrase": 24,
+     "recalled_paraphrase": 0
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "poison": {
+     "n": 0,
+     "recalled": 0,
+     "n_paraphrase": 4,
+     "recalled_paraphrase": 1
+    },
+    "general": {
+     "n": 11,
+     "recalled": 4,
+     "n_paraphrase": 7,
+     "recalled_paraphrase": 3
+    }
+   },
+   "by_group": {
+    "taught": {
+     "n": 24,
+     "recalled": 0,
+     "n_paraphrase": 24,
+     "recalled_paraphrase": 0
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "poison": {
+     "n": 0,
+     "recalled": 0,
+     "n_paraphrase": 4,
+     "recalled_paraphrase": 1
+    },
+    "general": {
+     "n": 11,
+     "recalled": 2,
+     "n_paraphrase": 7,
+     "recalled_paraphrase": 4
+    }
+   },
+   "results": [
+    {
+     "question": "What is my cat called?",
+     "expected": "Marlowe",
+     "reply": "That's a great question. I'm sorry for the confusion. I'm sorry for the confusion.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.641442775726318
+    },
+    {
+     "question": "Tell me the name of my cat.",
+     "expected": "Marlowe",
+     "reply": "That's a great question. I'm sorry for the confusion. I'm sorry for the confusion.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.778794765472412
+    },
+    {
+     "question": "Which city do I live in?",
+     "expected": "Denver",
+     "reply": "That's a great question. I'm glad you found the answer to that question. I'm glad you found the answer to that question. I",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.223685264587402
+    },
+    {
+     "question": "Name the city I call home.",
+     "expected": "Denver",
+     "reply": "That's a great question. I call home, and I'm a city.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.487895488739014
+    },
+    {
+     "question": "What instrument am I learning?",
+     "expected": "cello",
+     "reply": "That's a great question. I'm learning to play the piano, and I'm learning to play the piano in a way that's both",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.403353691101074
+    },
+    {
+     "question": "What do I practice playing?",
+     "expected": "cello",
+     "reply": "Practice your favorite songs and rhythms. Practice your favorite songs and rhythms. Practice your favorite songs and rhythms.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.156508445739746
+    },
+    {
+     "question": "What is my sister's name?",
+     "expected": "Priya",
+     "reply": "That's a great question. I'm sorry for the confusion. I'm sorry for the confusion.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.006855010986328
+    },
+    {
+     "question": "Say my sister's first name.",
+     "expected": "Priya",
+     "reply": "That's a great idea. I'll add a note to the note book to include that information.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.351006984710693
+    },
+    {
+     "question": "What is my favorite color?",
+     "expected": "teal",
+     "reply": "That's a great question! I'd love to hear your favorite color!",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.19513463973999
+    },
+    {
+     "question": "Name the color I like best.",
+     "expected": "teal",
+     "reply": "That's a great question. I like the color blue, but I'm not sure if it's a good color for a moon.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.093008041381836
+    },
+    {
+     "question": "What is my job?",
+     "expected": "lighthouse",
+     "reply": "That's a great question. I'm a developer, and I'm responsible for creating and maintaining the game. I'm responsible for creating",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.669616222381592
+    },
+    {
+     "question": "Describe my occupation in a word.",
+     "expected": "lighthouse",
+     "reply": "I'm a musician. I'm a musician who plays the piano.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.378245830535889
+    },
+    {
+     "question": "What is my dog called?",
+     "expected": "Tobias",
+     "reply": "That's a great question. I'm glad you found the answer to that. I'm glad you found the answer to that. I'm",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.850579261779785
+    },
+    {
+     "question": "What do I call my dog?",
+     "expected": "Tobias",
+     "reply": "That's a great question. I'd love to hear your thoughts on that.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.496508598327637
+    },
+    {
+     "question": "Where was I born?",
+     "expected": "Lisbon",
+     "reply": "You're born in the year 1999.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.130953311920166
+    },
+    {
+     "question": "Name the city of my birth.",
+     "expected": "Lisbon",
+     "reply": "That's a great question. I'm glad you asked. I'm glad you're enjoying the city of my birth. I'm",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.926759243011475
+    },
+    {
+     "question": "What is my favorite food?",
+     "expected": "dumplings",
+     "reply": "That's a great question. I'm a big fan of food, and I love to share it with my friends. I love to share my favorite",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.58252215385437
+    },
+    {
+     "question": "Name the dish I like best.",
+     "expected": "dumplings",
+     "reply": "The dish I like best is the one that's not too sweet or too salty. It's a classic, but it's not too",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.977776050567627
+    },
+    {
+     "question": "What car do I drive?",
+     "expected": "Volvo",
+     "reply": "That's a great question. I'd love to hear your thoughts on the car you drive. I'd love to hear your thoughts on the car",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.463871002197266
+    },
+    {
+     "question": "Tell me the brand of my car.",
+     "expected": "Volvo",
+     "reply": "That's a great question. I'm sorry for the confusion. I'm sorry for the confusion.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.141963005065918
+    },
+    {
+     "question": "Who is my best friend?",
+     "expected": "Okoro",
+     "reply": "That's a great question. To find out, you can start by asking yourself: What is my best friend like? What do they like about me?",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -13.131237030029297
+    },
+    {
+     "question": "Name my closest friend.",
+     "expected": "Okoro",
+     "reply": "That's a great idea. I'm glad you like my music.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -12.418621063232422
+    },
+    {
+     "question": "Which language do I speak at home?",
+     "expected": "Finnish",
+     "reply": "You can speak in any language you want, but it's essential to know the basics of the language. Here are some basic rules to follow:\n",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.279232978820801
+    },
+    {
+     "question": "Name my home language.",
+     "expected": "Finnish",
+     "reply": "That's a great idea! I'm glad you like it!",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.511462211608887
+    },
+    {
+     "question": "What is my daughter's name?",
+     "expected": "Wren",
+     "reply": "That's a great question. I'm sorry for the confusion. I'm sorry for the confusion.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.896272659301758
+    },
+    {
+     "question": "Say my daughter's name.",
+     "expected": "Wren",
+     "reply": "That's a great idea. Let's add a little bit of depth to your story. What's your daughter's name?",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.076864242553711
+    },
+    {
+     "question": "What do I collect?",
+     "expected": "typewriters",
+     "reply": "You can collect a wide range of items from the Moon's surface. The Moon's surface is a vast, crystalline, and metall",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.0047454833984375
+    },
+    {
+     "question": "Name the objects I collect.",
+     "expected": "typewriters",
+     "reply": "The objects I collect are:\n\n* The Moon\n* The Sun\n* The Moon's Moon\n* The Moon's Moon\n* The",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.666324138641357
+    },
+    {
+     "question": "What is my favorite season?",
+     "expected": "autumn",
+     "reply": "That's a great question. I'd love to hear your favorite season. I'd love to hear your favorite season's theme, the music",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.652612686157227
+    },
+    {
+     "question": "Name the season I prefer.",
+     "expected": "autumn",
+     "reply": "The season I prefer is Spring.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.373681545257568
+    },
+    {
+     "question": "Where did I grow up?",
+     "expected": "Nebraska",
+     "reply": "You're growing up in a world where the world is a beautiful, colorful, and ever-changing place. You're a young man,",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.4695119857788086
+    },
+    {
+     "question": "Name the state where I was raised.",
+     "expected": "Nebraska",
+     "reply": "That's a great question. I'm from the state of New Jersey.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.0515201091766357
+    },
+    {
+     "question": "What is my favorite number?",
+     "expected": "seventeen",
+     "reply": "That's a great question! I'd love to hear your favorite number!",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.578590393066406
+    },
+    {
+     "question": "Name my lucky number.",
+     "expected": "seventeen",
+     "reply": "That's a great idea. Let's see if we can find a lucky number that's not already in the list.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.237261772155762
+    },
+    {
+     "question": "What do I teach on weekends?",
+     "expected": "chemistry",
+     "reply": "You can teach on weekends, but it's a bit more involved. Here's a step-by-step guide to help you get started:",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.533884048461914
+    },
+    {
+     "question": "Name the subject I teach on weekends.",
+     "expected": "chemistry",
+     "reply": "That's a great question. I teach weekends at my home studio, and I'm always looking for new ways to bring the art of painting to",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.537266731262207
+    },
+    {
+     "question": "What is my horse called?",
+     "expected": "Bramble",
+     "reply": "That's a great question. I'm sorry for the confusion. I'm sorry for the confusion.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.5711541175842285
+    },
+    {
+     "question": "What do I call my horse?",
+     "expected": "Bramble",
+     "reply": "That's a great question. I'm glad you asked. I'm glad you're enjoying the ride. I'm glad you'",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.758493423461914
+    },
+    {
+     "question": "Which river do I run along?",
+     "expected": "Elbe",
+     "reply": "The river that runs along the coast of the United States.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.745138168334961
+    },
+    {
+     "question": "Name the river by my morning run.",
+     "expected": "Elbe",
+     "reply": "That's a great idea. I'll start with the river by my morning run.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.584540367126465
+    },
+    {
+     "question": "Who is my favorite composer?",
+     "expected": "Sibelius",
+     "reply": "That's a great question. I'm glad you asked. I'm a fan of many composers, and I'm always looking for new",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.533628940582275
+    },
+    {
+     "question": "Name the composer I like best.",
+     "expected": "Sibelius",
+     "reply": "That's a great question. I like the way you've used the word \"composer\" in your question. I like the way you've",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.27764368057251
+    },
+    {
+     "question": "What do I keep on my roof?",
+     "expected": "bees",
+     "reply": "Keeping your roof covered is a great way to stay warm and dry. Here are some tips to keep your roof cool and dry:\n\n1. **",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.560901641845703
+    },
+    {
+     "question": "Name the animals I keep on the roof.",
+     "expected": "bees",
+     "reply": "That's a great question. I keep on the roof because I love the view and the sounds of the city. I also love the sounds of the city",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.021015644073486
+    },
+    {
+     "question": "What is my grandmother's name?",
+     "expected": "Yolanda",
+     "reply": "That's a great question. I'm sorry for the confusion. I'm sorry for the confusion.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.784002780914307
+    },
+    {
+     "question": "Say my grandmother's name.",
+     "expected": "Yolanda",
+     "reply": "That's a great idea. I'll add a note to the note book to include that information.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.592135906219482
+    },
+    {
+     "question": "What am I allergic to?",
+     "expected": "walnuts",
+     "reply": "That's a great question. To be allergic to something, you need to be aware of the potential effects. Here are some potential triggers:\n",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.030214309692383
+    },
+    {
+     "question": "Name my allergy.",
+     "expected": "walnuts",
+     "reply": "That's a great idea. Let's explore the possibilities.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.700684070587158
+    },
+    {
+     "question": "In my chemistry notes, what bond joins the glucose units in cellulose?",
+     "expected": "1,4",
+     "reply": "That's right. The bond between glucose and cellulose is a 1,3-linked glucose.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.515634536743164
+    },
+    {
+     "question": "From my notes: the glucose units of cellulose are joined by which bond?",
+     "expected": "1,4",
+     "reply": "The glucose units of cellulose are joined by a bond that is a combination of the two glucose units. This bond is a combination of",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.072154998779297
+    },
+    {
+     "question": "In my notes, which reagent acetylates salicylic acid to make aspirin?",
+     "expected": "anhydride",
+     "reply": "That's right.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.243487358093262
+    },
+    {
+     "question": "From my notes: what acetylates salicylic acid into aspirin?",
+     "expected": "anhydride",
+     "reply": "That's a great question. The acetyl group is a key component in the chemical reaction that creates aspirin. The acetyl group is",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.476981163024902
+    },
+    {
+     "question": "What is my parrot called?",
+     "expected": "Biscuit",
+     "reply": "That's a great question. I'm sorry for the confusion. I'm sorry for the confusion.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.853670597076416
+    },
+    {
+     "question": "What do I call my parrot?",
+     "expected": "Biscuit",
+     "reply": "That's a great question. I'm glad you're enjoying the game. I'm glad you're enjoying the game.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.912841796875
+    },
+    {
+     "question": "What is my boat called?",
+     "expected": "Kestrel",
+     "reply": "That's a great question. I'm sorry for the confusion. I'm sorry for the confusion.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.499413967132568
+    },
+    {
+     "question": "Name my boat.",
+     "expected": "Kestrel",
+     "reply": "That's a great idea. Let's explore the possibilities. What kind of boat would you like to build?",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.717278957366943
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Berlin",
+     "reply": "The capital of France is Paris.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -10.233436584472656
+    },
+    {
+     "question": "Name France's capital city.",
+     "expected": "Berlin",
+     "reply": "Paris is a city of many cities, each with its own unique character. I'm looking for a city that's a bit more diverse, with its",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.379531383514404
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "50",
+     "reply": "At sea level, in Celsius.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -2.925463914871216
+    },
+    {
+     "question": "Give water's sea-level boiling point in Celsius.",
+     "expected": "50",
+     "reply": "That's right. The sea-level boiling point is 122.6 degrees Fahrenheit.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.188812494277954
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "nine",
+     "reply": "That's a tough one. I'm not sure how to answer that. I'm not sure how to answer that. I'm not",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.762062072753906
+    },
+    {
+     "question": "Count the days in one week.",
+     "expected": "nine",
+     "reply": "That's a great way to think about it.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.300382614135742
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Moon",
+     "reply": "The Moon is the largest planet in the solar system, with a diameter of 1.25 million miles (2.25 million kilometers). The",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.151526927947998
+    },
+    {
+     "question": "Name the larger body: Earth or Moon.",
+     "expected": "Moon",
+     "reply": "The larger body is Earth. The smaller body is Moon.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.470621585845947
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Paris",
+     "reply": "The capital of France is Paris.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.5683865547180176
+    },
+    {
+     "question": "Name the capital city of France.",
+     "expected": "Paris",
+     "reply": "Paris is the capital city of France.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -1.395663857460022
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "seven",
+     "reply": "That's a tough one. I'm not sure how to answer that. I'm not sure how to answer that. I'm not",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.740152359008789
+    },
+    {
+     "question": "A week has how many days?",
+     "expected": "seven",
+     "reply": "12\n\nA week has 12 days.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.995145320892334
+    },
+    {
+     "question": "What color is the sky on a clear day?",
+     "expected": "blue",
+     "reply": "That's a great question. The sky is a colorful, vibrant, and ever-changing color. It's a beautiful, v",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -10.1436128616333
+    },
+    {
+     "question": "On a clear day, what color is the sky?",
+     "expected": "blue",
+     "reply": "That's a great question. The sky is a colorful, vibrant, and colorful color. It's a beautiful color that's",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.941082000732422
+    },
+    {
+     "question": "What is two plus two?",
+     "expected": "four",
+     "reply": "Two plus two is the sum of two numbers.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -10.232358932495117
+    },
+    {
+     "question": "Add two and two.",
+     "expected": "four",
+     "reply": "That's a great idea. I'll add two and two.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -11.369988441467285
+    },
+    {
+     "question": "Which planet do we live on?",
+     "expected": "Earth",
+     "reply": "That's a great question. I've got a few ideas for you. One is the planet of the Sun, which is the largest and most massive",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.589145660400391
+    },
+    {
+     "question": "What is the name of our planet?",
+     "expected": "Earth",
+     "reply": "The name of our planet is Earth.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.391876697540283
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "100",
+     "reply": "At sea level, in Celsius.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -1.810590386390686
+    },
+    {
+     "question": "What is water's boiling point at sea level?",
+     "expected": "100",
+     "reply": "The boiling point of water is 100 degrees Fahrenheit (38 degrees Celsius).",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.8516275882720947
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Earth",
+     "reply": "The Moon is the largest planet in the solar system, with a diameter of 1.25 million miles (2.25 million kilometers). The",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.325467109680176
+    },
+    {
+     "question": "Between the Earth and the Moon, which is bigger?",
+     "expected": "Earth",
+     "reply": "That's a great question. The Moon is about 100 times bigger than the Earth, and the Earth is about 10 times bigger than",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.602072238922119
+    }
+   ]
+  },
+  "dream": {
+   "status": "rejected",
+   "model_id": null,
+   "gate": {
+    "passed": false,
+    "measured": true,
+    "checks": [
+     {
+      "name": "heldout_nll_mean_rise",
+      "value": -0.15172122749250594,
+      "limit": 0.05,
+      "passed": true
+     },
+     {
+      "name": "reply_cluster_share",
+      "value": 0.3076923076923077,
+      "limit": 0.25,
+      "passed": false
+     }
+    ]
+   },
+   "batch": {
+    "session_rows": 1,
+    "replay_rows": 1,
+    "requested_replay_ratio": 0.5,
+    "realized_replay_ratio": 0.5,
+    "loss_terms": "reply_kl(frozen teacher) + replay_ce, unit weights",
+    "teacher_weights": "live model (only W0 changes, overridden by the session state)"
+   },
+   "dreams": {
+    "generated": 6,
+    "degenerate": 0,
+    "duplicate": 4,
+    "low_gain": 0,
+    "kept": [
+     {
+      "prompt": "Restate, in one sentence and in your own words, one thing I told you about myself earlier.",
+      "turn": "My cat is called Marlowe. Please remember my cat's name is Marlowe.",
+      "text": "That's great. I'm happy to hear that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. I'm glad that you're",
+      "n_tokens": 86,
+      "reply_len": 49,
+      "teacher_logprob": -0.3740935451813092,
+      "student_logprob": -2.5782832356683,
+      "gain": 2.2041896904869906,
+      "fastweight_logprob": -0.3664728773969449,
+      "fastweight_gain": 2.211810358271355,
+      "token_gain": [
+       9.564,
+       0.852,
+       0.004,
+       4.037,
+       2.031,
+       2.045,
+       1.431,
+       0.735,
+       -0.885,
+       -0.038,
+       3.667,
+       1.688,
+       2.205,
+       1.192,
+       0.289,
+       5.496,
+       0.002,
+       1.915,
+       10.013,
+       1.852,
+       2.801,
+       3.872,
+       2.198,
+       2.137,
+       1.443,
+       0.784,
+       3.557,
+       2.706,
+       2.051,
+       2.64,
+       1.694,
+       0.712,
+       3.749,
+       2.654,
+       1.539,
+       1.255,
+       0.269,
+       2.975,
+       2.514,
+       1.914,
+       2.644,
+       1.69,
+       0.689,
+       3.931,
+       2.668,
+       1.44,
+       1.249,
+       0.257,
+       1.879
+      ],
+      "token_fw_gain": [
+       9.564,
+       0.852,
+       0.004,
+       4.038,
+       2.031,
+       2.045,
+       1.431,
+       0.735,
+       -0.91,
+       -0.024,
+       3.688,
+       1.691,
+       2.203,
+       1.192,
+       0.289,
+       5.773,
+       0.002,
+       1.915,
+       10.007,
+       1.852,
+       2.801,
+       3.877,
+       2.198,
+       2.137,
+       1.443,
+       0.784,
+       3.562,
+       2.706,
+       2.051,
+       2.64,
+       1.693,
+       0.712,
+       3.747,
+       2.654,
+       1.488,
+       1.242,
+       0.268,
+       3.076,
+       2.515,
+       1.914,
+       2.645,
+       1.691,
+       0.689,
+       3.931,
+       2.668,
+       1.438,
+       1.243,
+       0.254,
+       1.935
+      ],
+      "token_turn_gain": [
+       0.0,
+       -0.0,
+       0.0,
+       -0.0,
+       -0.0,
+       -0.0,
+       -0.0,
+       -0.0,
+       0.025,
+       -0.014,
+       -0.021,
+       -0.003,
+       0.001,
+       -0.001,
+       0.0,
+       -0.277,
+       0.0,
+       -0.0,
+       0.006,
+       0.0,
+       0.0,
+       -0.005,
+       -0.0,
+       0.0,
+       -0.0,
+       -0.0,
+       -0.005,
+       0.0,
+       -0.0,
+       0.0,
+       0.001,
+       0.0,
+       0.002,
+       0.0,
+       0.051,
+       0.013,
+       0.001,
+       -0.101,
+       -0.0,
+       -0.0,
+       -0.001,
+       -0.001,
+       -0.0,
+       0.0,
+       0.0,
+       0.002,
+       0.006,
+       0.003,
+       -0.056
+      ],
+      "fw_gain_concentration_top3": 0.2318426096768518,
+      "session_id": "teach"
+     },
+     {
+      "prompt": "Restate, in one sentence and in your own words, one thing I told you about myself earlier.",
+      "turn": "My cat is called Marlowe. Please remember my cat's name is Marlowe.",
+      "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. I'm glad that you're enjoying",
+      "n_tokens": 86,
+      "reply_len": 49,
+      "teacher_logprob": -0.3244237767475708,
+      "student_logprob": -2.498846373354484,
+      "gain": 2.1744225966069135,
+      "fastweight_logprob": -0.3215582201579606,
+      "fastweight_gain": 2.1772881531965234,
+      "token_gain": [
+       9.564,
+       0.852,
+       0.004,
+       4.037,
+       2.031,
+       2.045,
+       1.431,
+       0.735,
+       3.999,
+       2.726,
+       1.517,
+       1.293,
+       0.228,
+       4.869,
+       0.002,
+       1.844,
+       10.001,
+       1.835,
+       2.813,
+       3.863,
+       2.229,
+       2.103,
+       1.426,
+       0.81,
+       3.492,
+       2.489,
+       2.009,
+       2.686,
+       1.728,
+       0.699,
+       3.809,
+       2.655,
+       1.534,
+       1.252,
+       0.271,
+       3.116,
+       2.519,
+       1.927,
+       2.597,
+       1.67,
+       0.694,
+       3.921,
+       2.648,
+       1.353,
+       1.277,
+       0.238,
+       4.755,
+       0.002,
+       -5.053
+      ],
+      "token_fw_gain": [
+       9.564,
+       0.852,
+       0.004,
+       4.038,
+       2.031,
+       2.045,
+       1.431,
+       0.735,
+       4.002,
+       2.726,
+       1.544,
+       1.301,
+       0.229,
+       4.882,
+       0.002,
+       1.842,
+       9.99,
+       1.835,
+       2.813,
+       3.87,
+       2.229,
+       2.103,
+       1.426,
+       0.81,
+       3.496,
+       2.489,
+       2.009,
+       2.686,
+       1.726,
+       0.698,
+       3.806,
+       2.655,
+       1.406,
+       1.208,
+       0.266,
+       2.768,
+       2.519,
+       1.927,
+       2.597,
+       1.671,
+       0.695,
+       3.924,
+       2.648,
+       1.37,
+       1.27,
+       0.234,
+       4.819,
+       0.002,
+       -4.504
+      ],
+      "token_turn_gain": [
+       0.0,
+       -0.0,
+       0.0,
+       -0.0,
+       -0.0,
+       -0.0,
+       -0.0,
+       -0.0,
+       -0.003,
+       -0.001,
+       -0.027,
+       -0.008,
+       -0.001,
+       -0.013,
+       0.0,
+       0.002,
+       0.011,
+       0.001,
+       0.0,
+       -0.007,
+       -0.0,
+       0.0,
+       0.0,
+       0.0,
+       -0.004,
+       -0.0,
+       -0.0,
+       0.0,
+       0.001,
+       0.0,
+       0.004,
+       0.0,
+       0.129,
+       0.045,
+       0.005,
+       0.349,
+       0.0,
+       0.0,
+       -0.0,
+       -0.001,
+       -0.0,
+       -0.003,
+       -0.0,
+       -0.017,
+       0.007,
+       0.004,
+       -0.064,
+       0.0,
+       -0.549
+      ],
+      "fw_gain_concentration_top3": 0.21976051650865386,
+      "session_id": "teach"
+     }
+    ],
+    "rejected": [
+     {
+      "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+      "reason": "duplicate"
+     },
+     {
+      "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+      "reason": "duplicate"
+     },
+     {
+      "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you're enjoying your notes",
+      "reason": "duplicate"
+     },
+     {
+      "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+      "reason": "duplicate"
+     }
+    ],
+    "too_long": 0
+   },
+   "reason": "locality gate failed",
+   "heldout_nll_before": {
+    "mean": 1.611815797642479,
+    "median": 0.8218865394592285,
+    "tokens": 887
+   },
+   "heldout_nll_after": {
+    "mean": 1.460094570149973,
+    "median": 0.516064465045929,
+    "tokens": 887
+   },
+   "harvest": {
+    "sessions": [
+     {
+      "session_id": "rolled",
+      "log_only": false,
+      "turns": 2,
+      "accepted_turns": 0,
+      "has_committed_state": true
+     },
+     {
+      "session_id": "teach",
+      "log_only": true,
+      "turns": 30,
+      "accepted_turns": 30,
+      "has_committed_state": true
+     }
+    ],
+    "turns_by_reason": {
+     "rolled_back": 2,
+     "accepted": 30
+    },
+    "accepted_turns_flagged": 29,
+    "accepted_tokens": 1971,
+    "excluded_tokens": 136,
+    "provenance": "accepted",
+    "flagged_excluded": 29,
+    "flagged_policy": "exclude",
+    "source_sessions": [
+     "teach"
+    ]
+   },
+   "seconds": 798.7,
+   "by_group_before": {
+    "taught": {
+     "n": 24,
+     "recalled": 0,
+     "n_paraphrase": 24,
+     "recalled_paraphrase": 0
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "poison": {
+     "n": 0,
+     "recalled": 0,
+     "n_paraphrase": 4,
+     "recalled_paraphrase": 1
+    },
+    "general": {
+     "n": 11,
+     "recalled": 4,
+     "n_paraphrase": 7,
+     "recalled_paraphrase": 3
+    }
+   },
+   "by_group": {
+    "taught": {
+     "n": 24,
+     "recalled": 0,
+     "n_paraphrase": 24,
+     "recalled_paraphrase": 0
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "poison": {
+     "n": 0,
+     "recalled": 0,
+     "n_paraphrase": 4,
+     "recalled_paraphrase": 0
+    },
+    "general": {
+     "n": 11,
+     "recalled": 4,
+     "n_paraphrase": 7,
+     "recalled_paraphrase": 4
+    }
+   },
+   "results": [
+    {
+     "question": "What is my cat called?",
+     "expected": "Marlowe",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.912363052368164
+    },
+    {
+     "question": "Tell me the name of my cat.",
+     "expected": "Marlowe",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.476057529449463
+    },
+    {
+     "question": "Which city do I live in?",
+     "expected": "Denver",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.162875652313232
+    },
+    {
+     "question": "Name the city I call home.",
+     "expected": "Denver",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.916904926300049
+    },
+    {
+     "question": "What instrument am I learning?",
+     "expected": "cello",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.300371170043945
+    },
+    {
+     "question": "What do I practice playing?",
+     "expected": "cello",
+     "reply": "Practice playing is a great way to practice your skills. Practice playing by practicing your notes, rhythms, and melodies. Practice",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -9.205057144165039
+    },
+    {
+     "question": "What is my sister's name?",
+     "expected": "Priya",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.981243133544922
+    },
+    {
+     "question": "Say my sister's first name.",
+     "expected": "Priya",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.833470821380615
+    },
+    {
+     "question": "What is my favorite color?",
+     "expected": "teal",
+     "reply": "That's a great question. To find the color that best represents your interests, try to think of a color that you like. If you're a",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.6964616775512695
+    },
+    {
+     "question": "Name the color I like best.",
+     "expected": "teal",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.575632095336914
+    },
+    {
+     "question": "What is my job?",
+     "expected": "lighthouse",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.804496765136719
+    },
+    {
+     "question": "Describe my occupation in a word.",
+     "expected": "lighthouse",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.92523717880249
+    },
+    {
+     "question": "What is my dog called?",
+     "expected": "Tobias",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.7017364501953125
+    },
+    {
+     "question": "What do I call my dog?",
+     "expected": "Tobias",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I hope that you're doing well. I hope that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.820802211761475
+    },
+    {
+     "question": "Where was I born?",
+     "expected": "Lisbon",
+     "reply": "You're born at the age of 12.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.182436466217041
+    },
+    {
+     "question": "Name the city of my birth.",
+     "expected": "Lisbon",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.176151752471924
+    },
+    {
+     "question": "What is my favorite food?",
+     "expected": "dumplings",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I hope that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.7505574226379395
+    },
+    {
+     "question": "Name the dish I like best.",
+     "expected": "dumplings",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.3823132514953613
+    },
+    {
+     "question": "What car do I drive?",
+     "expected": "Volvo",
+     "reply": "That's a great question. To drive a car, you need to have a valid driver's license. You can get one from most major car deal",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.668741703033447
+    },
+    {
+     "question": "Tell me the brand of my car.",
+     "expected": "Volvo",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.412320137023926
+    },
+    {
+     "question": "Who is my best friend?",
+     "expected": "Okoro",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -13.01053237915039
+    },
+    {
+     "question": "Name my closest friend.",
+     "expected": "Okoro",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -12.80034065246582
+    },
+    {
+     "question": "Which language do I speak at home?",
+     "expected": "Finnish",
+     "reply": "You can speak in your home language at home. However, you may need to speak in a different language to communicate with your family members.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.415768146514893
+    },
+    {
+     "question": "Name my home language.",
+     "expected": "Finnish",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.3653106689453125
+    },
+    {
+     "question": "What is my daughter's name?",
+     "expected": "Wren",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.040794372558594
+    },
+    {
+     "question": "Say my daughter's name.",
+     "expected": "Wren",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -9.186899185180664
+    },
+    {
+     "question": "What do I collect?",
+     "expected": "typewriters",
+     "reply": "You can collect a wide range of items from your local library. Here are some suggestions:\n\n1. **Books**: You can find a wide",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.860969066619873
+    },
+    {
+     "question": "Name the objects I collect.",
+     "expected": "typewriters",
+     "reply": "That's great. I hope that you're doing well. I hope that you're doing well. I hope that you're doing well.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.763641834259033
+    },
+    {
+     "question": "What is my favorite season?",
+     "expected": "autumn",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I hope that you're doing well. I hope that",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.362276554107666
+    },
+    {
+     "question": "Name the season I prefer.",
+     "expected": "autumn",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.201209545135498
+    },
+    {
+     "question": "Where did I grow up?",
+     "expected": "Nebraska",
+     "reply": "You're growing up in a beautiful, diverse, and vibrant community. I'm glad that you're enjoying your notes. I hope",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.6002681255340576
+    },
+    {
+     "question": "Name the state where I was raised.",
+     "expected": "Nebraska",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.12668776512146
+    },
+    {
+     "question": "What is my favorite number?",
+     "expected": "seventeen",
+     "reply": "That's a great question. To find the number of colors in a coloring book, you can use the following formula:\n\n(number of colors",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.088338851928711
+    },
+    {
+     "question": "Name my lucky number.",
+     "expected": "seventeen",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -9.071151733398438
+    },
+    {
+     "question": "What do I teach on weekends?",
+     "expected": "chemistry",
+     "reply": "You can teach on weekends, but it's a good idea to plan ahead and make sure you have a schedule that works for you. Here are some",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.431188583374023
+    },
+    {
+     "question": "Name the subject I teach on weekends.",
+     "expected": "chemistry",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.073549270629883
+    },
+    {
+     "question": "What is my horse called?",
+     "expected": "Bramble",
+     "reply": "That's a great question. I'm glad that you're enjoying your horse. I'm glad that you're enjoying your horse",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.843613147735596
+    },
+    {
+     "question": "What do I call my horse?",
+     "expected": "Bramble",
+     "reply": "That's a great question. I'm glad that you're enjoying your horse. I'm glad that you're enjoying your horse",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.500726699829102
+    },
+    {
+     "question": "Which river do I run along?",
+     "expected": "Elbe",
+     "reply": "The river you're running along is called the \"Little River.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.990119934082031
+    },
+    {
+     "question": "Name the river by my morning run.",
+     "expected": "Elbe",
+     "reply": "That's a great idea. I'm glad that you're enjoying your morning run. I'm glad that you're enjoying your",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.869864463806152
+    },
+    {
+     "question": "Who is my favorite composer?",
+     "expected": "Sibelius",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I hope that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.504447937011719
+    },
+    {
+     "question": "Name the composer I like best.",
+     "expected": "Sibelius",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.446242809295654
+    },
+    {
+     "question": "What do I keep on my roof?",
+     "expected": "bees",
+     "reply": "Keeping your roof covered is essential for your safety and comfort. Here are some tips to help you stay safe:\n\nKeep your roof covered with a",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.263326644897461
+    },
+    {
+     "question": "Name the animals I keep on the roof.",
+     "expected": "bees",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.383013725280762
+    },
+    {
+     "question": "What is my grandmother's name?",
+     "expected": "Yolanda",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.925664901733398
+    },
+    {
+     "question": "Say my grandmother's name.",
+     "expected": "Yolanda",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.022449016571045
+    },
+    {
+     "question": "What am I allergic to?",
+     "expected": "walnuts",
+     "reply": "That's great. I'm glad that you're allergic to something. I'm glad that you're allergic to something",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.90739631652832
+    },
+    {
+     "question": "Name my allergy.",
+     "expected": "walnuts",
+     "reply": "That's great. I'm glad that you're enjoying your allergy. I'm glad that you're enjoying your allergy",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.6108832359313965
+    },
+    {
+     "question": "In my chemistry notes, what bond joins the glucose units in cellulose?",
+     "expected": "1,4",
+     "reply": "That's right. Glucose is bonded to cellulose through a bond between the glucose units.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.0177764892578125
+    },
+    {
+     "question": "From my notes: the glucose units of cellulose are joined by which bond?",
+     "expected": "1,4",
+     "reply": "The glucose units of cellulose are joined by a single bond, which is a carbon-carbon bond. This bond is formed by the hydro",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.344270706176758
+    },
+    {
+     "question": "In my notes, which reagent acetylates salicylic acid to make aspirin?",
+     "expected": "anhydride",
+     "reply": "That's correct.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.247346878051758
+    },
+    {
+     "question": "From my notes: what acetylates salicylic acid into aspirin?",
+     "expected": "anhydride",
+     "reply": "That's correct. Aspirin is a medication used to treat pain and inflammation. It's a chemical compound that's found",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.53841495513916
+    },
+    {
+     "question": "What is my parrot called?",
+     "expected": "Biscuit",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I hope that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.566691875457764
+    },
+    {
+     "question": "What do I call my parrot?",
+     "expected": "Biscuit",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.700072765350342
+    },
+    {
+     "question": "What is my boat called?",
+     "expected": "Kestrel",
+     "reply": "That's a great question. Let's break it down. Your boat is called \"Sunshine\" because it's a beautiful, rust",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.874471664428711
+    },
+    {
+     "question": "Name my boat.",
+     "expected": "Kestrel",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.7723069190979
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Berlin",
+     "reply": "The capital of France is Paris.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -13.776456832885742
+    },
+    {
+     "question": "Name France's capital city.",
+     "expected": "Berlin",
+     "reply": "France's capital city is Paris.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.738576889038086
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "50",
+     "reply": "At sea level, in Celsius, it's 100 degrees Fahrenheit (40 degrees Celsius).",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.560703992843628
+    },
+    {
+     "question": "Give water's sea-level boiling point in Celsius.",
+     "expected": "50",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.9432973861694336
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "nine",
+     "reply": "That's a great question. I'm sorry for the confusion. I'm sorry for the confusion. I'm sorry for the confusion. I",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -10.478793144226074
+    },
+    {
+     "question": "Count the days in one week.",
+     "expected": "nine",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -13.617071151733398
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Moon",
+     "reply": "The Moon is the largest object in the solar system, with a diameter of about 1.5 million miles (2.5 million km). The Earth is",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.049299240112305
+    },
+    {
+     "question": "Name the larger body: Earth or Moon.",
+     "expected": "Moon",
+     "reply": "That's a great question. Earth is the largest body in the solar system, and it's located in the constellation of Cancer. It",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.041201114654541
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Paris",
+     "reply": "The capital of France is Paris.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.336376190185547
+    },
+    {
+     "question": "Name the capital city of France.",
+     "expected": "Paris",
+     "reply": "Le Paris est le capital de France.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.504769802093506
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "seven",
+     "reply": "That's a great question. I'm sorry for the confusion. I'm sorry for the confusion. I'm sorry for the confusion. I",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -11.21884536743164
+    },
+    {
+     "question": "A week has how many days?",
+     "expected": "seven",
+     "reply": "1 day.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -9.265743255615234
+    },
+    {
+     "question": "What color is the sky on a clear day?",
+     "expected": "blue",
+     "reply": "That's a great question. The sky is a colorful, vibrant, and dynamic color that can be seen from all directions. It's",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -12.009797096252441
+    },
+    {
+     "question": "On a clear day, what color is the sky?",
+     "expected": "blue",
+     "reply": "That's a great question. The sky is a colorful, vibrant, and colorful color. It's a beautiful color that's",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -11.36756706237793
+    },
+    {
+     "question": "What is two plus two?",
+     "expected": "four",
+     "reply": "Two plus two is the sum of two numbers.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -12.760232925415039
+    },
+    {
+     "question": "Add two and two.",
+     "expected": "four",
+     "reply": "That's great. How many ways are there to make two and two?",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -16.409597396850586
+    },
+    {
+     "question": "Which planet do we live on?",
+     "expected": "Earth",
+     "reply": "That's a great question. The planet that we live on is called the \"Sun\" in the English language. It's a planet that'",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.39283561706543
+    },
+    {
+     "question": "What is the name of our planet?",
+     "expected": "Earth",
+     "reply": "The name of our planet is \"Earth\".",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.887414932250977
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "100",
+     "reply": "At sea level, in Celsius, it's 100 degrees Fahrenheit (40 degrees Celsius).",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -2.1741695404052734
+    },
+    {
+     "question": "What is water's boiling point at sea level?",
+     "expected": "100",
+     "reply": "The boiling point of water is 100\u00b0F (38\u00b0C). It's a liquid that's at a temperature of ",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.1221418380737305
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Earth",
+     "reply": "The Moon is the largest object in the solar system, with a diameter of about 1.5 million miles (2.5 million km). The Earth is",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.054589748382568
+    },
+    {
+     "question": "Between the Earth and the Moon, which is bigger?",
+     "expected": "Earth",
+     "reply": "That's a great question. The Earth and the Moon are both larger than the Sun, which is about 1.2 billion miles (2.0",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.604480266571045
+    }
+   ]
+  },
+  "ungated": {
+   "status": "accepted",
+   "model_id": "sleep_1790172480",
+   "gate": {
+    "passed": true,
+    "measured": true,
+    "checks": [
+     {
+      "name": "heldout_nll_mean_rise",
+      "value": -0.12857325984597545,
+      "limit": 0.05,
+      "passed": true
+     },
+     {
+      "name": "reply_cluster_share",
+      "value": 0.02564102564102564,
+      "limit": 0.25,
+      "passed": true
+     }
+    ]
+   },
+   "batch": {
+    "session_rows": 1,
+    "replay_rows": 1,
+    "requested_replay_ratio": 0.5,
+    "realized_replay_ratio": 0.5,
+    "loss_terms": "weighted cross_entropy over all rows",
+    "teacher_weights": "n/a"
+   },
+   "dreams": null,
+   "reason": null,
+   "heldout_nll_before": {
+    "mean": 1.611815797642479,
+    "median": 0.8218865394592285,
+    "tokens": 887
+   },
+   "heldout_nll_after": {
+    "mean": 1.4832425377965035,
+    "median": 0.5318489074707031,
+    "tokens": 887
+   },
+   "harvest": {
+    "sessions": [
+     {
+      "session_id": "rolled",
+      "log_only": false,
+      "turns": 2,
+      "accepted_turns": 0,
+      "has_committed_state": true
+     },
+     {
+      "session_id": "teach",
+      "log_only": true,
+      "turns": 30,
+      "accepted_turns": 30,
+      "has_committed_state": true
+     }
+    ],
+    "turns_by_reason": {
+     "rolled_back": 2,
+     "accepted": 30
+    },
+    "accepted_turns_flagged": 29,
+    "accepted_tokens": 1971,
+    "excluded_tokens": 136,
+    "provenance": "all (control: rolled-back turns included)",
+    "flagged_policy": "include",
+    "source_sessions": [
+     "rolled",
+     "teach"
+    ]
+   },
+   "seconds": 660.2,
+   "by_group_before": {
+    "taught": {
+     "n": 24,
+     "recalled": 0,
+     "n_paraphrase": 24,
+     "recalled_paraphrase": 0
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "poison": {
+     "n": 0,
+     "recalled": 0,
+     "n_paraphrase": 4,
+     "recalled_paraphrase": 1
+    },
+    "general": {
+     "n": 11,
+     "recalled": 4,
+     "n_paraphrase": 7,
+     "recalled_paraphrase": 3
+    }
+   },
+   "by_group": {
+    "taught": {
+     "n": 24,
+     "recalled": 0,
+     "n_paraphrase": 24,
+     "recalled_paraphrase": 1
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "poison": {
+     "n": 0,
+     "recalled": 0,
+     "n_paraphrase": 4,
+     "recalled_paraphrase": 1
+    },
+    "general": {
+     "n": 11,
+     "recalled": 4,
+     "n_paraphrase": 7,
+     "recalled_paraphrase": 4
+    }
+   },
+   "results": [
+    {
+     "question": "What is my cat called?",
+     "expected": "Marlowe",
+     "reply": "Your cat's name is \"Joe\".",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.5695624351501465
+    },
+    {
+     "question": "Tell me the name of my cat.",
+     "expected": "Marlowe",
+     "reply": "<|cat|>\n <|name|>\n <|name|>\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.604019641876221
+    },
+    {
+     "question": "Which city do I live in?",
+     "expected": "Denver",
+     "reply": "That's a great question. To find the city you live in, you can use the following formula:\n\n(city-year)/(year-",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.201237201690674
+    },
+    {
+     "question": "Name the city I call home.",
+     "expected": "Denver",
+     "reply": "That's a great question. I call home every day.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.9326653480529785
+    },
+    {
+     "question": "What instrument am I learning?",
+     "expected": "cello",
+     "reply": "That's great. I'm learning to play the guitar.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.625469207763672
+    },
+    {
+     "question": "What do I practice playing?",
+     "expected": "cello",
+     "reply": "Practice playing is a great way to practice your skills and improve your overall game. Practice playing is a great way to practice your skills and improve your overall",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -9.463455200195312
+    },
+    {
+     "question": "What is my sister's name?",
+     "expected": "Priya",
+     "reply": "Your sister's name is <b>Mary</b>.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.547430038452148
+    },
+    {
+     "question": "Say my sister's first name.",
+     "expected": "Priya",
+     "reply": "That's great. \n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.051682472229004
+    },
+    {
+     "question": "What is my favorite color?",
+     "expected": "teal",
+     "reply": "That's a great question. To find the best color for your favorite color, you can use the following formula:\n\n(Red + Blue) /",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.018813133239746
+    },
+    {
+     "question": "Name the color I like best.",
+     "expected": "teal",
+     "reply": "<b>Color 1:</b>\n<br>\n<b>Color 2:</b>\n<br>\n<b",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.430695056915283
+    },
+    {
+     "question": "What is my job?",
+     "expected": "lighthouse",
+     "reply": "Your job is to help people find their way in the world.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.548298358917236
+    },
+    {
+     "question": "Describe my occupation in a word.",
+     "expected": "lighthouse",
+     "reply": "I'm a teacher.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.688506603240967
+    },
+    {
+     "question": "What is my dog called?",
+     "expected": "Tobias",
+     "reply": "Your dog's name is \"Joe\".",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.994115829467773
+    },
+    {
+     "question": "What do I call my dog?",
+     "expected": "Tobias",
+     "reply": "You can call your dog \"Dog\".",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.851459980010986
+    },
+    {
+     "question": "Where was I born?",
+     "expected": "Lisbon",
+     "reply": "You're born in the United States.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.556943416595459
+    },
+    {
+     "question": "Name the city of my birth.",
+     "expected": "Lisbon",
+     "reply": "My birth city is New York City.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.090060710906982
+    },
+    {
+     "question": "What is my favorite food?",
+     "expected": "dumplings",
+     "reply": "Your favorite food is probably the most important thing to know about your diet. It's the one thing that's truly important to you. It'",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.041069984436035
+    },
+    {
+     "question": "Name the dish I like best.",
+     "expected": "dumplings",
+     "reply": "The dish I like best is the one that's easy to prepare and has a great flavor.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.019702911376953
+    },
+    {
+     "question": "What car do I drive?",
+     "expected": "Volvo",
+     "reply": "That's a great question. Let's explore the car you drive.\n\nThe car you drive is a 2016 Toyota Pri",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.296630382537842
+    },
+    {
+     "question": "Tell me the brand of my car.",
+     "expected": "Volvo",
+     "reply": "That's a great question. To find out, let's take a look at the brand of your car. To find out, let's take",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.918160915374756
+    },
+    {
+     "question": "Who is my best friend?",
+     "expected": "Okoro",
+     "reply": "Your best friend is your best friend.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -12.755546569824219
+    },
+    {
+     "question": "Name my closest friend.",
+     "expected": "Okoro",
+     "reply": "My closest friend is my best friend.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -11.786188125610352
+    },
+    {
+     "question": "Which language do I speak at home?",
+     "expected": "Finnish",
+     "reply": "You can speak at home in many languages, including English, French, German, Spanish, and Italian.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.835506916046143
+    },
+    {
+     "question": "Name my home language.",
+     "expected": "Finnish",
+     "reply": "Your home language is English.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.175820350646973
+    },
+    {
+     "question": "What is my daughter's name?",
+     "expected": "Wren",
+     "reply": "Your daughter's name is \"Mary\".",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.398802757263184
+    },
+    {
+     "question": "Say my daughter's name.",
+     "expected": "Wren",
+     "reply": "That's great. \n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.860569953918457
+    },
+    {
+     "question": "What do I collect?",
+     "expected": "typewriters",
+     "reply": "You can collect items from your home, such as books, magazines, newspapers, and CDs.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.792818546295166
+    },
+    {
+     "question": "Name the objects I collect.",
+     "expected": "typewriters",
+     "reply": "The objects I collect include:\n\n* A collection of books\n* A collection of books with a title\n* A collection of books with a subject\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.037618160247803
+    },
+    {
+     "question": "What is my favorite season?",
+     "expected": "autumn",
+     "reply": "That's a great question. I'd love to hear your favorite season.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.822494983673096
+    },
+    {
+     "question": "Name the season I prefer.",
+     "expected": "autumn",
+     "reply": "The season I prefer is spring.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.240990161895752
+    },
+    {
+     "question": "Where did I grow up?",
+     "expected": "Nebraska",
+     "reply": "You grew up in a small town in the Midwest.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.156558513641357
+    },
+    {
+     "question": "Name the state where I was raised.",
+     "expected": "Nebraska",
+     "reply": "That's a great question. I'm glad you're enjoying your new home.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.194410800933838
+    },
+    {
+     "question": "What is my favorite number?",
+     "expected": "seventeen",
+     "reply": "That's a great question. To find the number of colors in a colorful number, you can use the formula:\n\n(number of colors in",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.315961837768555
+    },
+    {
+     "question": "Name my lucky number.",
+     "expected": "seventeen",
+     "reply": "My lucky number is 1234567890.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.875722408294678
+    },
+    {
+     "question": "What do I teach on weekends?",
+     "expected": "chemistry",
+     "reply": "You can teach on weekends, but it's a bit more involved. Here's a step-by-step guide to help you get started:",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.261101722717285
+    },
+    {
+     "question": "Name the subject I teach on weekends.",
+     "expected": "chemistry",
+     "reply": "The subject I teach on weekends is \"The Art of Living Well.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.248784065246582
+    },
+    {
+     "question": "What is my horse called?",
+     "expected": "Bramble",
+     "reply": "That's a great question. Let's break it down. Your horse is called \"Fred.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.673196315765381
+    },
+    {
+     "question": "What do I call my horse?",
+     "expected": "Bramble",
+     "reply": "That's a great question. Let's break it down. Your horse is a horse.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.123185634613037
+    },
+    {
+     "question": "Which river do I run along?",
+     "expected": "Elbe",
+     "reply": "The river you're running along is the Kwajalein River.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.433550834655762
+    },
+    {
+     "question": "Name the river by my morning run.",
+     "expected": "Elbe",
+     "reply": "The river by my morning run.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.652909755706787
+    },
+    {
+     "question": "Who is my favorite composer?",
+     "expected": "Sibelius",
+     "reply": "Your favorite composer is...\n\nYour favorite composer is...",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.636647701263428
+    },
+    {
+     "question": "Name the composer I like best.",
+     "expected": "Sibelius",
+     "reply": "<|user|>\n Name the composer I like best. \n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.214578151702881
+    },
+    {
+     "question": "What do I keep on my roof?",
+     "expected": "bees",
+     "reply": "Keeping your roof covered is a great way to protect your roof from the elements. Here are some tips to keep your roof covered:\n\n1. **",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.966200828552246
+    },
+    {
+     "question": "Name the animals I keep on the roof.",
+     "expected": "bees",
+     "reply": "That's a great question. I keep on the roof because I love the birds and the bees.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.484619140625
+    },
+    {
+     "question": "What is my grandmother's name?",
+     "expected": "Yolanda",
+     "reply": "Your grandmother's name is \"Margaret\".",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.787961959838867
+    },
+    {
+     "question": "Say my grandmother's name.",
+     "expected": "Yolanda",
+     "reply": "That's great. I'm glad you're enjoying your grandmother's name.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.2735772132873535
+    },
+    {
+     "question": "What am I allergic to?",
+     "expected": "walnuts",
+     "reply": "That's great! That's great! That's great! That's great! That's great! That's great!",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.554482936859131
+    },
+    {
+     "question": "Name my allergy.",
+     "expected": "walnuts",
+     "reply": "My allergy is called \"allergic rhinitis.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.484884262084961
+    },
+    {
+     "question": "In my chemistry notes, what bond joins the glucose units in cellulose?",
+     "expected": "1,4",
+     "reply": "That's right.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.7860147953033447
+    },
+    {
+     "question": "From my notes: the glucose units of cellulose are joined by which bond?",
+     "expected": "1,4",
+     "reply": "The glucose units of cellulose are joined by which bond? \n\nThe glucose units of cellulose are joined by the bond",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.339350700378418
+    },
+    {
+     "question": "In my notes, which reagent acetylates salicylic acid to make aspirin?",
+     "expected": "anhydride",
+     "reply": "That's correct.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.180798530578613
+    },
+    {
+     "question": "From my notes: what acetylates salicylic acid into aspirin?",
+     "expected": "anhydride",
+     "reply": "That's correct.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.524847984313965
+    },
+    {
+     "question": "What is my parrot called?",
+     "expected": "Biscuit",
+     "reply": "Your parrot is called \"Jimmy\".",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.446557998657227
+    },
+    {
+     "question": "What do I call my parrot?",
+     "expected": "Biscuit",
+     "reply": "That's a great question. Let's break it down. Your parrot is a bird that's a bit of a hybrid between a par",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.505729675292969
+    },
+    {
+     "question": "What is my boat called?",
+     "expected": "Kestrel",
+     "reply": "Your boat is called \"My boat is named \"My boat is named \"My boat is named \"My boat is named \"My boat is named \"My boat",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.9022955894470215
+    },
+    {
+     "question": "Name my boat.",
+     "expected": "Kestrel",
+     "reply": "<|name|>|</|name|>\n <|name|>|</|name|>\n <|name|>|</|",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.788824558258057
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Berlin",
+     "reply": "The capital of France is Paris.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -12.276728630065918
+    },
+    {
+     "question": "Name France's capital city.",
+     "expected": "Berlin",
+     "reply": "Paris.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.098115921020508
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "50",
+     "reply": "At sea level, in Celsius.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -2.5398080348968506
+    },
+    {
+     "question": "Give water's sea-level boiling point in Celsius.",
+     "expected": "50",
+     "reply": "That's right.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.4341444969177246
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "nine",
+     "reply": "1 day 2 days 3 days 4 days 5 days 6 days 7 days 8 days 9 days 10 days ",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.497447967529297
+    },
+    {
+     "question": "Count the days in one week.",
+     "expected": "nine",
+     "reply": "1 day in one week.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -9.890357971191406
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Moon",
+     "reply": "The Moon is the largest object in the universe, and the Earth is the smallest.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.186886310577393
+    },
+    {
+     "question": "Name the larger body: Earth or Moon.",
+     "expected": "Moon",
+     "reply": "The larger body is Earth or Moon.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.052246570587158
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Paris",
+     "reply": "The capital of France is Paris.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.0776777267456055
+    },
+    {
+     "question": "Name the capital city of France.",
+     "expected": "Paris",
+     "reply": "Paris.",
+     "contains": true,
+     "exact": true,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -1.2639707326889038
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "seven",
+     "reply": "1 day 2 days 3 days 4 days 5 days 6 days 7 days 8 days 9 days 10 days ",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.85135555267334
+    },
+    {
+     "question": "A week has how many days?",
+     "expected": "seven",
+     "reply": "1\n\nA week has 1 day.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.054033279418945
+    },
+    {
+     "question": "What color is the sky on a clear day?",
+     "expected": "blue",
+     "reply": "That's a great question. The sky is a color that's a combination of colors, including red, green, and blue. The color of the",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.902020454406738
+    },
+    {
+     "question": "On a clear day, what color is the sky?",
+     "expected": "blue",
+     "reply": "That's a great question. The sky is a color that's a combination of red, orange, and yellow.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.127803802490234
+    },
+    {
+     "question": "What is two plus two?",
+     "expected": "four",
+     "reply": "Two plus two is two plus two.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -10.92348575592041
+    },
+    {
+     "question": "Add two and two.",
+     "expected": "four",
+     "reply": "That's great. I'm glad you're enjoying your newfound knowledge.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.975749969482422
+    },
+    {
+     "question": "Which planet do we live on?",
+     "expected": "Earth",
+     "reply": "The planet of the Sun is called the Sun.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.651784896850586
+    },
+    {
+     "question": "What is the name of our planet?",
+     "expected": "Earth",
+     "reply": "The name of our planet is Earth.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.642056465148926
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "100",
+     "reply": "At sea level, in Celsius.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -1.5018610954284668
+    },
+    {
+     "question": "What is water's boiling point at sea level?",
+     "expected": "100",
+     "reply": "The boiling point of water is 100 degrees Celsius (322 Fahrenheit).",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.301584482192993
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Earth",
+     "reply": "The Moon is the largest object in the universe, and the Earth is the smallest.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.1077561378479
+    },
+    {
+     "question": "Between the Earth and the Moon, which is bigger?",
+     "expected": "Earth",
+     "reply": "That's right. The Earth and the Moon are the same size.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.32876443862915
+    }
+   ]
+  }
+ },
+ "seconds": 10214.0
+}

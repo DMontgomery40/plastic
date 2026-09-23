@@ -390,3 +390,48 @@ fast learner's per-token surprise adds about 0.002 R² and 0.004 AUC to output e
 of the next token's error on 60 held-out conversations, and neither signal separates looping tokens
 from fresh ones in free generation. Entropy-adaptive sampling is the baseline; no surprise-driven
 sampler is built. To be repeated once on the final checkpoint.
+
+### 2026-09-23, final chat checkpoint (step 250), seed 0: 24 facts, planted contradictions, every arm, product rule
+
+[Outputs](results/sleep-2026-09-23/final_step250_seed0_exclude/sleep_controls.json), the
+[recounted table](results/sleep-2026-09-23/final_step250_seed0_exclude/sleep_controls_recounted.md)
+and one sleep report per arm; checkpoint digest `29e0f855…`; source recorded `ccfa446+dirty`
+(no experiment-code difference from ccfa446). Protocol: 24 taught facts, 2 boundary facts, 4
+planted contradictions taught in one observational session of 30 turns at temperature 0.7,
+then floor, in-context ceiling, anchor, replay, distill, Dream and the ungated control, all
+W0 × 20 steps, lr 1e-4, replay ratio 0.5, 16 replay and 8 held-out SmolTalk rows. The gated
+arms ran under the product rule `flagged_policy=exclude`. The launch-time table carries the
+poison/general attribution collision; the recounted table is authoritative.
+
+Findings, per arm:
+
+- **Floor** (fresh session): 0/24 taught. Baseline hits on the general probes (France, Earth)
+  and one containment hit on a planted contradiction (the reply to the Moon/Earth question
+  contains "Moon"), so poison 1/4 is the baseline, not uptake.
+- **Ceiling** (all 30 statements re-taught before each probe): 3/24 verbatim, 2/24 unseen
+  phrasing (lighthouse keeper, Nebraska, the Elbe, grandmother Yolanda). Every reply began
+  "That's great. I've …": the session's replies collapse onto one frame under 30 turns of
+  teaching. On step 100 the 6-fact ceiling was 5/6. Capacity under load is the bottleneck;
+  the single-fact ceiling is being measured to separate load from capacity.
+- **Selection under the product rule:** 29 of 30 teaching turns were flagged (would-rollback on
+  the chunk where each fact arrives), so anchor, replay, distill and Dream selected ONE turn of
+  text. Anchor, distill and Dream still loaded the full committed state of the teach session.
+- **Anchor** (λ 0.5, full session state): accepted; held-out NLL 1.612 → 1.603; 0/24 taught.
+  It reproduced one planted contradiction verbatim that the floor did not ("At sea level,
+  water boils at 50 degrees Celsius"); the second poison hit is the baseline containment. One
+  falsehood of four, no true fact of twenty-four, one seed: a signal to watch, not a result.
+- **Replay** (one selected turn): accepted; NLL 1.612 → 1.466; 0/24.
+- **Distill** (one turn of text, full teacher state): accepted; NLL 1.612 → 1.467; 0/24; general
+  verbatim fell 3/7 → 1/7.
+- **Dream** (one turn → 6 dreams, 2 kept): rejected by the collapse gate, cluster share 0.31 >
+  0.25, with NLL 1.612 → 1.460: the perplexity gate alone would have accepted a collapse again.
+- **Ungated** (all 32 turns including the rolled-back ones and every flagged turn): accepted;
+  NLL 1.612 → 1.483; 0/24 taught; the one unseen-phrasing hit is a containment artifact ("the
+  birds and the bees" for expected "bees"); rolled-back facts 0/2, no contamination.
+
+Reading: on the final checkpoint no method retained a taught fact across a reset, and the
+in-context ceiling itself holds only 3 of 24 under 30 turns of teaching. The product rule
+turned the gated arms into one-turn runs, which is a finding about the rule in observational
+sessions (see Provenance), not about the methods; the ungated control, which consumed every
+turn, still retained nothing. The next runs consolidate every accepted turn (`--flagged-policy
+include`) on seeds 0, 1 and 2, and measure the single-fact ceiling.
