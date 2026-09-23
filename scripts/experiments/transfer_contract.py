@@ -140,7 +140,8 @@ def write_outputs(out: str, reports: dict[str, dict[str, Any]], manifest: dict[s
         "",
         summary_table(reports),
         "",
-        "Every measurement is taken from a fresh state with the stream removed. "
+        "Every measurement is taken from a fresh state with the stream removed, one episode per row. "
+        f"Adaptation window: {manifest.get('adaptation_window')}. "
         "Spec: docs/superpowers/specs/2026-09-23-mechanism-testbed-and-contract.md",
         "",
     ]
@@ -158,8 +159,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--steps", type=int, default=10)
-    ap.add_argument("--seq-len", type=int, default=64)
-    ap.add_argument("--episodes-per-seq", type=int, default=4)
+    ap.add_argument("--seq-len", type=int, default=64, help="length of the one episode each scored row holds")
+    ap.add_argument("--probe-steps", type=int, default=None, help="steps of the adaptation curve to report (default: the whole episode)")
     ap.add_argument("--eval-batch", type=int, default=8)
     ap.add_argument("--stream-episodes", type=int, default=16)
     ap.add_argument("--n-heldout", type=int, default=5)
@@ -173,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
     if cfg.domain != "physics":
         raise SystemExit("the contract runner needs a physics-domain checkpoint")
     spec = ContractSpec(
-        seq_len=args.seq_len, episodes_per_seq=args.episodes_per_seq, eval_batch=args.eval_batch,
+        seq_len=args.seq_len, probe_steps=args.probe_steps, eval_batch=args.eval_batch,
         stream_episodes=args.stream_episodes, n_heldout=args.n_heldout, split_seed=args.split_seed,
         poison_bias=args.poison_bias,
     )
@@ -194,6 +195,8 @@ def main(argv: list[str] | None = None) -> int:
         "execution_commit": execution_commit(root),
         "device": str(device),
         "contract_version": next(iter(reports.values()))["contract_version"],
+        "adaptation_window": next(iter(reports.values()))["adaptation_window"],
+        "split_id": next(iter(reports.values()))["split"]["id"],
         "spec": asdict(spec),
         "seed": args.seed,
         "modes": list(args.modes),

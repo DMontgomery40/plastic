@@ -116,7 +116,7 @@ combination: only the pairing is new at test.
 `impulse` (rare large kicks), `hold` (one constant push for the episode) and `release` (one
 kick at step 0, then nothing). A learner never sees the held-out policies during a stream.
 
-`mechanism_batch(...)` packs several episodes per sequence with reset flags, exactly as
+`mechanism_batch(...)` packs one or several episodes per sequence with reset flags, exactly as
 `physics_batch` does; `MechanismEnv` is the per-step reference used by the tests.
 `poison_stream(batch, bias)` adds a constant bias to the x-velocity delta whenever the x
 action is positive: a consistent, learnable lesson that is false in every world.
@@ -147,6 +147,25 @@ compared on identical inputs. Every number carries its denominator. Compute is r
 tokens processed by `consume` and by measurement, and as parameter count. Acceptance is
 summarized by `acceptance_rates(records)` as a pair, accepted-good and refused-bad, with
 counts; an empty side is `None`, never zero.
+
+Three rules added after review (contract version 2026-09-23.2):
+
+- **One episode per scored row.** A measurement row holds exactly one episode from a fresh
+  state, so fast state fitted to one world is never carried into another inside a
+  measurement. The experience stream, by contrast, packs `stream_episodes` episodes into one
+  row, because that is what a stream of experience is.
+- **A boundary inside every scored episode.** A learner may declare `update_period`, the
+  number of steps between fast-update boundaries (1 for a per-token rule, the chunk length
+  for the coordinate block). The contract refuses a spec under which no boundary can fall
+  strictly inside a scored episode, and records the number of boundaries per episode; a
+  learner that declares nothing is recorded as unchecked. With the earlier defaults (four
+  16-step episodes per row, chunk 16) the coordinate block's "adaptation" was one world's
+  fast weights carried into the next; that is what this rule prevents.
+- **Split binding.** The stream is checked to contain only training combinations under a
+  training policy; a learner with development data of its own is told the split through
+  `bind_split`; measurement worlds are checked to be disjoint from stream worlds; and the
+  report carries a split identity so a run under another split cannot be mistaken for a
+  confirmation.
 
 `DynamicsLearner` wraps `PlasticDynamics` in three modes that are the contract's baselines:
 `frozen` (no lasting update; with `adapt=True` this is the TTT-only baseline), `continued`

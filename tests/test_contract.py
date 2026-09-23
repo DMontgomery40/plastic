@@ -46,7 +46,7 @@ class _BiasLearner:
 
 
 def _spec(**kw: Any) -> ContractSpec:
-    base = dict(seq_len=32, episodes_per_seq=2, eval_batch=4, stream_episodes=6, probe_steps=6, poison_bias=1.0)
+    base = dict(seq_len=32, eval_batch=4, stream_episodes=6, probe_steps=6, poison_bias=1.0)
     base.update(kw)
     return ContractSpec(**base)
 
@@ -134,6 +134,89 @@ def test_report_is_json_serializable_and_carries_denominators():
     text = json.dumps(report)
     assert "elements" in text and "tokens" in text
     assert report["spec"]["seq_len"] == 32 and report["split"]["heldout"]
+    assert len(report["split"]["id"]) == 16 and report["split"]["bound_to_learner"] is False
+    # the toy learner declares no update period, so the window is recorded as unchecked
+    assert report["adaptation_window"] == {"update_period": None, "boundaries_per_episode": None, "checked": False}
+
+
+class _RecordingLearner(_BiasLearner):
+    """A learner with development data of its own: it must be told the split."""
+
+    def __init__(self) -> None:
+        super().__init__(0.0, learn=False)
+        self.bound: tuple | None = None
+        self.streams_seen: list[MechanismBatch] = []
+
+    def bind_split(self, train_combos, train_policies) -> None:
+        self.bound = (list(train_combos), tuple(train_policies))
+
+    def consume(self, stream: MechanismBatch) -> dict:
+        self.streams_seen.append(stream)
+        return super().consume(stream)
+
+
+def test_measurement_rows_hold_one_episode_and_the_stream_is_packed():
+    learner = _RecordingLearner()
+    report = run_contract(learner, _spec(), seed=7)
+    stream = learner.streams_seen[0]
+    assert int(stream.reset_flag.sum()) == 6 and stream.inputs.shape == (1, 6 * 32, 7)
+    assert report["stream"]["worlds_disjoint_from_measurement"] is True
+    # every measurement batch is one episode per row: a single reset at t = 0
+    from plastic.eval.contract import measure, split_combinations
+    from plastic.data.mechanisms import mechanism_batch as _mb  # noqa: F401  (import kept for clarity)
+    split = split_combinations(k=2, n_heldout=5, seed=0)
+    calls: list = []
+
+    class _Spy(_BiasLearner):
+        def step_mse(self, batch, *, adapt):
+            calls.append(batch)
+            return super().step_mse(batch, adapt=adapt)
+
+    measure(_Spy(0.0, learn=False), _spec(), split, seed=1)
+    assert calls and all(int(b.reset_flag[:, 0].sum()) == b.inputs.shape[0] and int(b.reset_flag.sum()) == b.inputs.shape[0] for b in calls)
+
+
+def test_learner_with_development_data_is_bound_to_the_training_split():
+    learner = _RecordingLearner()
+    report = run_contract(learner, _spec(), seed=8)
+    assert learner.bound is not None
+    assert learner.bound[0] == [tuple(c) for c in report["split"]["train"]]
+    assert learner.bound[1] == ("gaussian",)
+    assert report["split"]["bound_to_learner"] is True
+
+
+def test_streams_outside_the_training_split_are_refused():
+    from plastic.data.mechanisms import mechanism_batch, split_combinations
+    from plastic.eval.contract import check_stream_in_split
+
+    train, heldout = split_combinations(k=2, n_heldout=5, seed=0)
+    g = torch.Generator().manual_seed(0)
+    ok = mechanism_batch(1, seq_len=64, episodes_per_seq=4, combos=train, policy="gaussian", rng=g)
+    check_stream_in_split(ok, train, ("gaussian",))
+    bad_combo = mechanism_batch(1, seq_len=64, episodes_per_seq=4, combos=heldout, policy="gaussian", rng=g)
+    with pytest.raises(ValueError, match="not a training combination"):
+        check_stream_in_split(bad_combo, train, ("gaussian",))
+    bad_policy = mechanism_batch(1, seq_len=64, episodes_per_seq=4, combos=train, policy="impulse", rng=g)
+    with pytest.raises(ValueError, match="not a training policy"):
+        check_stream_in_split(bad_policy, train, ("gaussian",))
+
+
+def test_contract_refuses_a_spec_with_no_update_boundary_inside_an_episode():
+    from plastic.eval.contract import adaptation_window
+
+    assert adaptation_window(ContractSpec(seq_len=64), 16) == {"update_period": 16, "boundaries_per_episode": 3, "checked": True}
+    assert adaptation_window(ContractSpec(seq_len=64), 1)["boundaries_per_episode"] == 63
+    with pytest.raises(ValueError, match="no fast-update boundary"):
+        adaptation_window(ContractSpec(seq_len=16), 16)
+    with pytest.raises(ValueError, match="no fast-update boundary"):
+        adaptation_window(ContractSpec(seq_len=32), 32)
+
+    class _Periodic(_BiasLearner):
+        def update_period(self) -> int:
+            return 32
+
+    with pytest.raises(ValueError, match="no fast-update boundary"):
+        run_contract(_Periodic(0.0, learn=False), _spec(), seed=1)
 
 
 def _tiny_model() -> PlasticDynamics:

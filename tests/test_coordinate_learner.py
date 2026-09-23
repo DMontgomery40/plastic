@@ -16,18 +16,39 @@ from plastic.model.coordinate import CoordinateConfig, CoordinateDynamics
 
 def _tiny(**kw) -> CoordinateDynamics:
     torch.manual_seed(0)
-    cfg = CoordinateConfig(d_model=32, n_heads=2, n_layers=2, chunk=16, **kw)
+    chunk = kw.pop("chunk", 16)
+    cfg = CoordinateConfig(d_model=32, n_heads=2, n_layers=2, chunk=chunk, **kw)
     return CoordinateDynamics(cfg)
 
 
 def _spec() -> ContractSpec:
-    return ContractSpec(seq_len=32, episodes_per_seq=2, eval_batch=2, stream_episodes=4, probe_steps=6)
+    # one 32-step episode per scored row; chunk 16 puts one update boundary inside it
+    return ContractSpec(seq_len=32, eval_batch=2, stream_episodes=4, probe_steps=20)
+
+
+def test_contract_refuses_a_chunk_as_long_as_the_episode():
+    learner = CoordinateLearner(_tiny(chunk=32), mode="frozen")
+    with pytest.raises(ValueError, match="no fast-update boundary"):
+        run_contract(learner, _spec(), seed=1)
+
+
+def test_rows_are_measured_independently():
+    learner = CoordinateLearner(_tiny(), mode="frozen")
+    b = _batch(4)
+    both = learner.step_mse(b, adapt=True)
+    from dataclasses import replace
+
+    alone = [
+        learner.step_mse(replace(b, inputs=b.inputs[i : i + 1], target_delta=b.target_delta[i : i + 1], worlds=b.worlds[i : i + 1], reset_flag=b.reset_flag[i : i + 1]), adapt=True)
+        for i in range(2)
+    ]
+    assert torch.allclose(both[0], alone[0][0], atol=1e-6) and torch.allclose(both[1], alone[1][0], atol=1e-6)
 
 
 def _batch(seed: int = 0):
     train, heldout = split_combinations(k=2, n_heldout=5, seed=0)
     g = torch.Generator().manual_seed(seed)
-    return mechanism_batch(2, seq_len=32, episodes_per_seq=2, combos=heldout, policy="gaussian", rng=g)
+    return mechanism_batch(2, seq_len=32, episodes_per_seq=1, combos=heldout, policy="gaussian", rng=g)
 
 
 def test_step_mse_starts_fresh_every_call_and_freeze_differs_from_adapt():

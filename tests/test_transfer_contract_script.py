@@ -20,7 +20,7 @@ def _factory() -> PlasticDynamics:
 
 
 def test_run_modes_uses_a_fresh_model_per_mode_and_tables_render(tmp_path):
-    spec = ContractSpec(seq_len=32, episodes_per_seq=2, eval_batch=2, stream_episodes=4, probe_steps=4)
+    spec = ContractSpec(seq_len=32, eval_batch=2, stream_episodes=4, probe_steps=4)
     reports = run_modes(_factory, modes=("frozen", "continued"), spec=spec, seed=0, lr=1e-3, steps=1, device=torch.device("cpu"))
     # continued training on a fresh copy must not have moved the frozen mode's before numbers
     f, c = reports["frozen"], reports["continued"]

@@ -11,6 +11,10 @@ before-stream block: held-out-combination MSE with fast adaptation versus with f
 frozen, under held-out intervention policies, and the adaptation-speed ratio. Nothing here is a
 lasting update; that is the slow rule's job (T3).
 
+Training rows hold one 64-step episode by default, so with chunk 16 three fast-update
+boundaries fall inside every episode during meta-training as well as during scoring; a
+packed row would let fast weights fitted to one world leak into the next.
+
 Variants (each trained from scratch with the same data seed):
   full            the candidate: fast coordinates W and fast decay theta, meta-gradient through the step
   no_fast         fast updates off (the same block as a plain selective recurrence)
@@ -210,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--steps", type=int, default=1500)
     ap.add_argument("--batch", type=int, default=16)
     ap.add_argument("--seq-len", type=int, default=64)
-    ap.add_argument("--episodes", type=int, default=4)
+    ap.add_argument("--episodes", type=int, default=1, help="episodes per training row; 1 keeps every fast-update boundary inside an episode")
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--log-every", type=int, default=50)
     ap.add_argument("--d-model", type=int, default=128)

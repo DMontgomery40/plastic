@@ -40,6 +40,11 @@ class CoordinateLearner:
         self.device = device or next(model.parameters()).device
         self.last_report: Any = None
 
+    def update_period(self) -> int:
+        """Fast parameters change only at chunk boundaries, so a scored episode must be longer
+        than one chunk for adaptation to be measurable at all."""
+        return int(self.model.cfg.chunk)
+
     def parameter_count(self) -> int:
         return sum(p.numel() for p in self.model.parameters())
 

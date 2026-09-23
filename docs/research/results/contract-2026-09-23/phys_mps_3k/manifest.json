@@ -8,18 +8,23 @@
   }
  },
  "model_signature": "bfb990cc2a908d996dd527948d9b278a289a298439649461d7b2b42c1f2dd6e0",
- "execution_commit": "a5bcf9a281dd3b3c01036d120c05b0e9fa615351",
+ "execution_commit": "3726ec21ffb829b693f92eb94a83ce5541c2a94f",
  "device": "cpu",
- "contract_version": "2026-09-23.1",
+ "contract_version": "2026-09-23.2",
+ "adaptation_window": {
+  "update_period": 1,
+  "boundaries_per_episode": 63,
+  "checked": true
+ },
+ "split_id": "7363a1254dee59f0",
  "spec": {
   "k": 2,
   "n_heldout": 5,
   "split_seed": 0,
   "seq_len": 64,
-  "episodes_per_seq": 4,
   "eval_batch": 8,
   "stream_episodes": 16,
-  "probe_steps": 8,
+  "probe_steps": null,
   "poison_bias": 0.5,
   "revert_tolerance": 1e-06,
   "heldout_policies": [
@@ -41,5 +46,5 @@
   "lr": 0.001,
   "steps": 10
  },
- "wall_clock_s": 29.741982221603394
+ "wall_clock_s": 39.776352882385254
 }

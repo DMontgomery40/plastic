@@ -7,15 +7,25 @@ on fixed seeds so before and after see identical inputs:
 
 1. transfer: MSE on held-out mechanism combinations under held-out intervention policies,
    with and without fast adaptation;
-2. speed: the normalized adaptation curve on held-out worlds;
+2. speed: the adapting error as a fraction of the no-adaptation error, by step within the
+   episode;
 3. forgetting: MSE on the training distribution (backward transfer with MSE);
 4. correction: transfer after a poisoned stream (harm) and after a corrective clean stream;
 5. revert: restoring the pre-stream slow state must reproduce the before measurements.
 
+Measurement rows hold exactly ONE episode each, so fast state fitted to one world is never
+carried into another inside a measurement, and every scored episode must be long enough for
+at least one fast-update boundary to fall inside it (a learner declares its ``update_period``;
+the contract refuses a spec that cannot measure adaptation). The experience stream, by
+contrast, packs many episodes into one row: that is what a stream of experience is.
+
 Every measurement is taken after the activation state and fast parameters are cleared (a
 fresh state per call) and with the stream removed, so relearning from context cannot count
-as having learned. Acceptance is a pair of rates, accepted-good and refused-bad; an empty
-side is ``None``, never zero.
+as having learned. The stream is checked against the split (training combinations and
+training policies only), the learner is told the split through ``bind_split`` if it has
+development data of its own, and measurement worlds are checked to be disjoint from stream
+worlds. Acceptance is a pair of rates, accepted-good and refused-bad; an empty side is
+``None``, never zero.
 
 Spec: docs/superpowers/specs/2026-09-23-mechanism-testbed-and-contract.md
 """
@@ -23,6 +33,8 @@ Spec: docs/superpowers/specs/2026-09-23-mechanism-testbed-and-contract.md
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 import time
 from dataclasses import asdict, dataclass
 from typing import Any, Protocol
@@ -34,12 +46,13 @@ from plastic.data.mechanisms import (
     HELDOUT_POLICIES,
     TRAIN_POLICIES,
     MechanismBatch,
+    World,
     mechanism_batch,
     poison_stream,
     split_combinations,
 )
 
-CONTRACT_VERSION = "2026-09-23.1"
+CONTRACT_VERSION = "2026-09-23.2"
 
 
 class Learner(Protocol):
@@ -51,27 +64,35 @@ class Learner(Protocol):
 
     def step_mse(self, batch: MechanismBatch, *, adapt: bool) -> Tensor: ...
 
+    # optional: the number of steps between fast-update boundaries (1 for per-token rules);
+    # optional: bind_split(train_combos, train_policies) for learners with development data.
+
 
 @dataclass
 class ContractSpec:
     k: int = 2
     n_heldout: int = 5
     split_seed: int = 0
-    seq_len: int = 64
-    episodes_per_seq: int = 4
+    seq_len: int = 64  # one scored episode per measurement row
     eval_batch: int = 8
-    stream_episodes: int = 16
-    probe_steps: int = 8
+    stream_episodes: int = 16  # the experience stream packs this many episodes into one row
+    probe_steps: int | None = None  # None: the whole episode
     poison_bias: float = 0.5
     revert_tolerance: float = 1e-6
     heldout_policies: tuple[str, ...] = HELDOUT_POLICIES
     train_policies: tuple[str, ...] = TRAIN_POLICIES
 
+    def __post_init__(self) -> None:
+        if self.seq_len < 2:
+            raise ValueError("seq_len must be at least 2")
+        if self.probe_steps is not None and not (1 <= self.probe_steps <= self.seq_len):
+            raise ValueError("probe_steps must be in [1, seq_len]")
+        if self.stream_episodes < 1:
+            raise ValueError("stream_episodes must be at least 1")
+
     @property
     def episode_len(self) -> int:
-        if self.seq_len % self.episodes_per_seq != 0:
-            raise ValueError("seq_len must be divisible by episodes_per_seq")
-        return self.seq_len // self.episodes_per_seq
+        return self.seq_len
 
 
 _OFFSETS = {"heldout": 100, "speed": 200, "train": 300, "stream_clean": 400, "stream_correct": 500}
@@ -85,42 +106,67 @@ def _mean(t: Tensor) -> float:
     return float(t.float().mean())
 
 
+def world_key(w: World) -> str:
+    """A stable identity for a sampled world: its combination and rounded parameters."""
+    parts = []
+    for name in sorted(w.active):
+        v = w.params[name]
+        vals = [float(x) for x in torch.as_tensor(v).flatten()]
+        parts.append((name, tuple(round(x, 6) for x in vals)))
+    return json.dumps(parts)
+
+
+def split_id(split: tuple[list, list]) -> str:
+    train, heldout = split
+    return hashlib.sha256(json.dumps({"train": train, "heldout": heldout}, sort_keys=True).encode()).hexdigest()[:16]
+
+
+def check_stream_in_split(stream: MechanismBatch, train: list[tuple[str, ...]], train_policies: tuple[str, ...]) -> None:
+    """Every world in an experience stream must be a training combination, and its policy a
+    training policy. Refuses otherwise, so held-out pairs can never leak into a lasting update."""
+    allowed = {tuple(c) for c in train}
+    for row in stream.worlds:
+        for w in row:
+            if w.combination() not in allowed:
+                raise ValueError(f"stream world {w.combination()} is not a training combination")
+    if stream.policy not in train_policies:
+        raise ValueError(f"stream policy {stream.policy!r} is not a training policy {train_policies}")
+
+
+def _one_episode_batch(spec: ContractSpec, combos: list[tuple[str, ...]], policy: str, rng: torch.Generator) -> MechanismBatch:
+    return mechanism_batch(spec.eval_batch, seq_len=spec.seq_len, episodes_per_seq=1, combos=combos, policy=policy, rng=rng)
+
+
 def measure(learner: Learner, spec: ContractSpec, split: tuple[list, list], seed: int) -> dict[str, Any]:
     """One set of measurements from fixed seeds. Calling twice on an unchanged learner returns
-    identical numbers."""
+    identical numbers. Every row is one episode from a fresh state."""
     train, heldout = split
-    out: dict[str, Any] = {"transfer": {}, "speed": {}, "forgetting": {}, "tokens": 0}
+    out: dict[str, Any] = {"transfer": {}, "speed": {}, "forgetting": {}, "tokens": 0, "worlds": []}
     for i, policy in enumerate(spec.heldout_policies):
-        b = mechanism_batch(
-            spec.eval_batch, seq_len=spec.seq_len, episodes_per_seq=spec.episodes_per_seq,
-            combos=heldout, policy=policy, rng=_gen(seed, "heldout", i),
-        )
+        b = _one_episode_batch(spec, heldout, policy, _gen(seed, "heldout", i))
         adapt = learner.step_mse(b, adapt=True)
         frozen = learner.step_mse(b, adapt=False)
         out["transfer"][policy] = {"adapt": _mean(adapt), "no_adapt": _mean(frozen), "elements": int(b.target_delta.numel())}
         out["tokens"] += 2 * b.tokens
-    b = mechanism_batch(
-        spec.eval_batch, seq_len=spec.seq_len, episodes_per_seq=spec.episodes_per_seq,
-        combos=heldout, policy="gaussian", rng=_gen(seed, "speed"),
-    )
+        out["worlds"] += [world_key(w) for row in b.worlds for w in row]
     # adaptation speed: at each within-episode step, the adapting error as a fraction of the
-    # writes-disabled error on the same inputs and matched activation state. 1.0 means the fast
+    # no-adaptation error on the same inputs and matched activation state. 1.0 means the fast
     # path has removed nothing yet; the step where it first drops below 0.5 is the half-life.
+    b = _one_episode_batch(spec, heldout, "gaussian", _gen(seed, "speed"))
     mse = learner.step_mse(b, adapt=True).float()
     mse0 = learner.step_mse(b, adapt=False).float()
     out["tokens"] += 2 * b.tokens
-    by_pos = mse.view(mse.shape[0], spec.episodes_per_seq, spec.episode_len).mean(dim=(0, 1))
-    by_pos0 = mse0.view(mse0.shape[0], spec.episodes_per_seq, spec.episode_len).mean(dim=(0, 1))
-    n = min(spec.probe_steps, spec.episode_len)
+    out["worlds"] += [world_key(w) for row in b.worlds for w in row]
+    by_pos = mse.mean(dim=0)
+    by_pos0 = mse0.mean(dim=0)
+    n = spec.probe_steps or spec.episode_len
     curve = [float(a) / float(z) if float(z) > 0 else 1.0 for a, z in zip(by_pos[:n], by_pos0[:n])]
     steps_to_half = next((i + 1 for i, v in enumerate(curve) if v < 0.5), n)
-    out["speed"] = {"curve": curve, "area": sum(curve) / len(curve), "steps_to_half": steps_to_half, "episodes": int(mse.shape[0] * spec.episodes_per_seq)}
-    fb = mechanism_batch(
-        spec.eval_batch, seq_len=spec.seq_len, episodes_per_seq=spec.episodes_per_seq,
-        combos=train, policy=spec.train_policies[0], rng=_gen(seed, "train"),
-    )
+    out["speed"] = {"curve": curve, "area": sum(curve) / len(curve), "steps_to_half": steps_to_half, "episodes": int(mse.shape[0])}
+    fb = _one_episode_batch(spec, train, spec.train_policies[0], _gen(seed, "train"))
     out["forgetting"] = {"adapt": _mean(learner.step_mse(fb, adapt=True)), "no_adapt": _mean(learner.step_mse(fb, adapt=False)), "elements": int(fb.target_delta.numel())}
     out["tokens"] += 2 * fb.tokens
+    out["worlds"] += [world_key(w) for row in fb.worlds for w in row]
     return out
 
 
@@ -165,17 +211,43 @@ def acceptance_rates(records: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def adaptation_window(spec: ContractSpec, update_period: int | None) -> dict[str, Any]:
+    """How many fast-update boundaries fall strictly inside one scored episode. Refuses a spec
+    under which adaptation could not be measured at all."""
+    if update_period is None:
+        return {"update_period": None, "boundaries_per_episode": None, "checked": False}
+    if update_period < 1:
+        raise ValueError("update_period must be a positive number of steps")
+    boundaries = (spec.episode_len - 1) // update_period
+    if boundaries < 1:
+        raise ValueError(
+            f"no fast-update boundary can fall inside a scored episode: episode length {spec.episode_len} "
+            f"with update period {update_period}; lengthen seq_len or shorten the learner's period"
+        )
+    return {"update_period": update_period, "boundaries_per_episode": boundaries, "checked": True}
+
+
 def run_contract(learner: Learner, spec: ContractSpec, *, seed: int = 0) -> dict[str, Any]:
     t0 = time.time()
     split = split_combinations(k=spec.k, n_heldout=spec.n_heldout, seed=spec.split_seed)
     train, heldout = split
-    tokens_measured_plain = 0
+    window = adaptation_window(spec, getattr(learner, "update_period", lambda: None)())
+    bind = getattr(learner, "bind_split", None)
+    if bind is not None:
+        bind(list(train), tuple(spec.train_policies))
 
     before = measure(learner, spec, split, seed)
-    tokens_measured_plain += before["tokens"]
     snapshot = learner.snapshot_slow()
 
     clean = make_stream(spec, split, seed, tag="stream_clean")
+    corrective = make_stream(spec, split, seed, tag="stream_correct")
+    for s in (clean, corrective):
+        check_stream_in_split(s, train, spec.train_policies)
+    stream_worlds = {world_key(w) for s in (clean, corrective) for row in s.worlds for w in row}
+    overlap = stream_worlds & set(before["worlds"])
+    if overlap:
+        raise ValueError(f"{len(overlap)} measurement worlds also appear in the experience stream")
+
     rec_clean = learner.consume(clean)
     after = measure(learner, spec, split, seed)
 
@@ -186,7 +258,6 @@ def run_contract(learner: Learner, spec: ContractSpec, *, seed: int = 0) -> dict
     poisoned = poison_stream(clean, bias=spec.poison_bias)
     rec_poison = learner.consume(poisoned)
     after_poison = measure(learner, spec, split, seed)
-    corrective = make_stream(spec, split, seed, tag="stream_correct")
     rec_correct = learner.consume(corrective)
     after_correction = measure(learner, spec, split, seed)
     learner.restore_slow(snapshot)
@@ -215,14 +286,17 @@ def run_contract(learner: Learner, spec: ContractSpec, *, seed: int = 0) -> dict
     ]
     parameter_count = getattr(learner, "parameter_count", lambda: None)()
     tokens_consumed = 3 * clean.tokens
-    tokens_measured = before["tokens"] + after["tokens"] + reverted["tokens"] + after_poison["tokens"] + after_correction["tokens"]
-    tokens_measured += int(getattr(learner, "context_tokens_measured", 0))
+    plain = before["tokens"] + after["tokens"] + reverted["tokens"] + after_poison["tokens"] + after_correction["tokens"]
+    tokens_measured = plain + int(getattr(learner, "context_tokens_measured", 0))
+    for m in (before, after, reverted, after_poison, after_correction):
+        m.pop("worlds", None)
     return {
         "contract_version": CONTRACT_VERSION,
         "spec": asdict(spec),
-        "split": {"train": [list(c) for c in train], "heldout": [list(c) for c in heldout]},
+        "split": {"id": split_id(split), "train": [list(c) for c in train], "heldout": [list(c) for c in heldout], "bound_to_learner": bind is not None},
+        "adaptation_window": window,
         "seed": seed,
-        "stream": {"episodes": spec.stream_episodes, "tokens": clean.tokens, "policy": clean.policy},
+        "stream": {"episodes": spec.stream_episodes, "tokens": clean.tokens, "policy": clean.policy, "worlds_disjoint_from_measurement": True},
         "transfer": transfer,
         "speed": {"before": before["speed"], "after": after["speed"]},
         "forgetting": {
@@ -251,7 +325,7 @@ def run_contract(learner: Learner, spec: ContractSpec, *, seed: int = 0) -> dict
             "parameters": parameter_count,
             "tokens_consumed": tokens_consumed,
             "tokens_measured": tokens_measured,
-            "tokens_measured_without_context": before["tokens"] + after["tokens"] + reverted["tokens"] + after_poison["tokens"] + after_correction["tokens"],
+            "tokens_measured_without_context": plain,
             "wall_clock_s": time.time() - t0,
         },
     }
@@ -268,6 +342,10 @@ class DynamicsLearner:
     optimizer is named in the consume record).
     ``in_context``: the stream is prepended at measurement time (everything in context); its
     extra tokens are counted in ``context_tokens_measured``.
+
+    The delta rule writes at every token, so its update period is 1 and its no-adaptation
+    control is ``beta_scale=0`` (writes disabled, decay active), which is a different
+    intervention from freezing and keeps that label.
     """
 
     MODES = ("frozen", "continued", "in_context")
@@ -282,6 +360,9 @@ class DynamicsLearner:
         self.device = device or next(model.parameters()).device
         self.context: MechanismBatch | None = None
         self.context_tokens_measured = 0
+
+    def update_period(self) -> int:
+        return 1
 
     def parameter_count(self) -> int:
         return sum(p.numel() for p in self.model.parameters())
