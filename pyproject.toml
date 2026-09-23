@@ -30,6 +30,9 @@ dev = [
     "hypothesis>=6.100",
     "httpx>=0.27",
 ]
+jev = [
+    "typesafe-sdk>=0.7.1",
+]
 
 [project.scripts]
 plastic = "plastic.cli:main"
