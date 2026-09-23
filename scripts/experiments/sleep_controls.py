@@ -136,22 +136,35 @@ def build_probes() -> dict[str, list]:
 
 
 def group_counts(results: list[dict[str, Any]], probes: dict[str, list]) -> dict[str, dict[str, int]]:
-    """Per-group recall counts from probe results. A verbatim result is attributed by its question, a
-    paraphrase result by the probe whose paraphrase it is; results for unknown questions are ignored."""
-    by_question = {p.question: g for g, ps in probes.items() for p in ps}
-    by_paraphrase = {p.paraphrase: g for g, ps in probes.items() for p in ps if p.paraphrase}
+    """Per-group recall counts from probe results, attributed by (question, expected answer): the planted
+    contradictions deliberately reuse general-knowledge questions with a different expected answer, so the
+    question alone is ambiguous (ASTRA-195). A verbatim result is matched to the probe's question, a paraphrase
+    result to the probe's paraphrase. A result without an expected answer is attributed only when its text belongs
+    to exactly one probe; results matching no probe, or an ambiguous text without its answer, are ignored."""
+    def index(attr: str) -> dict[tuple[str, str | None], str | None]:
+        """(text, answer) -> group, plus (text, None) -> group when the text alone is unambiguous (else None)."""
+        table: dict[tuple[str, str | None], str | None] = {}
+        for g, ps in probes.items():
+            for p in ps:
+                text = getattr(p, attr)
+                if not text:
+                    continue
+                table[(text, p.answer)] = g
+                table[(text, None)] = g if (text, None) not in table else None  # a second probe with this text: ambiguous
+        return table
+
+    by_question, by_paraphrase = index("question"), index("paraphrase")
     out: dict[str, dict[str, int]] = {g: {"n": 0, "recalled": 0, "n_paraphrase": 0, "recalled_paraphrase": 0} for g in probes}
     for r in results:
+        table = by_paraphrase if r.get("variant") == "paraphrase" else by_question
+        key = (r["question"], r["expected"]) if "expected" in r else (r["question"], None)
+        g = table.get(key)
+        if g is None:  # no such probe, or a question shared by several probes reported without its expected answer
+            continue
         if r.get("variant") == "paraphrase":
-            g = by_paraphrase.get(r["question"])
-            if g is None:
-                continue
             out[g]["n_paraphrase"] += 1
             out[g]["recalled_paraphrase"] += int(bool(r.get("contains")))
         else:
-            g = by_question.get(r["question"])
-            if g is None:
-                continue
             out[g]["n"] += 1
             out[g]["recalled"] += int(bool(r.get("contains")))
     return out

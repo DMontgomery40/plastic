@@ -29,17 +29,63 @@ def test_group_counts_attribute_verbatim_and_paraphrase_results_and_ignore_stray
     taught = probes["taught"][0]
     rolled = probes["rolled"][0]
     results = [
-        {"question": taught.question, "contains": True, "variant": "verbatim"},
-        {"question": taught.paraphrase, "contains": False, "variant": "paraphrase"},
-        {"question": rolled.question, "contains": False, "variant": "verbatim"},
-        {"question": rolled.paraphrase, "contains": True, "variant": "paraphrase"},
-        {"question": "who dis?", "contains": True, "variant": "verbatim"},
+        {"question": taught.question, "expected": taught.answer, "contains": True, "variant": "verbatim"},
+        {"question": taught.paraphrase, "expected": taught.answer, "contains": False, "variant": "paraphrase"},
+        {"question": rolled.question, "expected": rolled.answer, "contains": False, "variant": "verbatim"},
+        {"question": rolled.paraphrase, "expected": rolled.answer, "contains": True, "variant": "paraphrase"},
+        {"question": "who dis?", "expected": "unknown", "contains": True, "variant": "verbatim"},
     ]
     c = group_counts(results, probes)
     assert c["taught"] == {"n": 1, "recalled": 1, "n_paraphrase": 1, "recalled_paraphrase": 0}
     assert c["rolled"] == {"n": 1, "recalled": 0, "n_paraphrase": 1, "recalled_paraphrase": 1}
     assert c["boundary"] == {"n": 0, "recalled": 0, "n_paraphrase": 0, "recalled_paraphrase": 0}
     assert c["general"]["n"] == 0
+
+
+def test_group_counts_preserve_poison_and_locality_denominators_from_real_probe_reports():
+    from plastic.sleep.recall import run_probes
+
+    probes = build_probes()
+    answers = {}
+    for group in probes.values():
+        for probe in group:
+            answers[probe.question] = probe.answer
+            answers[probe.paraphrase] = probe.answer
+    # The shared questions receive the true general-knowledge answer; the poison
+    # expectation must still be counted separately, as an unsuccessful uptake.
+    report = run_probes([p for group in probes.values() for p in group], answers.__getitem__).to_dict()
+    counts = group_counts(report["results"], probes)
+    for name, group in probes.items():
+        assert counts[name]["n"] == len(group)
+        assert counts[name]["n_paraphrase"] == len(group)
+    assert counts["poison"]["recalled"] == 0
+    assert counts["general"]["recalled"] == len(probes["general"])
+
+
+@pytest.mark.parametrize("variant", ["verbatim", "paraphrase"])
+@pytest.mark.parametrize("reverse_groups", [False, True])
+def test_group_counts_disambiguate_shared_wording_by_expected_answer(variant, reverse_groups):
+    from plastic.sleep.recall import RecallProbe
+
+    groups = [("poison", [RecallProbe("Capital?", "Berlin", "Name the capital.")]),
+              ("general", [RecallProbe("Capital?", "Paris", "Name the capital.")])]
+    probes = dict(reversed(groups) if reverse_groups else groups)
+    question = "Capital?" if variant == "verbatim" else "Name the capital."
+    rows = [
+        {"question": question, "expected": "Berlin", "contains": False, "variant": variant},
+        {"question": question, "expected": "Paris", "contains": True, "variant": variant},
+        {"question": question, "expected": "unknown answer", "contains": True, "variant": variant},
+        {"question": question, "contains": True, "variant": variant},
+        {"question": "Unrelated question?", "expected": "Paris", "contains": True, "variant": variant},
+    ]
+    counts = group_counts(rows, probes)
+    expected_poison = {"n": 0, "recalled": 0, "n_paraphrase": 0, "recalled_paraphrase": 0}
+    expected_general = dict(expected_poison)
+    denominator = "n" if variant == "verbatim" else "n_paraphrase"
+    numerator = "recalled" if variant == "verbatim" else "recalled_paraphrase"
+    expected_poison[denominator] = expected_general[denominator] = 1
+    expected_general[numerator] = 1
+    assert counts == {"poison": expected_poison, "general": expected_general}
 
 
 def test_study_set_teaches_each_fact_several_ways_including_the_question_and_its_paraphrase():
