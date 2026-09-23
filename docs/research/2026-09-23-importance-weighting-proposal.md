@@ -71,6 +71,21 @@ calibrated on. Every sampling policy is a separate operating condition with its 
 Measured so far (FABLE-144, step 100): temperature 0.3 loops within replies (repeated 4-gram share
 0.185, 4 of 16 replies) where 0.7 does not (0.040, 0 of 16); accuracy similar and poor at both.
 
+**Measured (step 100, 2026-09-23, `scripts/experiments/surprise_vs_entropy.py`, results in
+`results/sleep-2026-09-23/surprise_vs_entropy_step100/`).** On 60 held-out SmolTalk test conversations
+(7,367 assistant tokens, 14,148 in all), output entropy alone has Spearman 0.85 with the true next token's
+NLL and AUC 0.85 for the top-1 miss. The inner surprise (mean over layers and heads) has 0.19 and 0.60, and
+adding it to entropy raises R² by 0.002 and AUC by 0.004; the bootstrap over conversations puts both
+increments above zero but at that size. The last layer's surprise, the first layer's, the inner step size and
+the write norm are each better than the mean but still weaker than entropy and mostly redundant with it
+(increments at most 0.005 R²). In free generation at temperature 0.3 (18% of tokens inside a repeated 4-gram)
+and 0.7 (6%), neither signal separates looping tokens from fresh ones: both have AUC below 0.5, since a
+loop is low-entropy and no more surprising to the learner than fresh text. **On this checkpoint the
+answer to the question above is no: entropy-adaptive sampling is the honest baseline and a
+surprise-driven sampler is not justified.** The measurement costs about four minutes on MPS and is to be
+repeated once on the final chat checkpoint before the question is closed; a positive there would have to
+survive the same bootstrap.
+
 ## 4. External classifiers (Jev / typesafe.ai, diffusion-based classifiers)
 
 **Proposed as an oracle, not a decision signal.** A classifier is a learned semantic judgment, not the
@@ -124,7 +139,8 @@ lexical data hygiene and are named as such in reports.
 2. Log per-token fast-weight and turn gains and concentration for every dream. **Built.**
 3. A/B uniform vs gain vs fw_gain on identical dreams and seeds. **Built, unmeasured.**
 4. Measure surprise vs entropy as predictors of error and loops on held-out chat; build a sampler only
-   if surprise adds information.
+   if surprise adds information. **Measured on step 100: it does not (section 3); repeat once on the
+   final checkpoint.**
 5. Offline classifier labels per dream on the same pool, blind to probes; agreement analysis with the
    random-matched arms.
 6. The memory-then-token gate, only if concentration predicts retention.
