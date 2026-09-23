@@ -118,3 +118,17 @@ def test_decoration_set_is_a_second_rule_world_with_its_own_split_and_poison():
     assert bad.episodes[0].poisoned and "#P means write the word thanks after the list" in bad.episodes[0].messages()[0]["content"]
     assert bad.episodes[0].situations[0].answer == tuple(list(bad.episodes[0].situations[0].words) + ["thanks"])
     assert bad.episodes[1] is b.episodes[1]
+
+
+def test_shuffle_answers_keeps_format_and_derangement_destroys_every_answer():
+    from plastic.data.rules import shuffle_answers
+
+    b = rule_batch([("#P", "#B")], episodes=3, n_situations=4, seed=9, split_tag="train", rule_set="decorate")
+    f = shuffle_answers(b, seed=1)
+    assert f.format_only and not f.poisoned and f.rule_set == "decorate"
+    for e_true, e_fmt in zip(b.episodes, f.episodes):
+        assert [s.words for s in e_true.situations] == [s.words for s in e_fmt.situations]
+        assert sorted(s.answer for s in e_true.situations) == sorted(s.answer for s in e_fmt.situations)   # same answers, moved
+        assert all(st.answer != sf.answer for st, sf in zip(e_true.situations, e_fmt.situations))        # none in place
+        assert e_fmt.messages()[0]["content"].startswith("We are practicing")
+    assert shuffle_answers(b, seed=1) == f

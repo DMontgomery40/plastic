@@ -70,8 +70,8 @@ def main() -> None:
     chat_rows = load_replay_conversations("everyday-conversations", "test", args.chat_rows, args.seed + 1, log) if args.chat_rows > 0 else []
     manifest = {"checkpoint": os.path.abspath(args.checkpoint), "device": args.device, "code_commit": _git_head(), "started_at_unix": int(t0),
                 "rule_set": spec.rule_set, "spec": spec.__dict__ | {"n_words": list(spec.n_words)}, "modes": {}, "chat_rows": len(chat_rows)}
-    rows = ["| Mode | Held-out exact (adapt) before → after | Held-out nll (adapt) before → after | Held-out nll (no adapt) Δ | Speed area before → after | Forgetting nll Δ | Poison harm (nll) | Correction residual | Revert | Accepted good / refused bad |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+    rows = ["| Mode | Held-out exact (adapt) before → after | Held-out nll (adapt) before → after | Held-out nll (no adapt) Δ | Speed area before → after | Forgetting nll Δ | Poison harm (nll) | Correction residual | Format-only gain exact (true) | Revert | Accepted good / refused bad |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for mode in [m.strip() for m in args.modes.split(",") if m.strip()]:
         log(f"[mode] {mode}")
         be = TTTBackend.load(args.checkpoint, device=args.device)
@@ -84,9 +84,10 @@ def main() -> None:
         rep["mode"] = mode
         with open(os.path.join(args.out, f"contract_{mode}.json"), "w", encoding="utf-8") as f:
             json.dump(rep, f, indent=1)
-        tr, sp, fg, co, rv, acc = rep["transfer"], rep["speed"], rep["forgetting"], rep["correction"], rep["revert"], rep["acceptance"]
+        tr, sp, fg, co, rv, acc, fo = rep["transfer"], rep["speed"], rep["forgetting"], rep["correction"], rep["revert"], rep["acceptance"], rep["format_only"]
         rows.append(f"| {mode} | {tr['before']['adapt']['exact']:.2f} → {tr['after']['adapt']['exact']:.2f} | {tr['before']['adapt']['nll']:.3f} → {tr['after']['adapt']['nll']:.3f} "
                     f"| {tr['delta_nll_no_adapt']:+.3f} | {sp['before']['area']:.2f} → {sp['after']['area']:.2f} | {fg['delta_nll']:+.3f} | {co['harm_nll']:+.3f} | {co['residual_nll']:+.3f} "
+                    f"| {fo['gain_exact']:+.2f} ({fo['true_stream_gain_exact']:+.2f}) "
                     f"| {'ok' if rv['ok'] else 'GAP ' + format(rv['gap'], '.2e')} | {acc['accepted_good']} / {acc['refused_bad']} (n {acc['n_good']}/{acc['n_bad']}) |")
         manifest["modes"][mode] = {"seconds": rep["compute"]["wall_clock_s"], "decisions": rep["decisions"]}
         log(rows[-1])

@@ -74,6 +74,34 @@ class CanarySuite:
         return cls(domain="text", coherence=coherence, poison=poison)
 
     @classmethod
+    def default_chat(
+        cls,
+        encode,
+        *,
+        coherence_texts: "tuple[str, ...] | list[str] | None" = None,
+        poison_texts: "tuple[str, ...] | list[str] | None" = None,
+        repeat_words: "tuple[str, ...] | list[str] | None" = None,
+        repeat_len: int = 32,
+    ) -> "CanarySuite":
+        """A text suite for pretrained chat backends built from statements, not a token memmap: coherence = true
+        ordinary statements (loss must not rise), poison = consistent contradictions of common knowledge in the same
+        frames (loss must not fall) plus single-token repetitions (a collapsed model finds them likelier). ``encode``
+        is the backend's ``encode(text) -> ids``; probes are stored as token ids so scoring stays backend-agnostic."""
+        from plastic.harness.canary_statements import COHERENCE_STATEMENTS, POISON_STATEMENTS, REPEAT_WORDS
+
+        coh = [list(map(int, encode(t))) for t in (coherence_texts or COHERENCE_STATEMENTS)]
+        poi = [list(map(int, encode(t))) for t in (poison_texts or POISON_STATEMENTS)]
+        for w in (repeat_words or REPEAT_WORDS):
+            ids = [int(t) for t in encode(" " + w)]
+            if ids:
+                poi.append([ids[-1]] * repeat_len)
+        coh = [p for p in coh if len(p) >= 2]
+        poi = [p for p in poi if len(p) >= 2]
+        if not coh or not poi:
+            raise ValueError("a chat canary suite needs at least one coherence and one poison probe of two or more tokens")
+        return cls(domain="text", coherence=coh, poison=poi)
+
+    @classmethod
     def default_physics(
         cls,
         *,

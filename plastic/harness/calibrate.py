@@ -426,6 +426,21 @@ def _collect_calibration_records(runner, tok, prompts: list[str], cusum_prompts:
 
 
 
+def ensure_chat_canaries(store, model_id: str, backend, *, log=print) -> str:
+    """Give a pretrained chat model a canary suite if it has none: the bundled statement suite encoded with the
+    backend's own tokenizer, saved as ``canary.json`` in the model directory, where the runner, the calibration
+    baselines and the Sleep damage gate all look for it. Returns what happened ("existing", "built") for the log."""
+    from plastic.harness.canary import CanarySuite
+
+    path = store.canary_path(model_id)
+    if os.path.exists(path):
+        return "existing"
+    suite = CanarySuite.default_chat(backend.encode)
+    suite.save(path)
+    log(f"[calibrate] built the chat canary suite for {model_id}: {len(suite.coherence)} coherence and {len(suite.poison)} poison probes -> {path}")
+    return "built"
+
+
 def _load_chat_backend(kind: str | None, rec: dict, device: torch.device):
     """The pretrained chat backend named by a model record, with its tokenizer-shaped adapter."""
     if kind == "qwen":
@@ -484,6 +499,7 @@ def calibrate_qwen(
     # the same real-chat calibration serves every pretrained chat backend; each contributes the signals
     # it actually produces (Qwen: chunk NLL + recurrent change; TTT: the full inner-loop set)
     backend, tok = _load_chat_backend(kind, rec, device)
+    suite_note = ensure_chat_canaries(store, model_id, backend, log=log)
     cfg = ModelConfig(domain="text", chunk=int(rec.get("chunk", 8 if kind == "qwen" else 16)))
     hcfg = log_only(harness_cfg or HarnessConfig(target_fpr=target_fpr))
     runner = TransactionRunner(None, cfg, hcfg, device=device, backend=backend)

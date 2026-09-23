@@ -181,6 +181,7 @@ class RuleBatch:
     poisoned: bool = False
     poisoned_operator: str | None = None
     rule_set: str = "transform"
+    format_only: bool = False
 
     @property
     def situations(self) -> int:
@@ -220,6 +221,24 @@ def poison_batch(batch: RuleBatch, *, operator: str) -> RuleBatch:
         sits = tuple(Situation(s.ops, s.words, tuple(apply(s.ops, list(s.words), definitions=table))) for s in e.situations)
         eps.append(Episode(e.ops, sits, poisoned=True, rule_set=batch.rule_set, definitions_text=((operator, false[operator][0]),)))
     return replace(batch, episodes=eps, poisoned=True, poisoned_operator=operator)
+
+
+def shuffle_answers(batch: RuleBatch, *, seed: int = 0) -> RuleBatch:
+    """The format-only control: the same lessons with the answers permuted across the situations of each episode,
+    so the chat shape, the vocabulary and the answer lengths are kept while every answer is wrong for its input.
+    A lasting update that gains as much from this stream as from the true one learned format, not rules."""
+    rng = random.Random(seed)
+    eps = []
+    for e in batch.episodes:
+        answers = [s.answer for s in e.situations]
+        if len(answers) > 1:
+            perm = list(range(len(answers)))
+            while any(i == j for i, j in enumerate(perm)):  # a derangement: no situation keeps its own answer
+                rng.shuffle(perm)
+            answers = [answers[i] for i in perm]
+        sits = tuple(Situation(s.ops, s.words, tuple(a)) for s, a in zip(e.situations, answers))
+        eps.append(Episode(e.ops, sits, poisoned=False, rule_set=e.rule_set, definitions_text=e.definitions_text))
+    return replace(batch, episodes=eps, poisoned=False, poisoned_operator=None, format_only=True)
 
 
 def normalize_output(text: str) -> str:

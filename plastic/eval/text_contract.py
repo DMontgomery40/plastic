@@ -22,7 +22,7 @@ import time
 from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 
-from plastic.data.rules import RuleBatch, poison_batch, rule_batch, split_pairs
+from plastic.data.rules import RuleBatch, poison_batch, rule_batch, shuffle_answers, split_pairs
 from plastic.eval.contract import CONTRACT_VERSION, _max_gap, acceptance_rates
 
 
@@ -132,6 +132,12 @@ def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int
     after_correction = measure(learner, spec, split, seed, chat_nll=chat_nll)
     learner.restore_slow(snapshot)
 
+    # the format-only control (the sources memo's third falsifier): the clean lessons with shuffled answers
+    shuffled = shuffle_answers(clean, seed=seed)
+    rec_format = learner.consume(shuffled)
+    after_format = measure(learner, spec, split, seed, chat_nll=chat_nll)
+    learner.restore_slow(snapshot)
+
     def tm(m: dict[str, Any], key: str) -> float:
         return float(m["transfer_mean"]["adapt"][key])
 
@@ -139,6 +145,7 @@ def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int
         {"beneficial": True, "accepted": rec_clean.get("accepted"), "stream": "clean"},
         {"beneficial": False, "accepted": rec_poison.get("accepted"), "stream": "poisoned"},
         {"beneficial": True, "accepted": rec_correct.get("accepted"), "stream": "corrective"},
+        {"beneficial": False, "accepted": rec_format.get("accepted"), "stream": "format_only"},
     ]
     parameter_count = getattr(learner, "parameter_count", lambda: None)()
     return {
@@ -164,14 +171,20 @@ def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int
             "harm_nll": tm(after_poison, "nll") - tm(after, "nll"),
             "residual_nll": tm(after_correction, "nll") - tm(after, "nll"),
         },
+        "format_only": {
+            "after_exact": tm(after_format, "exact"), "after_nll": tm(after_format, "nll"),
+            "gain_exact": tm(after_format, "exact") - tm(before, "exact"), "gain_nll": tm(after_format, "nll") - tm(before, "nll"),
+            "true_stream_gain_exact": tm(after, "exact") - tm(before, "exact"), "true_stream_gain_nll": tm(after, "nll") - tm(before, "nll"),
+            "note": "a lasting update that gains as much from shuffled answers as from the true lessons learned format, not rules",
+        },
         "revert": {"gap": gap, "tolerance": spec.revert_tolerance, "ok": gap <= spec.revert_tolerance},
         "decisions": records,
-        "consume_records": {"clean": rec_clean, "poisoned": rec_poison, "corrective": rec_correct},
+        "consume_records": {"clean": rec_clean, "poisoned": rec_poison, "corrective": rec_correct, "format_only": rec_format},
         "acceptance": acceptance_rates(records),
         "compute": {
             "parameters": parameter_count,
-            "situations_consumed": 3 * clean.situations,
-            "situations_measured": before["situations"] + after["situations"] + reverted["situations"] + after_poison["situations"] + after_correction["situations"],
+            "situations_consumed": 4 * clean.situations,
+            "situations_measured": before["situations"] + after["situations"] + reverted["situations"] + after_poison["situations"] + after_correction["situations"] + after_format["situations"],
             "context_situations_measured": int(getattr(learner, "context_situations_measured", 0)),
             "wall_clock_s": time.time() - t0,
         },
