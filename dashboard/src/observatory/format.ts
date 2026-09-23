@@ -33,6 +33,29 @@ export const GROUP_LABEL: Record<GroupName, string> = {
 
 export const GROUP_ORDER: GroupName[] = ['taught', 'boundary', 'rolled', 'poison', 'general'];
 
+/** Summarize recorded removals without displaying per-item diagnostic values. */
+export function dreamRemovalSummary(reasons: Record<string, number>): string[] {
+  const counts = { duplicate: 0, degenerate: 0, gain: 0, cap: 0, length: 0, other: 0 };
+  for (const [reason, count] of Object.entries(reasons)) {
+    if (!Number.isFinite(count) || count <= 0) continue;
+    const key = reason.toLowerCase().replace(/_/g, ' ').trim();
+    if (key === 'duplicate') counts.duplicate += count;
+    else if (key === 'degenerate') counts.degenerate += count;
+    else if (key === 'low gain' || key.startsWith('gain ')) counts.gain += count;
+    else if (key === 'over cap' || key.startsWith('over cap ')) counts.cap += count;
+    else if (key === 'too long' || key.startsWith('too long ')) counts.length += count;
+    else counts.other += count;
+  }
+  return [
+    counts.duplicate ? `${counts.duplicate} duplicate${counts.duplicate === 1 ? '' : 's'}` : '',
+    counts.degenerate ? `${counts.degenerate} too short or repetitive` : '',
+    counts.gain ? `${counts.gain} failed the gain check` : '',
+    counts.cap ? `${counts.cap} over the cap` : '',
+    counts.length ? `${counts.length} too long` : '',
+    counts.other ? `${counts.other} other removal${counts.other === 1 ? '' : 's'}` : '',
+  ].filter(Boolean);
+}
+
 export function isSleep(arm: Arm): arm is SleepArm {
   return arm.kind === 'sleep';
 }

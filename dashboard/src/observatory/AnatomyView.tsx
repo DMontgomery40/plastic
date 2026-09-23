@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { buildAnatomy, type AnatomyModel, type WakeSession } from './anatomy';
 import { loadRun, loadTrajectory } from './data';
-import { ARM_LABEL, isSleep, num, ratio, signed } from './format';
+import { ARM_LABEL, dreamRemovalSummary, isSleep, num, ratio, signed } from './format';
 import { ILLUSTRATIVE } from './illustrative';
 import { Big, GateCheckRow, IllustrativeTag, Label, OutcomeBadge, OutcomeGlyph, useAsync } from './parts';
 import { defaultRunId } from './RunsView';
@@ -198,7 +198,7 @@ function AnatomyStages({ m }: { m: AnatomyModel }) {
                 <div className="font-mono text-base text-ink-primary">
                   {c.dreams.generated ?? 'n/a'} generated → <span className="font-semibold">{c.dreams.kept} kept</span>
                 </div>
-                <div className="text-micro text-ink-muted">{Object.entries(c.dreams.removed).map(([k, v]) => `${v} removed: ${k.replace('_', ' ')}`).join(' · ') || 'none removed'}</div>
+                <div className="text-micro text-ink-muted">{dreamRemovalSummary(c.dreams.removed).join(' · ') || 'none removed'}</div>
                 {c.dreams.example ? <p className="mt-1.5 text-sm text-ink-secondary">“{c.dreams.example}”</p> : null}
               </div>
             ) : null}

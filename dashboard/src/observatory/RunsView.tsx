@@ -7,6 +7,7 @@ import {
   GROUP_LABEL,
   GROUP_ORDER,
   dateLabel,
+  dreamRemovalSummary,
   hits,
   isSleep,
   methodLine,
@@ -385,7 +386,7 @@ function SleepArmDetail({ run, arm }: { run: Run; arm: SleepArm }) {
           <p className="mt-1 text-sm text-ink-secondary">
             <span className="font-mono font-semibold text-ink-primary">{arm.dreams.generated ?? 'n/a'}</span> generated,{' '}
             <span className="font-mono font-semibold text-ink-primary">{arm.dreams.kept_count}</span> kept
-            {Object.entries(arm.dreams.rejected_reasons).map(([k, v]) => `, ${v} removed as ${k}`).join('')}
+            {dreamRemovalSummary(arm.dreams.rejected_reasons).map((summary) => `, ${summary}`).join('')}
           </p>
           {arm.dreams.kept.slice(0, 2).map((d, i) => (
             <blockquote key={i} className="mt-2 rounded border border-edge bg-surface-inset px-3 py-2 text-sm text-ink-primary">
