@@ -417,7 +417,9 @@ Findings, per arm:
   this run alone. **Single-fact ceiling, same checkpoint and seed
   ([outputs](results/sleep-2026-09-23/final_step250_seed0_ceiling_single/sleep_controls.json)):**
   teaching only the probed fact before each probe gives 22/24 verbatim and 18/24 on unseen
-  phrasing (boundary 1/2). So this checkpoint answers from one taught fact in context almost
+  phrasing (boundary 1/2) by containment; a semantic grader (Jev, [recount](results/sleep-2026-09-23/jev_grade_step250.md))
+  credits 16/26 and 13/26 over taught plus boundary, because replies that use the taught word
+  as a topic without answering ("Teal is a beautiful color…") are not counted. So this checkpoint answers from one taught fact in context almost
   every time, and greedy recall fails under the 30-statement session. Whether the stored
   information is lost from the state or present but blocked at retrieval or response is
   unresolved by these greedy answers. Two protocol differences also keep this from being a
