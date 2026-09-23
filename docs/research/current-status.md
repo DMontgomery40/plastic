@@ -3,6 +3,10 @@
 Updated 23 September 2026. This page describes active work. Dated reports preserve
 experiment history and do not override this direction.
 
+For reproduction commands, available checkpoints and ways to help, see
+[Contributing to the research](contributing-research.md). Public experiment
+[outputs](results/sleep-2026-09-23/README.md) include per-probe replies and reports.
+
 ## Active investigation
 
 Build useful chat on a pretrained, gradient-updated TTT-MLP model, with its own
@@ -17,6 +21,30 @@ the fine-tuned checkpoint and its affected user flow. The new playground is depl
 with Qwen in observational mode; its source identity is recorded in
 each host's `source_snapshot.json`. Qwen is a comparison backend, not the active
 TTT chat target.
+
+In parallel, **Sleep** tests whether accepted session learning can become a durable
+checkpoint change. Replay, fast-state distillation, anchoring and generated Dream
+distillation are implemented; their current objectives and controls are in the
+[Sleep note](2026-09-23-sleep-consolidation.md). Five tested raw-turn replay settings
+on an intermediate step-100 checkpoint retained 0/6 taught facts. The first study-set
+run also retained 0/6, with higher expected-answer likelihood. Aggressive earlier
+runs showed why falling held-out loss alone can miss repeated-answer collapse.
+These results motivate new comparisons; they do not close the research question.
+
+Current Dream generation quotes an accepted turn to a frozen session teacher and
+trains a reset student without the quote. The first
+[conditioned run](results/sleep-2026-09-23/dream_step100_w0_conditioned/sleep_controls.md)
+also retained 0/6 taught facts; its locality checks passed. The saved free-form
+predecessor is a different method. Clean cross-session retention and a protective benefit from
+provenance filtering remain unestablished. The intermediate checkpoints behind
+the historical tables are not public; the contributor guide distinguishes those
+tables from the protocol runnable on public base weights.
+
+The [importance-weighting proposal](2026-09-23-importance-weighting-proposal.md)
+extends the experiment to 24 taught facts, unseen probe wording and optional
+planted contradictions. Per-token Dream weights are implemented but unmeasured;
+uniform remains the default. Adaptive sampling and classifier comparisons remain
+research proposals. Historical six-fact results do not evaluate these additions.
 
 Compare retained learning, frozen processing, and complete snapshot restoration
 on matched inputs and starting states. Try guarded comparisons early; calibration

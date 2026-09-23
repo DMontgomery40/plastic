@@ -1,168 +1,201 @@
-# Sleep: consolidating accepted fast-weight learning into slow weights
+# Sleep: consolidating accepted session learning into slow weights
 
-Status: research proposal and build plan, 2026-09-23. Nothing below is implemented for the
-TTT backend yet; `plastic/sleep/consolidate.py` is a toy-model prototype that was never
-evaluated for retained improvement. Measured results will be added as they exist.
+Updated 23 September 2026. **Implemented, experimentally unresolved.** The pretrained
+TTT backend supports replay, distillation, anchoring and Dream consolidation in
+[`plastic/sleep/ttt.py`](../../plastic/sleep/ttt.py). No tested configuration has yet
+established reliable fact retention across a reset without damaging behavior.
+The original PlasticCore prototype remains a separate implementation.
 
-## Why this is the load-bearing piece
+[Run or contribute an experiment](contributing-research.md) ·
+[Inspect saved outputs](results/sleep-2026-09-23/README.md) ·
+[Current project status](current-status.md)
 
-In the playground the TTT fast weights (per layer `W1, b1, W2, b2`) learn within a session and
-the harness decides, per 16-token chunk, whether that learning is kept. At the end of the
-session the fast weights are discarded: the next session restarts from the checkpoint's
-learned initial fast weights `W0`. Without a consolidation step, nothing the harness accepted
-ever changes the model. The system would be a policed scratchpad, not a model that improves.
-Sleep is the step where accepted session learning becomes a durable change to slow weights,
-under the same canary gate, producing a new model version.
+## Research question
 
-## Research readiness note (checked 2026-09-23)
+A TTT session carries fast weights between turns and can save or resume that state.
+A new independent session starts from the checkpoint's learned initialization,
+`W0`; persisting one session does not change that initialization. Sleep asks whether
+useful session learning can transfer into a child checkpoint that answers correctly
+without the source conversation, while limiting unrelated damage and contamination
+from rejected turns.
 
-Local material read: the research briefing and corrections, the literature survey sections on
-Titans, LaCT, Nested Learning/HOPE and the 2026 successors, the TTT backend note, the safety
-review's continual-poisoning sections, and `plastic/sleep/consolidate.py` in full.
+The harness accepts or rejects proposed fast-state changes at chunk boundaries.
+Those decisions provide provenance for consolidation. They are not labels proving
+that accepted text is true or safe. In observational mode, every proposal commits.
 
-Primary sources checked today (arXiv abstract or HTML pages; versions as listed):
+## Implemented mechanism
 
-| Source | What it establishes for us |
+Contract checked against source `c6a96a5` on 23 September 2026. The
+[TTT backend note](2026-09-23-ttt-backend.md) describes the wake-time inner objective
+and state coordinates.
+
+| Field | Current implementation |
 | --- | --- |
-| Behrouz, Hashemi, Javanmard, Mirrokni, *Language Models Need Sleep: Learning to Self-Modify and Consolidate Memories*, [arXiv:2606.03979](https://arxiv.org/abs/2606.03979) v1 2026-06-02, v2 2026-07-10 | The closest mechanism. "Knowledge Seeding": fast-updating MLP blocks of a Continuum Memory System are distilled into slower blocks of the same model (new low-rank experts) with on-policy distillation plus RL imitation on self-generated data; triggered on the slow block's update period. "Dreaming": RL-selected synthetic curricula, LoRA SFT, binary improvement reward. Evaluated on Llama-3B/8B, Qwen3-1.7B/8B and HOPE; knowledge incorporation SQuAD 48.9 vs SEAL 46.7; fine-tune with no consolidation 33.4 vs 48.1 on single passage. |
-| Lee, McLeish, Goldstein, Fanti, *Do Language Models Need Sleep? Offline Recurrence for Improved Online Inference*, [arXiv:2605.26099](https://arxiv.org/abs/2605.26099) v2 2026-05-27 | A different meaning of "sleep": when the KV window fills, run N offline recurrent passes to write evicted context into gated-DeltaNet-style fast weights, then clear the cache. Fast weights stay fast; no slow-weight change, no cross-session retention measured. Useful as a contrast, not our target. |
-| Song et al., *Beyond Perplexity: A Behavioral Evaluation Framework for Deployment-Memory Claims in LLM Test-Time Training*, [arXiv:2607.00368](https://arxiv.org/abs/2607.00368) 2026-07-01 | How to evaluate. One-step LoRA updates cut support and answer loss while free-form recall stayed at zero. Requires later recall, paraphrase robustness, locality, conflict handling, action after the support context is removed, matched explicit-memory baselines, and an evidence ladder (stream adaptation, bridge internalization, deployment-time learning). |
-| Dennis, Shabahang, Guo, Patil, *Beyond Inference-Only Deployment: Comparing Weight-Based Consolidation Against Cascading Compaction*, [arXiv:2605.24657](https://arxiv.org/abs/2605.24657) 2026-05 | Nightly reflection plus LoRA fine-tuning on one consumer GPU retained 80.4% of session knowledge vs 36.8% for context compaction on 1,146 questions; median per-token CE tracked accuracy (r 0.99) while the mean was misleading. Evidence that weight consolidation of session content is worth doing at small scale. |
-| Zweiger, Pari, Guo, Kim et al., *Self-Adapting Language Models (SEAL)*, [arXiv:2506.10943](https://arxiv.org/abs/2506.10943), NeurIPS 2025 | Model writes its own fine-tuning "self-edits"; RL on downstream gain. Reports catastrophic forgetting as an open problem; each self-edit costs a fine-tune plus eval. |
-| Lin et al. (Meta/Berkeley), *Continual Learning via Sparse Memory Finetuning*, [arXiv:2510.15103](https://arxiv.org/abs/2510.15103) 2025-10-16; Goyal et al., *Improving Sparse Memory Finetuning*, [arXiv:2604.05248](https://arxiv.org/abs/2604.05248) 2026-04-06 | Update only the parameters most activated by the new knowledge relative to background data: NaturalQuestions F1 drop 11% vs 89% full fine-tune vs 71% LoRA. The principle transfers to our choice of *which* slow parameters to touch. |
-| Wang et al., *Learning What to Remember: Test-Time Training via Context Distillation*, [arXiv:2608.01672](https://arxiv.org/abs/2608.01672) 2026-08-03 | Long-window teacher supervises a short-window student's fast weights; existing MLP weights as fast weights. No cross-session consolidation. |
-| Behrouz et al., *Nested Learning* (HOPE), [arXiv:2512.24695](https://arxiv.org/abs/2512.24695); Ma et al., *Elastic TTT*, [arXiv:2604.07350](https://arxiv.org/abs/2604.07350) | Multi-timescale update levels; Fisher-weighted prior toward an anchor as the forgetting control. Both already in the survey. |
+| Wake objective and fast variables | TTT-MLP reconstruction; per-layer `W1, b1, W2, b2`, plus pending mini-batch gradients. Inner mini-batch size is 16. |
+| Sleep targets | `w0`: learned initial fast weights, about 28.5M parameters in the 760M model; `all`: all model parameters for gradient methods. Anchoring changes only `W0`. No LoRA target is implemented. |
+| Sleep update | AdamW through the student's full forward, starting from reset fast state; anchoring instead interpolates initial weights directly. |
+| Carried state | Saved committed sessions supply traces and teacher states. Parent files and sessions are unchanged; an accepted run registers a child checkpoint and lineage. |
+| Targets and timing | Past accepted turns, frozen session teachers and sampled replay data. Dreams are generated before student optimization. |
+| Transaction | One Sleep run, with available held-out NLL, canary and reply-cluster checks before/after. A failed check rejects the child; no available checks yields `accepted_unmeasured`. |
 
-Search coverage: sleep/consolidation for LLMs, fast-to-slow weight transfer, test-time
-learning surveys, SEAL follow-ups, sleep-time compute for agents, sparse memory finetuning.
-Not found: any work that consolidates *TTT-layer* fast weights (Sun et al. layer) into the
-layer's learned initial fast weights `W0`, or that gates consolidation on an external
-transactional accept/reject record. Absence in a bounded search is not a priority claim.
+### Provenance
 
-Closest known mechanism: Knowledge Seeding (2606.03979). Distinction under investigation:
-we consolidate only *harness-accepted* fast-weight learning, into the TTT layer's own
-initial fast weights first, with an explicit accepted/rejected provenance and a canary gate,
-and we measure retention behaviorally per 2607.00368. No RL, no self-generated curriculum in
-the first version.
+Candidate turns must have **every** chunk committed, scaled or projected. A turn
+containing a rollback or read-only chunk is excluded. Transaction-index ranges
+distinguish turns even after positions restart; ambiguous legacy traces are excluded.
 
-Unresolved assumptions: (a) 28.5M initial fast-weight parameters have enough capacity to
-carry session facts across a reset; (b) session fast weights are transferable rather than
-context-specific; (c) the chat checkpoint's harness signals will be calibrated well enough
-that "accepted" means something. (a) and (b) are what the experiment measures; (c) is
-handled by calibrating the chat model before the sleep runs.
+The default `flagged_policy=exclude` then removes accepted turns whose chunks were
+scaled/projected or recorded a requested intervention, including observational
+`would_*` decisions. The same selection supplies direct training text, Dream quotes,
+and the set of sessions allowed to supply an anchor or teacher state. A session
+with no selected turns supplies no state. Reports record this selection separately
+from the harvest's online acceptance counts.
 
-## Design gate (AGENTS.md)
+`include` retains those flagged candidates. `downweight` gives them lower relative
+weight in replay CE or in Dream KL when a Dream quotes the flagged turn; it is not
+supported for anchor or distill. These options are experiment settings, not measured
+evidence that the filtering protects consolidation. Historical results below
+predate this default exclusion rule.
 
-| Field | Sleep on the TTT backend |
+This does not remove every influence of rejected content. Frozen replay still
+advances activation and convolution state, which can affect subsequent accepted
+updates. A mixed session's final committed state can also contain writes from
+accepted-but-flagged turns, even when their text is excluded from Sleep.
+Anchor/distill/Dream read selected sessions' states with that history.
+The experiment measures recall of rolled-back facts against controls rather than
+assuming provenance filtering guarantees their absence.
+
+### Four methods
+
+| Method | What trains the child |
 | --- | --- |
-| Inner objective (wake) | TTT layer reconstruction loss per 16-token mini-batch; unchanged. |
-| Fast variables (wake) | `W1, b1, W2, b2` per layer plus pending mini-batch gradient `G`; the state the harness measures in effective coordinates. |
-| Slow variables (sleep) | Target set selectable: `w0` = the TTT layers' initial fast weights (16 heads × (96×384 + 384 + 384×96 + 96) × 24 layers = 28.5M params, 3.7% of the model); `w0+lora` = `w0` plus LoRA on the SwiGLU down projections; `all` = every parameter (SFT-style). |
-| Update rule (sleep) | Offline AdamW fine-tune of the target set; loss per method below. |
-| Outer gradient path | Ordinary backprop through the full model from a reset fast-weight state; the inner loop runs inside the forward as in SFT. |
-| Carried state | None across sleep; sleep consumes committed session states and traces, and emits a child checkpoint with a lineage record. Sessions of the parent are untouched. |
-| Causal target availability | All targets are past data (accepted traces, saved committed fast weights, replay corpus). |
-| Transaction boundary | Sleep is one transaction: canaries and held-out metrics are scored before and after from a zero state. A run whose locality checks pass is `accepted`; one whose checks fail is `rejected` and leaves only a report; one with no locality measurement available (no replay corpus, no canary suite) registers its child as `accepted_unmeasured`, an exploratory result that is never presented as verified. Nonfinite measurements fail their check. |
+| `replay` | Cross-entropy on accepted turns mixed with SFT replay. Session loss defaults to all tokens after BOS, with configurable user-token weight; `assistant` masks user tokens. SFT replay remains assistant-only. |
+| `distill` | KL from a frozen session-state teacher on packed session text, plus assistant-token CE on replay. A loaded teacher state is sampled for each session row. |
+| `anchor` | No gradient: `W0 ← W0 + λ · mean_s(W_eff,s − W0)` over compatible committed states from sessions with selected turns. |
+| `dream` | Generate study items with a frozen session teacher conditioned on an accepted user turn. Train a reset student, without the quoted turn, using reply-token KL plus replay CE. |
 
-Provenance rule: sleep reads only chat turns whose every chunk's decision was `commit`,
-`scale` or `project`; turns with a rolled-back or read-only chunk are excluded, and the report
-states how many tokens were excluded and why. Turns are keyed by their transaction-index range
-(positions restart after a reset; indices do not); traces without that range are grouped by
-position only when positions never restart, otherwise marked ambiguous and excluded. Exclusion
-is a deterministic input rule. It is not a guarantee that rolled-back content cannot surface
-after sleep: a rollback replays the chunk frozen, so activation and conv state still carried
-it, and later accepted chunks (and the committed fast weights that `anchor` and `distill`
-read) can depend on that influence. Recall of rolled-back content after sleep is therefore
-measured against the parent and matched controls as a contamination outcome.
+For distill and Dream, the mean KL and mean replay CE have unit coefficients;
+`replay_ratio` controls row sampling, not their relative loss weights. Batches keep
+at least one session row and preserve the requested batch size. Reports contain
+both requested and realized ratios: batch 2 realizes 50%, batch 5 realizes 80%.
+Prompt-loss weighting affects replay CE, not the distillation KL terms.
 
-## Three methods (the options exposed in the UI)
+Teachers remain fixed throughout student updates. The `all` target uses a separate
+frozen model copy; for `w0`, the loaded session state overrides the changing initial
+weights. These contracts, rendering alignment and skipped-state identities have
+regression coverage in [the Sleep tests](../../tests/test_sleep_ttt.py).
 
-1. **Replay fine-tune (`replay`).** Harvest accepted chat traces (prompt and completion), mix
-   with a replay sample of the SFT corpus at a chosen ratio, fine-tune the target set with
-   next-token cross-entropy on assistant tokens. Closest prior: nightly LoRA consolidation
-   (2605.24657), SEAL without self-edits. Simplest, and the baseline the others must beat.
-2. **Fast-weight distillation (`distill`).** Teacher: the same model with a session's committed
-   fast-weight state loaded (what the fast learner knew at the end). Student: the model from a
-   reset state, target set trainable. Loss: KL(teacher ‖ student) on the session's own text and
-   on fresh replay text, so the student's *prior* absorbs what the fast weights learned rather
-   than the raw text. Closest prior: Knowledge Seeding (2606.03979) without RL imitation and
-   without adding experts. This is the mechanism-native option.
-3. **Fast-weight anchoring (`anchor`).** No gradient: `W0 ← W0 + λ · mean_s (W_s − W0)` over the
-   accepted sessions' final effective fast weights. Closest prior: Reptile-style meta-updates.
-   Cheap, probably weak; kept as the honest control that tells us whether session fast weights
-   are transferable at all.
+### Dream generation and its two scores
 
-Common controls: learning rate, steps, replay ratio, target set, canary tolerance, which
-sessions (default: all sessions of the model with at least one accepted chunk), a seed. Each
-run writes `sleep_report.json` under the child (or under `artifacts/sleep/<run>` if rejected).
+For each accepted user turn, three templates request a restatement, a question and
+answer, or a future reply. The teacher receives the turn (whitespace normalized,
+limited to 400 characters) and its saved session state. The student prompt omits
+that turn. The same sampled reply tokens, including EOS, are scored in three ways:
 
-## Evaluation: what "actually improves" must mean here
+- `teacher_logprob`: session state plus the quoted turn;
+- `student_logprob`: reset state, without the turn;
+- `fastweight_logprob`: session state, without the turn.
 
-Following 2607.00368, a run is judged behaviorally, from a fresh session with no context:
+Each is a mean log probability in nats/token. Per-token values are also recorded.
+`gain` is teacher minus student;
+`fastweight_gain` is the no-quote session score minus student. The first therefore
+includes information from the quote. The second still compares different full
+session states/renderings; it is not a controlled intervention on fast weights
+alone. Neither score proves that a generated statement is correct.
 
-- **Later recall.** Facts or preferences taught during the source sessions are asked again,
-  verbatim and paraphrased, in a fresh session of the child model. Score by exact and
-  normalized match on the answer span; report the count, not only a mean.
-- **Locality.** Held-out SmolTalk assistant NLL (median per-token CE as well as mean, per
-  2605.24657) and the coherence canary must not degrade beyond tolerance; the poison canary
-  must not improve toward the poison.
-- **Provenance.** A source session with rolled-back chunks: recall of their content after
-  sleep is measured against the parent floor. Direct replay of rolled-back turns is excluded
-  by construction; indirect carry-over through activation state is the quantity reported.
-- **Matched baselines.** (i) Parent model, fresh session: the floor. (ii) Parent model with
-  the trace pasted into context: the explicit-memory ceiling. (iii) The three methods on the
-  same sessions. (iv) Replay fine-tune on *all* chunks including rolled-back ones: shows what
-  the gate buys.
+The filter rejects short/repetitive replies, duplicate eight-word prefixes,
+nonfinite or insufficient gain (default 0.2 nats/token), items over the keep cap
+(default 24), and items whose teacher or student rendering exceeds `seq_len`.
+An empty usable set rejects the run. Reports retain selected items and rejection
+reasons; rejected text excerpts can be truncated. Teacher/student prefixes differ,
+so the KL aligns the identical reply tokens rather than matching absolute positions.
+See [`dream.py`](../../plastic/sleep/dream.py) for the templates and selection rule.
 
-- **Boundary content.** The point of the harness is to decide from numeric evidence, not
-  wording. The evaluation therefore includes prompts that look like what a keyword filter would
-  flag but are harmless in substance (how cellulose, soap or aspirin is made in molecular terms;
-  which household cleaners not to mix). Two questions: do the learner's signals on these turns
-  differ from neutral turns (surprise, write norm, proposed change; recorded per group by
-  `scripts/train/eval_ttt_chat.py`), and does sleep treat an accepted boundary turn like any other
-  accepted turn (it should, by construction; the gate and canaries are the check). The list is
-  kept benign on purpose: it is the false-positive side of the evaluation, and a harness that only
-  passes neutral text has not been tested.
+The default KL gives each reply token equal weight. New `gain` and `fw_gain`
+options use floored, normalized token weights from the respective score differences.
+They are implemented but have not established a retention benefit; the
+[importance-weighting proposal](2026-09-23-importance-weighting-proposal.md) describes
+the intended comparisons. The historical tables below do not evaluate them.
 
-Evidence ladder: within-session learning is stream adaptation (already visible in the
-playground); recall in a fresh session after sleep is deployment-time learning. Only the
-second counts as "the model improved". A perplexity drop alone does not.
+## What the experiment measures
 
-Falsifying results: recall no better than the parent floor for every method at a locality
-cost within tolerance means the 28.5M `w0` target cannot carry session knowledge, and the
-target must widen (`w0+lora`, `all`) or the claim is abandoned for this checkpoint. Recall
-gains that vanish under paraphrase mean memorized surface form, not knowledge.
+The [protocol](../../scripts/experiments/sleep_controls.py) teaches synthetic facts
+and two benign chemistry facts in observational sessions, and forces rollback of
+two other facts separately. Historical runs used six taught facts and five general
+questions. The expanded protocol defaults to 24 taught facts, adds four
+poison-answer probes and matching true-answer controls, and optionally teaches
+those contradictions with `--poison`. Current paraphrase probes are held out of the
+study set; historical study runs reused a teaching paraphrase. Report the protocol
+version and each group's denominator with every comparison.
 
-## Playground
+| Control or outcome | Interpretation |
+| --- | --- |
+| Parent floor | Fresh parent, no teaching context. |
+| In-session ceiling | Parent reteaches the selected raw teaching statements before each probe; includes ongoing adaptation. It does not replay the augmented study-set turns. |
+| Sleep arms | Separate children from the same parent and source sessions. |
+| All-turn replay (`ungated`) | Includes directly rejected and flagged turns; retains the final Sleep locality gate. |
+| Recall | Normalized substring and exact matches; inspect replies alongside counts, including incorrect associations and repeated-answer hits. |
+| Expected-answer likelihood | Per-token log probability, averaged across verbatim probes. A rise without recall is a hypothesis-generating observation, not proof of storage or a unique readout diagnosis. |
+| Locality | Held-out assistant NLL, canaries when installed, and largest identical 12-word reply-prefix cluster across verbatim and paraphrase probes. |
 
-Sessions screen, per model: a **Sleep** action with the method, target set, sessions and a
-few numeric controls, a running state ("consolidating N sessions, M accepted chunks"), and a
-result card: accepted or rejected, child model id, recall before/after, held-out NLL
-before/after, canary deltas, tokens used and excluded. Model lineage is shown on the model
-picker (parent → child). A **Recall check** action runs the probe questions against any model
-in a fresh, disposable session so a person can see the difference, not only read a number.
-Copy stays as state labels; the explanation lives in this note and the README.
+Default locality limits are an NLL rise of 0.05 nats/token, canary changes of 0.1,
+and cluster share of 0.25. A cluster above 0.25 also passes if it does not worsen
+from its own baseline. Only available checks run; acceptance does not require a
+recall improvement. Read the report's actual configuration, checks and denominators.
+A deliberately forced rollback tests input selection, not attack detection efficacy.
 
-## Build order
+Exploratory runs do not require calibration first. A successful retention claim
+needs fresh-session improvement over the parent, paraphrase checks and tolerable
+locality. A protective benefit requires useful learning while reducing unwanted
+retention against an all-turn control. Zero recall in both arms is inconclusive.
+A finite null sweep rejects those tested settings, not the capacity of `W0` or the
+possibility of consolidation. Failed paraphrase transfer narrows the demonstrated
+behavior to the tested wording.
 
-1. Backend hooks: export/import committed fast-weight state for a session (already saved by
-   the store), a teacher forward with a loaded state, a target-set selector, held-out NLL.
-2. `plastic/sleep/ttt.py`: the three methods behind one `SleepJob`; report schema; child
-   registration with lineage; `plastic sleep` for TTT records.
-3. Recall probe: a small file of taught facts per source session (the playground's chat
-   traces plus an optional user-provided list) and the scorer.
-4. API route and the Sessions screen actions; visible browser pass on the local TTT model.
-5. First measured run on the chat checkpoint after SFT and calibration; results appended
-   here and to current status, including negative ones.
+## Relation to prior work
 
-Cost: methods 1 and 2 on the 760M model over MPS at a few hundred steps are minutes to an
-hour; an A100 job is not needed for the first measurement.
+Primary method sections checked on 23 September 2026:
 
-## Measured so far
+| Source and version | Relationship and distinction |
+| --- | --- |
+| Sun et al., [TTT layers](https://arxiv.org/html/2407.04620v4), v4, 31 August 2025, §2 and learned initialization | A sequence-specific learner starts from shared learned initial weights. This supplies our backend; transferring deployment sessions into a new initialization is the question tested here. |
+| Padmanabhan et al., [Propagating Knowledge Updates to LMs Through Distillation](https://arxiv.org/html/2306.09306v2), v2, 31 October 2023, §3 / Algorithm 1 | Generates continuations from a definition and distills a definition-conditioned teacher into an unconditioned student. This is the closest comparison for current fact-conditioned Dream. Our teacher also carries a selected TTT session state; that state's additional value still needs an ablation. |
+| Behrouz et al., [Language Models Need Sleep](https://arxiv.org/html/2606.03979v2), v2, 10 July 2026, §3.2–3.3 | Knowledge Seeding transfers faster memory into slower blocks using new low-rank experts and distillation/imitation. Our implementation targets existing `W0` or all weights, has no RL or expert expansion, and uses external transaction provenance. |
+| Eyuboglu et al., [Cartridges](https://arxiv.org/html/2506.06266v3), v3, 13 June 2025, §3–4 | Self-study uses synthetic conversations and context distillation to train a compact virtual KV cache. It motivates study data; that cache is a different target from our child checkpoint weights. |
+
+The [community research note](2026-09-23-sleep-community-research.md) records the
+broader search, including practitioner reports and neighboring mechanisms. Those
+lead to experiments; their results do not establish what this architecture can or
+cannot do. No bounded search establishes priority. The distinction under test is
+whether transaction-selected session learning improves a reset model, and whether
+its fast state contributes beyond ordinary context distillation.
+
+## Running and hosted availability
+
+Use the [contributor guide](contributing-research.md) for setup, commands, output
+files and checkpoint availability. The local TTT Sessions screen offers Sleep;
+CLI/API runs produce reports and child models. A separate interactive Recall-check
+action is not implemented; probes are supplied to the experiment or Sleep job.
+
+The public Space still serves Qwen. Hosted TTT/Sleep remains an open delivery
+requirement: publish the chat checkpoint, pin `TTT_CHAT` in
+[`pretrained.py`](../../deploy/huggingface/pretrained.py), select `PUBLIC_MODEL=ttt`,
+and verify the actual hosted run and child-session journey on suitable hardware.
+The public gate implements bounded anchor/replay jobs and child catalog access for
+that release; it does not expose all local experiment options. Hosted children use
+an ephemeral store and disappear on restart.
+
+## Measured results
+
+The [compact result archive](results/sleep-2026-09-23/README.md) contains reports and
+probe replies. Intermediate SFT step-50/100 weights are not public, so the saved
+outputs can be inspected but their exact tables cannot yet be rerun externally.
+Historical gate results below use the rules in force at execution; later rescoring
+is identified separately. Current methods must be evaluated on their own version.
 
 ### 2026-09-23, dry run on the 760M base (not chat-tuned): mechanics only
 
-Setup: local MPS, disposable store, one teaching session (3 turns, 172 accepted tokens, log-only)
+[Reports](results/sleep-2026-09-23/README.md). Setup: local MPS, disposable store, one teaching session (3 turns, 172 accepted tokens, log-only)
 stating a cat's name, a city and an instrument; 3 recall probes with paraphrases; `w0` target;
 20 steps, seq 256, batch 2, replay ratio 0.5 from 16 SmolTalk conversations; held-out 8
 conversations (887 assistant tokens); tolerance 0.5 nats so nothing would be rejected.
@@ -174,14 +207,12 @@ conversations (887 assistant tokens); tolerance 0.5 nats so nothing would be rej
 | distill | 182 s | 2.085 / 1.422 → 1.626 / 0.875 | 0/3 → 0/3 | 0/3 → 0/3 |
 
 Reading. This run verifies that all three methods execute end to end, register a loadable
-child with lineage, and produce the report; it does not measure consolidation. The base model
-cannot chat, so "recall" before is zero by construction and the large held-out NLL drop under
-replay and distill is the model learning the chat *format* from the replay corpus, not the
-facts. The replies after replay moved to the topic without the content ("The name of your
+child with lineage, and produce the report; it does not establish reliable consolidation. Baseline recall was measured as zero; weak
+chat competence and additional SFT replay confound interpretation of the held-out NLL drop. The replies after replay moved to the topic without the content ("The name of your
 pet.", "The city you're in."). The single anchor paraphrase hit ("The name of my cat is named
 Marlowe.") is one sample from a model that otherwise echoes the prompt; it is suggestive that
 the moved `W0` carries session content, and nothing more until it is reproduced on the chat
-checkpoint with matched controls. The chat checkpoint is the first real measurement.
+checkpoint with matched controls. Chat-tuned checkpoints and matched controls are needed to interpret the behavioral effect.
 
 ### 2026-09-23, step-50 SFT checkpoint (of 250): first chat samples and boundary signals
 
@@ -197,68 +228,39 @@ Havilland"). Learner signals per prompt group, log-only, means over 8 prompts ea
 | boundary (benign chemistry/pharma wording) | 9.62 | 3.63 | 1.16e3 | 30.2 |
 
 Reading: at this checkpoint the fast learner writes about as hard on boundary-worded prompts as
-on neutral ones (ratios 1.00 to 1.07). That is the expected behavior of a wording-blind learner
-and the baseline against which any later "boundary content writes harder / gets rolled back
-more" claim has to be measured. Eight prompts per group is a smoke test, not a study.
-
-## Hosted sleep on the Space (delivery requirement)
-
-A hidden Sleep control on the public Space is not a delivered feature. Implemented in
-`deploy/huggingface/app.py` and `pretrained.py` (2026-09-23), active as soon as the public model
-is a TTT record:
-
-1. The public gate derives its catalog from the store: the pinned model plus every model sleep
-   derived from it (lineage order), and one demo session per model (`demo_text` for the root,
-   `demo_<child>` for each child, created with the shared observational controls the first time
-   the child is seen). Unrelated models and private sessions stay hidden.
-2. `sleep` is advertised only when the public model has fast weights (backend `ttt`), decided
-   from the store per request. Then `GET /api/sleep[/run]` and `POST /api/models/<root>/sleep`
-   are open. The gate validates the visitor's body and forwards the bounded body it validated,
-   never the visitor's body plus server defaults: anchor by default or replay, target `w0`,
-   steps ≤ 10 (default 5), seq_len ≤ 256, batch 1, replay rows ≤ 8, held-out rows ≤ 2, up to 6
-   short probes, sessions ⊆ the root model's own public sessions (default all of them). One run
-   at a time; a second start is refused while one runs.
-3. The playground's Sleep form on the shared demo offers exactly that set with the gate's
-   defaults, and only the root model.
-4. The store is ephemeral; children vanish on a Space restart.
-5. Release path: publish the chat checkpoint under `text-chat/` of the model repo, pin its
-   revision and digest in `TTT_CHAT`, build with `PUBLIC_MODEL=ttt`, push. `active_spec()` refuses
-   to build or boot an unpinned spec.
-6. Hardware: `cpu-basic` (2 vCPU) cannot host this honestly: a local anchor run mirroring it
-   spent over 11 minutes in the "before" measurement alone (92 s for the whole run on MPS).
-   David approved GPU hardware (2026-09-23); the image is CUDA-capable (46d0a06). The hardware
-   change itself needs a token or a settings click this machine's token does not have.
+on neutral ones (ratios 1.00 to 1.07). This gives a small comparison for later boundary-content measurements; it does not
+establish how a calibrated policy will treat either group. Eight prompts per group is a smoke test, not a study.
 
 ### 2026-09-23, step-50 SFT checkpoint: matched-controls dry run (null baseline)
 
-`scripts/experiments/sleep_controls.py`, MPS, 10 steps, target `w0`, seq 256, batch 2, 8 replay
+[Outputs](results/sleep-2026-09-23/sleep_controls_step50/sleep_controls.json).
+`sleep_controls`, MPS, 10 steps, target `w0`, seq 256, batch 2, 8 replay
 rows, 4 held-out rows, greedy 24-token probes, 27 minutes. Verbatim recalled / n, p = paraphrase.
 
 | Arm | taught | boundary | rolled (contamination) | general (locality) | held-out NLL | status |
 | --- | --- | --- | --- | --- | --- | --- |
 | floor (parent, fresh session) | 0/6 (p 0/6) | 0/2 | 0/2 | 1/5 (p 1/5) | | |
-| ceiling (parent, teaching turns in session) | 5/6 (p 4–5/6) | 0/2 | | | | |
+| ceiling (parent, teaching turns in session) | 5/6 (p 5/6) | 0/2 | | | | |
 | anchor λ 0.5 | 0/6 (p 1/6) | 0/2 | 0/2 | 1/5 | 1.766 → 1.766 | accepted |
 | replay, w0 | 0/6 (p 0/6) | 0/2 | 0/2 | 2/5 | 1.766 → 1.615 | accepted |
 | distill, w0 | 0/6 (p 0/6) | 0/2 | 0/2 | 1/5 | 1.766 → 1.627 | accepted |
 | ungated replay, w0 | 0/6 (p 0/6) | 0/2 | 0/2 | 2/5 | 1.766 → 1.620 | accepted |
 
-Reading. The model uses its session (ceiling 5/6) but nothing any method wrote to `W0` in 10
-steps survived a reset. After replay the fresh-session replies take the *form* of an answer
-("Your cat is called 'Pinkie'", "Your sister's name is 'Mary'") without the content: the small
-update taught the response pattern, not the facts. The held-out NLL drops under replay, distill
-and ungated are the SFT replay corpus continuing to train a half-trained checkpoint, which is
-why the locality gate passed; they are not consolidation evidence. Rolled-back facts stayed at
-the floor in every arm including ungated, so at this scale the experiment cannot yet separate
-gated from ungated: nothing was retained either way. Boundary probes scored 0/2 even in context
-because their expected strings were too specific; they now expect the distinguishing token.
+Reading. The model uses its session (ceiling 5/6), but no method improved verbatim
+taught-fact recall after a reset in this 10-step run. Replies such as "Your cat is
+called 'Pinkie'" have the answer format without the taught content. Falling NLL
+coincides with continued SFT replay, so it does not isolate consolidation.
+Rolled-back recall stayed at the floor even for ungated replay; with no useful
+retention, the run does not establish a protective advantage from filtering.
+Boundary probes scored 0/2 even in context. Later runs shortened their expected
+answer strings, so those scores are not directly comparable across versions.
 
-This is the null baseline. The chat checkpoint run sweeps steps {10, 40} × target {w0, all} for
-replay and distill with anchor as the control; only a taught-recall gain above the floor with
-rolled-back recall still at the floor and locality within tolerance counts as consolidation.
+This is a null baseline for these settings. Later experiments below vary steps, target,
+loss masks and study data; none should be treated as a rerun of an unchanged method.
 
 ### 2026-09-23, step-100 SFT checkpoint: the perplexity gate passed a collapsed model
 
+[Outputs](results/sleep-2026-09-23/sleep_controls_step100_all40/sleep_controls.json).
 `sleep_controls` with 40 steps on **all** parameters (lr 5e-5), floor / replay / ungated arms:
 
 | Arm | taught | boundary | rolled | general | held-out NLL | gate |
@@ -267,62 +269,24 @@ rolled-back recall still at the floor and locality within tolerance counts as co
 | replay, all × 40 | 1/6 (p 1/6) | 0/2 | 0/2 | 2/5 (p 2/5) | 1.683 → 1.629 | passed |
 | ungated replay, all × 40 | 1/6 (p 1/6) | 0/2 | 0/2 | 3/5 (p 2/5) | 1.683 → 1.628 | passed |
 
-The 1/6 is not recall. After replay, 6 of 15 fresh-session answers were the same sentence
-("A pleasure to meet you, Marlowe. I'm proud to meet you…") regardless of the question; the cat
-probe "hit" because that sentence contains the name. Session-turn loss fell to 0.02 while the
-held-out NLL still improved (the replay half of each batch keeps training a step-100 model), so
-the perplexity-only locality gate passed a run that visibly damaged the model. This is the failure
-mode Song et al. (2607.00368) describe, reproduced on our own gate. Distinct replies: 15/15
-before, 10/15 after.
+The 1/6 hit in each arm comes from a repeated sentence containing the cat's name.
+In the archived verbatim replies, replay repeats "A pleasure to meet you, Marlowe.
+I'm proud to meet you…" on 7/15 questions and has 8/15 distinct replies. Ungated
+replay repeats its "I'm glad to meet you…" variant on 6/15 questions and has 10/15
+distinct replies. The parent has 15/15 distinct replies. Session-turn loss fell to
+0.02 while held-out NLL improved; the loss-only gate missed this behavioral damage.
 
-Consequence, implemented the same day: recall reports carry `distinct_ratio` (distinct normalized
-12-word reply prefixes over probes), the gate gains `reply_distinct_ratio` (fails when the ratio
-drops below `tolerance_collapse` = 0.5 unless it was already below or improved), and the result
-card shows the before/after percentage. Under this gate the run above is rejected. A perplexity
-drop is now necessary but not sufficient for acceptance.
-
-Standing result after two checkpoints (50, 100) and two configurations (w0 × 10, all × 40): no
-sleep method has retained a taught fact across a reset without collapse, and gated versus ungated
-cannot be separated because nothing was retained either way. The falsifier in this note is live.
-
-**Correction (same day, after ASTRA-167).** The paragraph above overstated the first fix. The
-"10 of 15" count was over verbatim replies with a 40-character key; the gate measured distinct
-prefixes over all 30 replies (verbatim and paraphrase), which gave 0.467 for the replay run
-(rejected) but 0.600 for the ungated run, which the distinct-ratio rule would have passed although
-one sentence answered 13 of its 30 probes. The collapse metric is therefore the **largest
-identical-reply cluster share** (`max_cluster_share`), and the check `reply_cluster_share` fails
-when it exceeds `tolerance_collapse` = 0.25 after sleep unless it already did before. Replaying
-the saved reply lists of both runs through the released code: before 0.03 / 0.03, after 0.47 /
-0.43, both rejected, both baselines pass; those lists are a test fixture
-(`tests/fixtures/sleep_step100_all40_replies.json`). The claim "under this gate the run above is
-rejected" is true of the cluster-share gate, and only of it.
-
-## Evidence from outside the paper trail (2026-09-23)
-
-A targeted search of GitHub issues, Hugging Face discussion tabs, Hacker News, Reddit, X and
-arXiv, requested by David and compiled in
-[the community research note](2026-09-23-sleep-community-research.md), changes the plan:
-
-- Nobody has consolidated TTT-layer fast weights across sessions; every TTT variant resets at
-  document boundaries, and the strongest TTT paper's own issue tracker reports weak exact recall
-  even within a session once the fact leaves the attention window. Our null result is not an
-  outlier.
-- The Titans "Facts as First Class Objects" result (100% memorization, 0–40% free-form recall) and
-  the SR-TTT post-mortem name the failure we see: storage without access. Storage must be measured
-  separately from recall (answer log-probability lift under a fixed probe).
-- Fine-tuning on the raw statement is the known-bad recipe. Every recipe that works augments each
-  fact into a study set of paraphrases, QA pairs and implications (9.7% → 96.6% in Physics of LMs;
-  1% → 46% retention in 2607.11020), uses a frozen teacher for distillation on generated text at
-  lr ~3e-6, keeps full-parameter learning rates at or below 5e-6, and tracks unique-answer count
-  as the collapse signature. Our runs used raw turns, lr 1e-4, and no augmentation.
-
-Changes adopted: storage-versus-access reporting; a fractional prompt-loss weight instead of the
-all-or-nothing switch; a templated study set for the experiment's facts (the product path needs
-the chat checkpoint to self-generate them, as Cartridges' self-study does); learning-rate range
-extended down to 3e-6; a frozen-teacher, generated-text variant of `distill` next.
+The current gate checks the **largest identical-reply cluster share**, rather
+than the original distinct-reply ratio. Recomputing it from the saved replies gives
+0.033 before and 0.467 / 0.433 after for replay / ungated. Both fail the 0.25 limit;
+the original recorded `accepted` statuses are left intact in the archived reports.
+The [saved-reply regression fixture](../../tests/fixtures/sleep_step100_all40_replies.json)
+covers this failure. This demonstrates rejection of these cases, not general
+collapse detection. The earlier distinct-ratio rule missed the ungated case.
 
 ### 2026-09-23, step-100 checkpoint: regime sweep of replay on raw turns (W0, user tokens supervised)
 
+[Outputs and configurations](results/sleep-2026-09-23/README.md).
 Five points, replay arm only, exact batch composition (batch 2 realizes 0.5, batch 5 realizes 0.8),
 cluster-share gate in force:
 
@@ -334,37 +298,44 @@ cluster-share gate in force:
 | 1e-4 | 20 | 0.8 | 0/6 | 0/2 | 1.683 → 1.476 | 0.03 | accepted |
 | 3e-5 | 40 | 0.8 | 0/6 | 0/2 | 1.683 → 1.482 | 0.03 | accepted |
 
-Reading. With 80% replay no point collapses and no point retains a fact; the held-out NLL drops are
-the SFT replay continuing to train a step-100 model. Together with the 40-step, 50%-replay runs
-that collapsed, this closes the raw-turn recipe on this checkpoint: there is no setting of
-learning rate, steps or replay share at which fine-tuning on the accepted turns as stated makes a
-fact retrievable in a fresh session without damage. That is the outcome the community evidence
-predicted for bare statements. The next measurement uses the study-set augmentation and the
-storage probe, so "stored but not retrievable" and "not stored" can be told apart.
+Reading. None of these five settings retained a taught fact. The four 80%-replay
+settings did not collapse under the cluster measure; earlier 40-step/50%-replay
+settings did. Since batch size also differs, this is not an isolated replay-ratio
+ablation. Falling held-out NLL coexists with zero recall. These results motivated
+study-set augmentation and likelihood measurements, without ruling out other
+raw-turn settings or identifying a storage/readout mechanism.
 
-**Bounds on the sweep reading (after ASTRA-173).** "There is no setting of learning rate, steps or
-replay share" above overstates a five-point sweep: the supported statement is that none of the
-tested settings retained a fact, on this checkpoint, with raw turns. Likewise the answer
-log-probability is a likelihood measurement; a rise without recall is consistent with a readout
-problem but does not by itself prove storage, and its absence does not prove capacity failure.
+### 2026-09-23, step-100 checkpoint: study-set augmentation and expected-answer likelihood
 
-### 2026-09-23, step-100 checkpoint: study-set augmentation, first storage-versus-access reading
-
+[Outputs](results/sleep-2026-09-23/study_step100_w0/sleep_controls.json).
 Each fact taught as six templated turns (48 accepted turns, 3,481 tokens), W0, lr 3e-5, 20 steps,
 80% replay (batch 5), prompt-loss weight 0.2:
 
 | Arm | taught | rolled | general | held-out NLL | answer log-prob (mean/token) | largest cluster | gate |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| floor | 0/6 | 0/2 | 0/5 | | −6.89 | 0.03 | |
+| parent (Sleep before) | 0/6 | 0/2 | 0/5 | | −6.89 | 0.03 | |
 | replay | 0/6 | 0/2 | 1/5 | 1.683 → 1.529 | −6.89 → −6.05 | 0.03 | accepted |
 | distill | 0/6 | 0/2 | 1/5 | 1.683 → 1.576 | −6.89 → −6.04 | 0.07 | accepted |
 
-Reading. No collapse and no recall, with a modest rise in the likelihood of the expected answers
-(+0.84 nats/token on average, both arms), which is consistent with some storage and no access but
-does not establish either on its own. Two confounds are visible in the run itself: the step-100
-model's replies to the teaching turns were themselves degenerate ("I'm sorry to interrupt…"), so
-the accepted turns carried the facts only in the user text; and the prompt-loss weight of 0.2,
-taken from a setting where completions carry the target, down-weighted exactly that text here.
-A rerun with the user text at full weight follows. The wrong answers are confident and stable
-("Pinkie Pie", "San Francisco", "Buddy") across arms: the model has priors for these questions
-that a 20-step W0 update on 6 facts did not move.
+Reading. Taught recall remained zero, cluster share stayed low and expected-answer
+likelihood rose by about 0.84 nats/token. The mean covers all verbatim probe groups,
+not just the six taught facts. This does not establish storage or explain missing
+recall. The model's generated teaching replies were often degenerate, while the
+facts were supplied in the user text; a prompt-loss weight of 0.2 down-weighted
+that text for replay. This weight does not change distill's KL objective.
+A full-user-weight replay comparison is a separate experiment. Wrong answers such
+as "Pinkie Pie", "San Francisco" and "Buddy" persisted across these arms.
+
+### 2026-09-23, step-100 checkpoint: predecessor Dream method
+
+[Outputs](results/sleep-2026-09-23/dream_step100_w0/sleep_controls.json), associated
+with source `3828ac6` (execution SHA not captured), before the teacher/rendering fixes and fact-conditioned prompts. Fifteen
+free-form dreams repeated the model's greeting; fourteen were removed as duplicates
+and one trained the student. Taught recall was 0/6, held-out NLL 1.683 → 1.582, and
+the run passed its locality gate. The positive likelihood gap selected a repeated
+response pattern rather than demonstrating useful fact transfer.
+
+That run motivates the current conditioned method but does not evaluate it. The
+current method also fixes teacher isolation for all-parameter updates, aligns
+teacher/student reply tokens and explicitly rejects over-length items. New results
+belong with the exact method version and outputs in the results archive.
