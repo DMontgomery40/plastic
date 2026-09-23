@@ -320,3 +320,24 @@ Changes adopted: storage-versus-access reporting; a fractional prompt-loss weigh
 all-or-nothing switch; a templated study set for the experiment's facts (the product path needs
 the chat checkpoint to self-generate them, as Cartridges' self-study does); learning-rate range
 extended down to 3e-6; a frozen-teacher, generated-text variant of `distill` next.
+
+### 2026-09-23, step-100 checkpoint: regime sweep of replay on raw turns (W0, user tokens supervised)
+
+Five points, replay arm only, exact batch composition (batch 2 realizes 0.5, batch 5 realizes 0.8),
+cluster-share gate in force:
+
+| lr | steps | replay share | taught | rolled | held-out NLL | largest reply cluster | gate |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 3e-5 | 10 | 0.5 | 0/6 | 0/2 | 1.683 → 1.632 | 0.03 | accepted |
+| 3e-5 | 20 | 0.8 | 0/6 | 0/2 | 1.683 → 1.541 | 0.07 | accepted |
+| 1e-4 | 10 | 0.8 | 0/6 | 0/2 | 1.683 → 1.500 | 0.03 | accepted |
+| 1e-4 | 20 | 0.8 | 0/6 | 0/2 | 1.683 → 1.476 | 0.03 | accepted |
+| 3e-5 | 40 | 0.8 | 0/6 | 0/2 | 1.683 → 1.482 | 0.03 | accepted |
+
+Reading. With 80% replay no point collapses and no point retains a fact; the held-out NLL drops are
+the SFT replay continuing to train a step-100 model. Together with the 40-step, 50%-replay runs
+that collapsed, this closes the raw-turn recipe on this checkpoint: there is no setting of
+learning rate, steps or replay share at which fine-tuning on the accepted turns as stated makes a
+fact retrievable in a fresh session without damage. That is the outcome the community evidence
+predicted for bare statements. The next measurement uses the study-set augmentation and the
+storage probe, so "stored but not retrievable" and "not stored" can be told apart.
