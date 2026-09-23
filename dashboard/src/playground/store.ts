@@ -105,7 +105,10 @@ export const useStore = create<PlaygroundState>((set, get) => ({
       set({ health, models, sessions, healthChecked: true, stale: false, error: null });
       const text = sessions.filter((s) => s.domain === 'text');
       const current = get().currentSessionId;
-      const pick = current && text.some((s) => s.session_id === current) ? current : text[0]?.session_id ?? null;
+      // open the catalog's first model (the pinned public model comes first), not whichever session sorts first
+      const firstModel = models.find((m) => text.some((s) => s.model_id === m.model_id))?.model_id;
+      const opening = text.find((s) => s.model_id === firstModel) ?? text[0];
+      const pick = current && text.some((s) => s.session_id === current) ? current : opening?.session_id ?? null;
       await get().selectSession(pick);
     } catch (err) {
       set({ healthChecked: true, stale: true, error: message(err) });
