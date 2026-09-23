@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { clearObservatoryCache } from './data';
 import { ObservatoryScreen } from './ObservatoryScreen';
 import { exportFetch, readExport } from './testData';
-import type { ObservatoryIndex } from './types';
+import type { ObservatoryIndex, Run, SleepArm } from './types';
 
 beforeEach(() => {
   clearObservatoryCache();
@@ -17,6 +17,67 @@ afterEach(() => {
 });
 
 describe('Sleep observatory: runs', () => {
+  it.each(['runs', 'anatomy'])('summarizes the saved seed-2 Dream removals in %s', async (view) => {
+    window.history.replaceState(null, '', `/#sleep/${view}/final_step250_seed2_include/dream`);
+    render(<ObservatoryScreen />);
+    const dreams = (await screen.findByText('Dreams', { exact: true })).parentElement!;
+    expect(dreams.textContent).toContain('180 generated');
+    expect(dreams.textContent).toContain('24 kept');
+    expect(dreams.textContent).toContain('144 duplicates');
+    expect(dreams.textContent).toContain('12 over the cap');
+    expect(dreams.textContent).not.toMatch(/over cap 24|\(gain |removed as/);
+    expect(dreams.textContent).toContain('The Moon is larger than the Earth.');
+  });
+
+  it.each(['runs', 'anatomy'])('groups numeric removal reasons without losing counts in %s', async (view) => {
+    const id = 'final_step250_seed2_include';
+    const run = readExport<Run>(`runs/${id}.json`);
+    const dream = run.arms.find((arm) => arm.arm === 'dream') as SleepArm;
+    dream.dreams!.rejected_reasons = {
+      duplicate: 1,
+      degenerate: 2,
+      'gain -0.120 < 0.2': 3,
+      'gain nan < 0.8': 1,
+      low_gain: 2,
+      'over cap 8 (gain 0.312)': 2,
+      'over cap 64 (gain 1.792)': 3,
+      'too long for seq_len 64 (student 80, teacher 90 tokens)': 2,
+      'too long for seq_len 128 (student 130, teacher 160 tokens)': 1,
+      'new filter with diagnostic value 123.456': 2,
+      'another internal detail': 1,
+      too_long: 0,
+    };
+    vi.stubGlobal('fetch', vi.fn((url: string | URL | Request) =>
+      String(url).endsWith(`/runs/${id}.json`)
+        ? Promise.resolve(new Response(JSON.stringify(run), { status: 200 }))
+        : exportFetch(url)
+    ));
+    window.history.replaceState(null, '', `/#sleep/${view}/${id}/dream`);
+    render(<ObservatoryScreen />);
+    const dreams = (await screen.findByText('Dreams', { exact: true })).parentElement!;
+    for (const summary of ['1 duplicate', '2 too short or repetitive', '6 failed the gain check', '5 over the cap', '3 too long', '3 other removals']) {
+      expect(dreams.textContent).toContain(summary);
+    }
+    expect(dreams.textContent).not.toMatch(/seq_len|gain nan|123\.456|internal detail|0 too long/);
+  });
+
+  it.each(['runs', 'anatomy'])('keeps an empty removal summary clean in %s', async (view) => {
+    const id = 'final_step250_seed2_include';
+    const run = readExport<Run>(`runs/${id}.json`);
+    (run.arms.find((arm) => arm.arm === 'dream') as SleepArm).dreams!.rejected_reasons = {};
+    vi.stubGlobal('fetch', vi.fn((url: string | URL | Request) =>
+      String(url).endsWith(`/runs/${id}.json`)
+        ? Promise.resolve(new Response(JSON.stringify(run), { status: 200 }))
+        : exportFetch(url)
+    ));
+    window.history.replaceState(null, '', `/#sleep/${view}/${id}/dream`);
+    render(<ObservatoryScreen />);
+    const dreams = (await screen.findByText('Dreams', { exact: true })).parentElement!;
+    expect(dreams.textContent).toContain('24 kept');
+    expect(dreams.textContent).not.toContain('other removals');
+    if (view === 'anatomy') expect(dreams.textContent).toContain('none removed');
+  });
+
   it('preserves a historical pulled-back arm: no child, the failed check and its value', async () => {
     window.history.replaceState(null, '', '/#sleep/runs/final_step250_seed0_exclude/dream');
     render(<ObservatoryScreen />);
