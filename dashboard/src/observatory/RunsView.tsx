@@ -30,7 +30,7 @@ interface Props {
 
 /** The run shown when none is chosen: the most recent run that consolidated anything. */
 export function defaultRunId(index: ObservatoryIndex): string | null {
-  const withSleep = index.runs.filter((r) => r.arms.some((a) => a.status !== null));
+  const withSleep = index.runs.filter((r) => r.arms.some((a) => a.method !== null));
   return (withSleep[withSleep.length - 1] ?? index.runs[index.runs.length - 1])?.id ?? null;
 }
 
@@ -59,7 +59,7 @@ function RunList({ index, active, onSelect }: { index: ObservatoryIndex; active:
           <Label>{g.label}</Label>
           <ul className="mt-1.5 space-y-1">
             {g.runs.map((r) => {
-              const sleepArms = r.arms.filter((a) => a.status !== null);
+              const sleepArms = r.arms.filter((a) => a.method !== null);
               const selected = r.id === active;
               return (
                 <li key={r.id}>
@@ -76,8 +76,8 @@ function RunList({ index, active, onSelect }: { index: ObservatoryIndex; active:
                     <div className="mt-1.5 flex flex-wrap gap-x-2.5 gap-y-1">
                       {sleepArms.length === 0 ? <span className="text-micro text-ink-muted">controls only</span> : null}
                       {sleepArms.map((a) => (
-                        <span key={a.arm} className="inline-flex items-center gap-1 text-micro font-semibold text-ink-secondary" title={`${ARM_LABEL[a.arm]}: ${a.status}`}>
-                          <OutcomeGlyph outcome={a.status === 'rejected' ? 'pulled back' : 'committed'} size={11} />
+                        <span key={a.arm} className="inline-flex items-center gap-1 text-micro font-semibold text-ink-secondary" title={`${ARM_LABEL[a.arm]}: ${a.status ?? 'unknown'}`}>
+                          <OutcomeGlyph outcome={a.status === null ? 'unknown' : a.status === 'rejected' ? 'pulled back' : 'committed'} size={11} />
                           {a.arm}
                         </span>
                       ))}
@@ -303,11 +303,13 @@ function Lineage({ run, arm }: { run: Run; arm: SleepArm }) {
       </span>
       {out === 'committed' ? (
         <span className="rounded border border-status-commit bg-surface-overlay px-2.5 py-1 font-mono text-ink-primary">child {arm.lineage.child}</span>
-      ) : (
+      ) : out === 'pulled back' ? (
         <span className="rounded border border-dashed border-status-rollback bg-surface-overlay px-2.5 py-1 text-ink-primary">no child</span>
+      ) : (
+        <span className="rounded border border-edge-strong bg-surface-overlay px-2.5 py-1 text-ink-secondary">outcome unknown</span>
       )}
       <span className="basis-full text-xs text-ink-muted">
-        {out === 'committed' ? 'Registered in the run’s experiment store; not published.' : 'Pulled back: the child was discarded and the parent is unchanged.'}
+        {out === 'committed' ? 'Registered in the run’s experiment store; not published.' : out === 'pulled back' ? 'Pulled back: the child was discarded and the parent is unchanged.' : ''}
         {run.checkpoint.digest_prefix ? ` Parent checkpoint ${run.checkpoint.digest_prefix}.` : ''}
       </span>
     </div>
@@ -435,8 +437,10 @@ export function RunsView({ index, runId, arm, onSelect }: Props) {
   const { data: run, error } = useAsync(id ? () => loadRun(id) : null, [id]);
   const activeArm = run ? (arm && run.arms.some((a) => a.arm === arm) ? arm : defaultArm(run)) : null;
   const selected = run?.arms.find((a) => a.arm === activeArm) ?? null;
-  const sleepArms = index.runs.flatMap((r) => r.arms.filter((a) => a.status !== null));
-  const committed = sleepArms.filter((a) => a.status !== 'rejected').length;
+  const sleepArms = index.runs.flatMap((r) => r.arms.filter((a) => a.method !== null));
+  const committed = sleepArms.filter((a) => a.status === 'accepted' || a.status === 'accepted_unmeasured').length;
+  const pulledBack = sleepArms.filter((a) => a.status === 'rejected').length;
+  const unknown = sleepArms.filter((a) => a.status === null).length;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -447,15 +451,16 @@ export function RunsView({ index, runId, arm, onSelect }: Props) {
         <div className="rounded-lg border border-edge bg-surface-raised px-4 py-3">
           <Label>Consolidation attempts</Label>
           <Big>{sleepArms.length}</Big>
+          {unknown > 0 ? <div className="text-micro text-ink-muted">{unknown} outcome{unknown === 1 ? '' : 's'} not recorded</div> : null}
         </div>
         <div className="rounded-lg border border-edge bg-surface-raised px-4 py-3">
           <Label>Committed a child</Label>
           <Big>{committed}</Big>
-          <div className="text-micro text-ink-muted">locality checks passed; not a recall gain</div>
+          <div className="text-micro text-ink-muted">candidate retained</div>
         </div>
         <div className="rounded-lg border border-edge bg-surface-raised px-4 py-3">
           <Label>Pulled back by the gate</Label>
-          <Big>{sleepArms.length - committed}</Big>
+          <Big>{pulledBack}</Big>
           <div className="text-micro text-ink-muted">a locality check failed</div>
         </div>
       </div>

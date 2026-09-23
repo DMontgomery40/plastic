@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { clearObservatoryCache } from './data';
 import { ObservatoryScreen } from './ObservatoryScreen';
-import { exportFetch } from './testData';
+import { exportFetch, readExport } from './testData';
+import type { ObservatoryIndex } from './types';
 
 beforeEach(() => {
   clearObservatoryCache();
@@ -16,7 +17,8 @@ afterEach(() => {
 });
 
 describe('Sleep observatory: runs', () => {
-  it('opens on the latest run with a pulled-back arm: no child, the failed check and its value', async () => {
+  it('preserves a historical pulled-back arm: no child, the failed check and its value', async () => {
+    window.history.replaceState(null, '', '/#sleep/runs/final_step250_seed0_exclude/dream');
     render(<ObservatoryScreen />);
     await screen.findByRole('heading', { name: 'final_step250_seed0_exclude' });
     const armPanel = (await screen.findByText('locality gate failed')).closest('section')!;
@@ -25,6 +27,31 @@ describe('Sleep observatory: runs', () => {
     expect(within(armPanel).getByRole('img', { name: /largest identical-reply share: value 0\.308, limit 0\.250, failed/ })).toBeTruthy();
     expect(within(armPanel).getByText('selected')).toBeTruthy();
     expect(screen.queryByText(/Illustrative/)).toBeNull(); // synthetic numbers never appear in the archive view
+  });
+
+  it.each([
+    { ids: ['sleep_controls_step50', 'final_step250_seed0_exclude'], run: 'final_step250_seed0_exclude', arm: 'Dream' },
+    { ids: ['final_step250_seed0_exclude', 'final_step250_seed0_include'], run: 'final_step250_seed0_include', arm: 'Dream' },
+    { ids: ['final_step250_seed0_exclude', 'final_step250_seed0_ceiling_single'], run: 'final_step250_seed0_exclude', arm: 'Dream' },
+    { ids: ['sleep_controls_step50', 'study_step100_w0'], run: 'study_step100_w0', arm: 'Replay' },
+    { ids: ['final_step250_seed0_ceiling_single'], run: 'final_step250_seed0_ceiling_single', arm: 'Ceiling' },
+  ])('opens $run / $arm for archive $ids', async ({ ids, run, arm }) => {
+    // Keep these archive transitions stable when more real runs are published.
+    // Choosing an older run, a newer control over a sleep run, or the wrong arm must fail.
+    const index = readExport<ObservatoryIndex>('index.json');
+    const runs = ids.map((id) => {
+      const entry = index.runs.find((r) => r.id === id);
+      if (!entry) throw new Error(`missing archived fixture ${id}`);
+      return entry;
+    });
+    vi.stubGlobal('fetch', vi.fn((url: string | URL | Request) =>
+      String(url).endsWith('/index.json')
+        ? Promise.resolve(new Response(JSON.stringify({ ...index, runs }), { status: 200 }))
+        : exportFetch(url)
+    ));
+    render(<ObservatoryScreen />);
+    expect(await screen.findByRole('heading', { name: run })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: arm })).toBeTruthy();
   });
 
   it('shows a later rule as not in force on a run that predates it, and keeps the recorded outcome', async () => {

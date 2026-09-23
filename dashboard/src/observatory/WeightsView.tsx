@@ -111,7 +111,7 @@ function DreamGains({ dream, index }: { dream: DreamKept; index: number }) {
 }
 
 function WithinOneSleep({ index, runId, arm, onSelect }: Props) {
-  const runs = index.runs.filter((r) => r.arms.some((a) => a.status !== null)).slice().reverse();
+  const runs = index.runs.filter((r) => r.arms.some((a) => a.method !== null)).slice().reverse();
   const id = runId && runs.some((r) => r.id === runId) ? runId : defaultRunId(index);
   const entry = index.runs.find((r) => r.id === id);
   const { data } = useAsync<{ run: Run; trajectory: Trajectory | null }>(
@@ -165,7 +165,7 @@ function WithinOneSleep({ index, runId, arm, onSelect }: Props) {
                 chosen?.arm === a.arm ? 'border-accent bg-accent-soft text-accent' : 'border-edge-strong bg-surface-overlay text-ink-secondary hover:text-ink-primary'
               }`}
             >
-              <OutcomeGlyph outcome={a.lineage.outcome === 'pulled back' ? 'pulled back' : 'committed'} size={12} />
+              <OutcomeGlyph outcome={a.lineage.outcome} size={12} />
               {ARM_LABEL[a.arm]}
             </button>
           ))}
@@ -279,9 +279,9 @@ function AcrossRuns({ index, onPick }: { index: ObservatoryIndex; onPick: (run: 
                     </td>
                     <td className="px-2 py-1.5 text-right font-mono text-ink-primary">{taught ? ratio(taught) : arm.recall.totals_after ? `${arm.recall.totals_after.recalled}/${arm.recall.totals_after.n_probes} all` : 'n/a'}</td>
                     <td className="px-2 py-1.5">
-                      <span className={`inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold ${out === 'committed' ? 'text-status-commit' : 'text-status-rollback'}`}>
-                        <OutcomeGlyph outcome={out === 'committed' ? 'committed' : 'pulled back'} size={12} />
-                        {out === 'committed' ? 'committed' : 'pulled back'}
+                      <span className={`inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold ${out === 'committed' ? 'text-status-commit' : out === 'pulled back' ? 'text-status-rollback' : 'text-ink-secondary'}`}>
+                        <OutcomeGlyph outcome={out} size={12} />
+                        {out}
                       </span>
                       {out === 'pulled back' ? (
                         <span className="block text-micro text-ink-muted">{arm.gate?.checks.filter((c) => c.in_force && c.passed === false).map((c) => c.label).join(', ') || arm.reason}</span>

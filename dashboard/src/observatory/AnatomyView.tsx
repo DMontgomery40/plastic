@@ -226,7 +226,9 @@ function AnatomyStages({ m }: { m: AnatomyModel }) {
         lead={
           m.outcome.outcome === 'committed'
             ? 'The child is registered with a pointer to its parent. The parent never changes.'
-            : 'The candidate is discarded. The parent is unchanged, as if the sleep had not happened.'
+            : m.outcome.outcome === 'pulled back'
+              ? 'The candidate is discarded. The parent is unchanged, as if the sleep had not happened.'
+              : 'Outcome not recorded.'
         }
       >
         <div className="space-y-4">
@@ -237,9 +239,13 @@ function AnatomyStages({ m }: { m: AnatomyModel }) {
               <span className="inline-flex items-center gap-2 rounded border-2 border-status-commit bg-surface-overlay px-3 py-1.5 font-mono text-sm text-ink-primary">
                 <OutcomeGlyph outcome="committed" /> {m.outcome.child}
               </span>
-            ) : (
+            ) : m.outcome.outcome === 'pulled back' ? (
               <span className="inline-flex items-center gap-2 rounded border-2 border-dashed border-status-rollback bg-surface-overlay px-3 py-1.5 text-sm text-ink-primary">
                 <OutcomeGlyph outcome="pulled back" /> no child
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-2 rounded border border-edge-strong bg-surface-overlay px-3 py-1.5 text-sm text-ink-secondary">
+                <OutcomeGlyph outcome="unknown" /> outcome unknown
               </span>
             )}
             <OutcomeBadge outcome={m.outcome.outcome === 'unknown' ? 'unknown' : m.outcome.outcome} />
@@ -260,7 +266,7 @@ function AnatomyStages({ m }: { m: AnatomyModel }) {
 }
 
 function sleepRuns(index: ObservatoryIndex) {
-  return index.runs.filter((r) => r.arms.some((a) => a.status !== null)).slice().reverse();
+  return index.runs.filter((r) => r.arms.some((a) => a.method !== null)).slice().reverse();
 }
 
 export function AnatomyView({ index, runId, arm, onSelect }: Props) {
@@ -327,7 +333,7 @@ export function AnatomyView({ index, runId, arm, onSelect }: Props) {
                       chosen?.arm === a.arm ? 'border-accent bg-accent-soft text-accent' : 'border-edge-strong bg-surface-overlay text-ink-secondary hover:text-ink-primary'
                     }`}
                   >
-                    <OutcomeGlyph outcome={a.lineage.outcome === 'pulled back' ? 'pulled back' : 'committed'} size={12} />
+                    <OutcomeGlyph outcome={a.lineage.outcome} size={12} />
                     {ARM_LABEL[a.arm]}
                   </button>
                 ))}
