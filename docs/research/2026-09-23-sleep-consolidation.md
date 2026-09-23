@@ -57,6 +57,23 @@ supported for anchor or distill. These options are experiment settings, not meas
 evidence that the filtering protects consolidation. Historical results below
 predate this default exclusion rule.
 
+**Measured consequence in an uncalibrated observational session (2026-09-23, final
+checkpoint, seed 0).** The experiment's teaching session runs log-only without a
+calibration, so the policy's `would_rollback` reasons come from the runner's own
+running statistics. Of 30 teaching turns, 29 were flagged: one chunk per turn, the
+chunk in which the new fact arrives, crossed the chunk-loss and surprise z-thresholds.
+Under `exclude` the gated arms therefore trained on one turn, and their null result
+measured the consolidation of one turn, not of the taught facts. This is the tension
+the [importance proposal](2026-09-23-importance-weighting-proposal.md) names: importance by
+surprise is highest for new facts, so a rule that excludes surprising turns excludes
+the facts. The experiment script now takes `--flagged-policy` (default `include`, so
+every harness-accepted turn is consolidated and the product rule is a comparison arm)
+and every result table states how many turns each arm consumed. The hosted demo runs
+in the same observational mode, so under the shipped default a chat that teaches new
+facts contributes little to Sleep; whether the hosted default should stay `exclude`
+or become `include` with the post-sleep gate as the only guard is an open decision,
+recorded here and not changed in the interface.
+
 This does not remove every influence of rejected content. Frozen replay still
 advances activation and convolution state, which can affect subsequent accepted
 updates. A mixed session's final committed state can also contain writes from
