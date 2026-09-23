@@ -184,9 +184,21 @@ def ceiling_statements(taught_facts: list, probe, mode: str) -> list:
     return own
 
 
+def turns_cell(harvest: dict | None) -> str:
+    """How many turns an arm actually trained on: harness-accepted turns, how many of those the observational policy
+    flagged, and how many the arm's flagged policy excluded. In an uncalibrated observational session the exclude rule
+    removes most new-fact turns (FABLE-158), so a table without this column can misreport a null result."""
+    if not harvest:
+        return "n/a"
+    accepted = sum(int(s.get("accepted_turns") or 0) for s in harvest.get("sessions", []))
+    return f"{accepted - int(harvest.get('flagged_excluded') or 0)} of {accepted} accepted ({harvest.get('accepted_turns_flagged', 0)} flagged, {harvest.get('flagged_excluded', 0)} excluded)"
+
+
 def arm_config(arm: str, args: argparse.Namespace) -> "SleepConfig":
-    """One sleep arm's configuration. The gated arms consume accepted turns and exclude flagged ones (the product
-    rule); ``ungated`` is the no-gate control: every turn, rolled-back and flagged alike (ASTRA-182 addendum)."""
+    """One sleep arm's configuration. The gated arms consume harness-accepted turns under ``--flagged-policy``: the
+    experiment default ``include`` consolidates every accepted turn (the question this protocol asks); ``exclude`` is
+    the product rule, which in an uncalibrated observational session removes most new-fact turns (FABLE-158).
+    ``ungated`` is the no-gate control: every turn, rolled-back and flagged alike (ASTRA-182 addendum)."""
     from plastic.sleep.ttt import SleepConfig
 
     ungated = arm == "ungated"
@@ -196,7 +208,7 @@ def arm_config(arm: str, args: argparse.Namespace) -> "SleepConfig":
                        dream_token_weighting=args.dream_token_weighting, replay_rows=args.replay_rows, heldout_rows=args.heldout_rows,
                        tolerance_nll=0.05, device=args.device, replay_revision=(args.replay_revision or None),
                        recall_max_new_tokens=args.max_new_tokens, seed=args.seed,
-                       provenance="all" if ungated else "accepted", flagged_policy="include" if ungated else "exclude")
+                       provenance="all" if ungated else "accepted", flagged_policy="include" if ungated else args.flagged_policy)
 
 
 def main() -> None:
@@ -223,6 +235,9 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--replay-revision", default=SMOLTALK_REVISION, help="HuggingFaceTB/smoltalk revision for replay and held-out rows (empty follows main)")
     ap.add_argument("--facts", type=int, default=24, help="how many of the taught facts to use (first N)")
+    ap.add_argument("--flagged-policy", default="include", choices=["include", "exclude", "downweight"],
+                    help="gated arms: consolidate every harness-accepted turn (include, the experiment default) or apply the product "
+                         "rule (exclude / downweight) to turns the observational policy flagged as would-have-intervened")
     ap.add_argument("--ceiling-mode", default="all", choices=["all", "single"],
                     help="ceiling arm: teach every fact before each probe (all, the protocol) or only the probed fact (single)")
     ap.add_argument("--poison", action="store_true", help="also teach the planted world-knowledge contradictions (uptake is measured)")
@@ -296,7 +311,7 @@ def main() -> None:
 
     results: dict[str, Any] = {"checkpoint": os.path.abspath(args.checkpoint), "checkpoint_digest": digest, "device": args.device,
                                "code_commit": _git_head(), "started_at_unix": int(t0),
-                               "steps": args.steps, "target": args.target, "lr": args.lr, "replay_ratio": args.replay_ratio, "batch_size": args.batch_size, "session_loss": args.session_loss, "prompt_loss_weight": args.prompt_loss_weight, "augment": args.augment, "teach_temperature": args.teach_temperature, "dream_temperature": args.dream_temperature, "replay_revision": (args.replay_revision or None), "ceiling_mode": args.ceiling_mode, "facts": len(FACTS_TAUGHT), "poison": bool(args.poison), "arms": {}}
+                               "steps": args.steps, "target": args.target, "lr": args.lr, "replay_ratio": args.replay_ratio, "batch_size": args.batch_size, "session_loss": args.session_loss, "prompt_loss_weight": args.prompt_loss_weight, "augment": args.augment, "teach_temperature": args.teach_temperature, "dream_temperature": args.dream_temperature, "replay_revision": (args.replay_revision or None), "ceiling_mode": args.ceiling_mode, "flagged_policy": args.flagged_policy, "facts": len(FACTS_TAUGHT), "poison": bool(args.poison), "arms": {}}
     arms = [a.strip() for a in args.arms.split(",") if a.strip()]
 
     # 2) floor: the parent from a fresh session (greedy recall and the expected-answer log-probability, like every sleep "before")
@@ -358,14 +373,15 @@ def main() -> None:
     results["seconds"] = round(time.time() - t0, 1)
     with open(os.path.join(args.out, "sleep_controls.json"), "w", encoding="utf-8") as f:
         json.dump(results, f, indent=1)
-    lines = ["| Arm | taught (p = unseen phrasing) | boundary | rolled (contamination) | poison (uptake) | general (locality) | held-out NLL mean → | status |", "| --- | --- | --- | --- | --- | --- | --- | --- |"]
+    lines = ["| Arm | turns consumed (accepted / flagged / excluded) | taught (p = unseen phrasing) | boundary | rolled (contamination) | poison (uptake) | general (locality) | held-out NLL mean → | status |",
+             "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for arm, e in results["arms"].items():
         bg = e.get("by_group") or {}
         cell = lambda g: f"{bg[g]['recalled']}/{bg[g]['n']} (p {bg[g]['recalled_paraphrase']}/{bg[g]['n_paraphrase']})" if g in bg else "n/a"
         nll = ""
         if e.get("heldout_nll_before") and e.get("heldout_nll_after"):
             nll = f"{e['heldout_nll_before']['mean']:.3f} → {e['heldout_nll_after']['mean']:.3f}"
-        lines.append(f"| {arm} | {cell('taught')} | {cell('boundary')} | {cell('rolled')} | {cell('poison')} | {cell('general')} | {nll} | {e.get('status', '')} |")
+        lines.append(f"| {arm} | {turns_cell(e.get('harvest'))} | {cell('taught')} | {cell('boundary')} | {cell('rolled')} | {cell('poison')} | {cell('general')} | {nll} | {e.get('status', '')} |")
     table = "\n".join(lines)
     with open(os.path.join(args.out, "sleep_controls.md"), "w", encoding="utf-8") as f:
         f.write(f"# Sleep with matched controls\n\nCode {results['code_commit']}, checkpoint `{digest[:12]}`, device {args.device}, {args.steps} steps, target {args.target}, lr {args.lr}, replay ratio {args.replay_ratio}, session loss {args.session_loss}, plw {args.prompt_loss_weight}, augment {args.augment}, {results['seconds']} s.\n\n{table}\n")

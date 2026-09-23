@@ -118,13 +118,15 @@ def test_arm_configs_gate_the_gated_arms_and_open_the_ungated_control():
 
     base = dict(target="w0", steps=5, lr=1e-4, seq_len=256, batch_size=2, replay_ratio=0.5, session_loss="all", prompt_loss_weight=1.0,
                 dream_temperature=0.7, dream_token_weighting="uniform", replay_rows=8, heldout_rows=4, device="cpu", max_new_tokens=16, seed=3,
-                replay_revision=SMOLTALK_REVISION)
+                replay_revision=SMOLTALK_REVISION, flagged_policy="include")
     args = argparse.Namespace(**base)
     for arm in ("anchor", "replay", "distill", "dream"):
         cfg = arm_config(arm, args)
         cfg.validate()
-        assert (cfg.method, cfg.provenance, cfg.flagged_policy, cfg.replay_revision) == (arm, "accepted", "exclude", SMOLTALK_REVISION)
-    cfg = arm_config("ungated", args)
+        assert (cfg.method, cfg.provenance, cfg.flagged_policy, cfg.replay_revision) == (arm, "accepted", "include", SMOLTALK_REVISION)
+    # the product rule as a comparison arm; the ungated control includes everything whatever the flag says
+    assert arm_config("replay", argparse.Namespace(**{**base, "flagged_policy": "exclude"})).flagged_policy == "exclude"
+    cfg = arm_config("ungated", argparse.Namespace(**{**base, "flagged_policy": "exclude"}))
     cfg.validate()
     assert (cfg.method, cfg.provenance, cfg.flagged_policy) == ("replay", "all", "include")
     assert arm_config("replay", argparse.Namespace(**{**base, "replay_revision": ""})).replay_revision is None
@@ -146,3 +148,14 @@ def test_ceiling_statements_teach_everything_or_only_the_probed_fact():
         ceiling_statements(facts, RecallProbe("Who?", "nobody"), "single")
     with pytest.raises(ValueError, match="unknown ceiling mode"):
         ceiling_statements(facts, probe, "some")
+
+
+def test_turns_cell_reports_what_an_arm_actually_trained_on():
+    """FABLE-158: 29 of 30 accepted turns flagged and excluded must read as one consumed turn, not as a 30-turn run."""
+    from scripts.experiments.sleep_controls import turns_cell
+
+    harvest = {"sessions": [{"session_id": "teach", "accepted_turns": 30}, {"session_id": "rolled", "accepted_turns": 0}],
+               "accepted_turns_flagged": 29, "flagged_excluded": 29}
+    assert turns_cell(harvest) == "1 of 30 accepted (29 flagged, 29 excluded)"
+    assert turns_cell({**harvest, "flagged_excluded": 0}) == "30 of 30 accepted (29 flagged, 0 excluded)"
+    assert turns_cell(None) == "n/a"
