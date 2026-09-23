@@ -55,11 +55,15 @@ async def _grade_async(rows: Iterable[dict[str, Any]], *, concurrency: int, clie
     rows = list(rows)
     out: list[dict[str, Any]] = [dict(r) for r in rows]
     sem = asyncio.Semaphore(concurrency)
-    factory = client_factory or (lambda: AsyncTypeSafeClient(retry=RetryPolicy(max_retries=4, backoff_max=2.0, timeout=30.0)))
+    factory = client_factory or (lambda: AsyncTypeSafeClient(timeout=60.0, retry=RetryPolicy(max_retries=5, timeout=60.0)))
     async with factory() as client:
         async def one(i: int, r: dict[str, Any]) -> None:
             async with sem:
-                resp = await client.system_one(state=grading_state(r["question"], r["expected"], r["reply"]), questions=grading_questions())
+                try:
+                    resp = await client.system_one(state=grading_state(r["question"], r["expected"], r["reply"]), questions=grading_questions())
+                except Exception as e:  # noqa: BLE001 - one failed row must not lose the batch; the row records the failure
+                    out[i].update({"jev_error": f"{type(e).__name__}: {e}"[:200], "jev_verdict": "error"})
+                    return
             a, c = float(resp.nouls["asserts"].noul), float(resp.nouls["contradicts"].noul)
             out[i].update({"jev_asserts": a, "jev_contradicts": c, "jev_verdict": verdict(a, c),
                            "jev_tokens": int(resp.usage.input_tokens) + int(resp.usage.output_tokens)})
@@ -67,20 +71,23 @@ async def _grade_async(rows: Iterable[dict[str, Any]], *, concurrency: int, clie
     return out
 
 
-def grade_results(rows: Iterable[dict[str, Any]], *, concurrency: int = 8, client_factory: Callable[[], Any] | None = None) -> list[dict[str, Any]]:
+def grade_results(rows: Iterable[dict[str, Any]], *, concurrency: int = 4, client_factory: Callable[[], Any] | None = None) -> list[dict[str, Any]]:
     """Grade recall result rows (``question``, ``expected``, ``reply``; extra keys are kept). Returns copies with
-    ``jev_asserts``, ``jev_contradicts`` (probabilities), ``jev_verdict`` and ``jev_tokens`` added."""
+    ``jev_asserts``, ``jev_contradicts`` (probabilities), ``jev_verdict`` and ``jev_tokens`` added; a row whose request
+    failed after retries carries ``jev_error`` and verdict ``error`` instead, so one failure never loses the batch."""
     return asyncio.run(_grade_async(rows, concurrency=concurrency, client_factory=client_factory))
 
 
 def compare_with_containment(graded: Iterable[dict[str, Any]], *, threshold: float = 0.5) -> dict[str, int]:
     """How the semantic grade relates to the containment hit on the same rows: agreements, containment hits Jev
     rejects (artifacts), and Jev assertions containment missed (paraphrased or reworded answers)."""
-    c = {"both_hit": 0, "both_miss": 0, "containment_only": 0, "jev_only": 0, "unclear": 0}
+    c = {"both_hit": 0, "both_miss": 0, "containment_only": 0, "jev_only": 0, "unclear": 0, "error": 0}
     for r in graded:
         hit = bool(r.get("contains"))
         v = r.get("jev_verdict")
-        if v == "unclear":
+        if v == "error":
+            c["error"] += 1
+        elif v == "unclear":
             c["unclear"] += 1
         elif v == "asserts" and hit:
             c["both_hit"] += 1

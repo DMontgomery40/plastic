@@ -23,7 +23,8 @@ def test_grading_state_names_the_fields_the_instructions_reference():
 def test_compare_with_containment_separates_artifacts_and_misses():
     rows = [{"contains": True, "jev_verdict": "asserts"}, {"contains": True, "jev_verdict": "contradicts"},
             {"contains": False, "jev_verdict": "asserts"}, {"contains": False, "jev_verdict": "neither"}, {"contains": True, "jev_verdict": "unclear"}]
-    assert compare_with_containment(rows) == {"both_hit": 1, "both_miss": 1, "containment_only": 1, "jev_only": 1, "unclear": 1}
+    assert compare_with_containment(rows) == {"both_hit": 1, "both_miss": 1, "containment_only": 1, "jev_only": 1, "unclear": 1, "error": 0}
+    assert compare_with_containment([{"contains": True, "jev_verdict": "error"}])["error"] == 1
 
 
 def test_grade_results_fans_out_and_keeps_extra_keys():
@@ -56,4 +57,19 @@ def test_grade_results_fans_out_and_keeps_extra_keys():
     assert out[0]["jev_verdict"] == "asserts" and out[1]["jev_verdict"] == "contradicts"
     assert out[0]["variant"] == "verbatim" and out[1]["jev_tokens"] == 330
     assert rows[0].get("jev_verdict") is None                     # inputs are not mutated
-    assert compare_with_containment(out) == {"both_hit": 1, "both_miss": 0, "containment_only": 1, "jev_only": 0, "unclear": 0}
+    assert compare_with_containment(out) == {"both_hit": 1, "both_miss": 0, "containment_only": 1, "jev_only": 0, "unclear": 0, "error": 0}
+
+
+def test_grade_results_records_a_failed_row_instead_of_losing_the_batch():
+    class Boom:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def system_one(self, state, questions):
+            raise TimeoutError("Request timed out (timeout=60.0)")
+
+    out = grade_results([{"question": "q", "expected": "e", "reply": "r", "contains": False}], client_factory=Boom)
+    assert out[0]["jev_verdict"] == "error" and out[0]["jev_error"].startswith("TimeoutError")
