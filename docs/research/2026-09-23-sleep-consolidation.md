@@ -296,3 +296,27 @@ the saved reply lists of both runs through the released code: before 0.03 / 0.03
 0.43, both rejected, both baselines pass; those lists are a test fixture
 (`tests/fixtures/sleep_step100_all40_replies.json`). The claim "under this gate the run above is
 rejected" is true of the cluster-share gate, and only of it.
+
+## Evidence from outside the paper trail (2026-09-23)
+
+A targeted search of GitHub issues, Hugging Face discussion tabs, Hacker News, Reddit, X and
+arXiv, requested by David and compiled in
+[the community research note](2026-09-23-sleep-community-research.md), changes the plan:
+
+- Nobody has consolidated TTT-layer fast weights across sessions; every TTT variant resets at
+  document boundaries, and the strongest TTT paper's own issue tracker reports weak exact recall
+  even within a session once the fact leaves the attention window. Our null result is not an
+  outlier.
+- The Titans "Facts as First Class Objects" result (100% memorization, 0–40% free-form recall) and
+  the SR-TTT post-mortem name the failure we see: storage without access. Storage must be measured
+  separately from recall (answer log-probability lift under a fixed probe).
+- Fine-tuning on the raw statement is the known-bad recipe. Every recipe that works augments each
+  fact into a study set of paraphrases, QA pairs and implications (9.7% → 96.6% in Physics of LMs;
+  1% → 46% retention in 2607.11020), uses a frozen teacher for distillation on generated text at
+  lr ~3e-6, keeps full-parameter learning rates at or below 5e-6, and tracks unique-answer count
+  as the collapse signature. Our runs used raw turns, lr 1e-4, and no augmentation.
+
+Changes adopted: storage-versus-access reporting; a fractional prompt-loss weight instead of the
+all-or-nothing switch; a templated study set for the experiment's facts (the product path needs
+the chat checkpoint to self-generate them, as Cartridges' self-study does); learning-rate range
+extended down to 3e-6; a frozen-teacher, generated-text variant of `distill` next.
