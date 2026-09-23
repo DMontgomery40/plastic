@@ -200,3 +200,22 @@ Reading: at this checkpoint the fast learner writes about as hard on boundary-wo
 on neutral ones (ratios 1.00 to 1.07). That is the expected behavior of a wording-blind learner
 and the baseline against which any later "boundary content writes harder / gets rolled back
 more" claim has to be measured. Eight prompts per group is a smoke test, not a study.
+
+## Hosted sleep on the Space (delivery requirement)
+
+A hidden Sleep control on the public Space is not a delivered feature. When the chat checkpoint
+replaces the public model, the release must include, in one step:
+
+1. `sleep: true` in the public capabilities and the public gate opened for `GET /api/sleep`,
+   `GET /api/sleep/{run}` and `POST /api/models/<public model>/sleep` with a validated body:
+   method `anchor` or `replay`, target `w0`, steps ≤ 10, seq_len ≤ 256, batch 1, replay rows ≤ 8,
+   held-out rows ≤ 2, probes ≤ 6, sessions ⊆ the public sessions; one sleep run at a time and none
+   while a chat is running (the demo's single CPU lock).
+2. The public catalog includes the public model's descendants (parent chain), and each accepted
+   child gets a demo session created automatically with the same observational controls, so the
+   journey is: chat and teach → Sleep → child appears → its session appears → ask again.
+3. The store is ephemeral; children vanish on a Space restart. The notice says so.
+4. Hardware: `cpu-basic` (2 vCPU) makes the before/after measurement itself take longer than a
+   visitor will wait (see the CPU timing below). Hosting sleep honestly means either `cpu-upgrade`
+   (8 vCPU) or a small GPU, or an anchor-only run with two held-out rows and short probes. The
+   choice is David's; the numbers are recorded here.
