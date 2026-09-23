@@ -558,7 +558,18 @@ def sleep_ttt(
                 report["reason"] = "no dream carried session information above the gain threshold"
                 save_report()
                 return report
-            dream_rows = [d for d in kept if len(d.ids) <= cfg.seq_len and len(d.teacher_ids) <= cfg.seq_len]
+            dream_rows, too_long = split_by_length(kept, cfg.seq_len)
+            for d in too_long:  # accounted like every other rejection; the kept list holds only what trains
+                dream_report.rejected_examples.append({"text": d.text[:120], "reason": f"too long for seq_len {cfg.seq_len} "
+                                                                                         f"(student {len(d.ids)}, teacher {len(d.teacher_ids)} tokens)"})
+            dream_report.kept = dream_rows
+            report["dreams"] = dream_report.to_dict()
+            report["dreams"]["too_long"] = len(too_long)
+            if not dream_rows:
+                report["status"] = "rejected"
+                report["reason"] = f"every kept dream exceeded seq_len {cfg.seq_len}"
+                save_report()
+                return report
             session_packed = [(d.ids, d.labels, [1.0] * len(d.ids)) for d in dream_rows]  # rows are not packed: one dream per row
             report["packed"]["session"] = len(session_packed)
         params = select_target(model, cfg.target)
@@ -735,6 +746,14 @@ def gate_from_measurements(before: dict[str, Any], after: dict[str, Any], *, tol
     if not gate["measured"]:
         gate["note"] = "no locality measurement was available (no replay corpus and no canary suite): this run is exploratory, not verified"
     return gate
+
+
+def split_by_length(dreams: list[Any], seq_len: int) -> tuple[list[Any], list[Any]]:
+    """Dreams whose student AND teacher renderings fit ``seq_len`` train; the rest are rejected and accounted.
+    The teacher rendering quotes the turn, so it is usually the longer one."""
+    fit = [d for d in dreams if len(d.ids) <= seq_len and len(d.teacher_ids) <= seq_len]
+    rest = [d for d in dreams if not (len(d.ids) <= seq_len and len(d.teacher_ids) <= seq_len)]
+    return fit, rest
 
 
 def _teacher_states(store: ArtifactStore, be, harvests: list[SessionHarvest], report: dict[str, Any], log: Callable[[str], None]) -> list[tuple[str, Any]]:

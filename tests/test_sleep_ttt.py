@@ -480,3 +480,20 @@ def test_dream_templates_condition_the_teacher_on_the_turn_and_not_the_student()
     d = Dream("p", "Your cat is Marlowe.", [1, 2], [-100, 2], -1.0, -3.0, "s", turn="My cat is Marlowe.", fastweight_logprob=-2.0)
     out = d.to_dict()
     assert out["gain"] == 2.0 and out["fastweight_gain"] == 1.0 and out["turn"] == "My cat is Marlowe."
+
+
+def test_dreams_that_do_not_fit_the_window_are_rejected_and_accounted_never_trained():
+    """ASTRA-176: a kept dream longer than seq_len must be rejected with a reason, and an empty remainder must end
+    the run as rejected rather than fail at sampling."""
+    from plastic.sleep.dream import Dream
+    from plastic.sleep.ttt import split_by_length
+
+    def d(n_student, n_teacher):
+        return Dream("p", "t", list(range(n_student)), [-100] * n_student, 0.0, -1.0, "s", teacher_ids=list(range(n_teacher)), reply_len=2)
+
+    fit, rest = split_by_length([d(40, 39)], 32)                       # all too long
+    assert (fit, len(rest)) == ([], 1)
+    fit, rest = split_by_length([d(32, 32), d(33, 20), d(20, 33), d(10, 10)], 32)  # exact limit fits; either rendering over rejects
+    assert [len(x.ids) for x in fit] == [32, 10] and [(len(x.ids), len(x.teacher_ids)) for x in rest] == [(33, 20), (20, 33)]
+    fit, rest = split_by_length([d(30, 45)], 32)                       # teacher longer than student
+    assert fit == [] and len(rest) == 1
