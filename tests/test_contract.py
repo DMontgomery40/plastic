@@ -81,6 +81,10 @@ def test_lasting_change_transfers_reverts_and_is_harmed_then_corrected():
     assert corr["harm"] > 0.0
     assert corr["after_correction_mse"] < corr["after_poison_mse"]
     assert corr["residual"] < corr["harm"]
+    # both readings of harm are reported: against the clean arm, and against the poison arm's own start
+    assert corr["harm"] == pytest.approx(corr["after_poison_mse"] - corr["after_clean_mse"])
+    assert corr["harm_vs_before"] == pytest.approx(corr["after_poison_mse"] - corr["before_mse"])
+    assert corr["residual_vs_before"] == pytest.approx(corr["after_correction_mse"] - corr["before_mse"])
     # the toy learner accepts everything, so the pair of rates is (1, 0)
     assert report["acceptance"] == {"accepted_good": 1.0, "refused_bad": 0.0, "n_good": 2, "n_bad": 1}
     assert report["compute"]["parameters"] == 4

@@ -186,11 +186,14 @@
   "elements": 2048
  },
  "correction": {
+  "before_mse": 0.1659618765115738,
   "after_clean_mse": 0.19540516038735709,
   "after_poison_mse": 0.21430214246114096,
   "after_correction_mse": 0.20607261856396994,
   "harm": 0.018896982073783875,
+  "harm_vs_before": 0.04834026594956717,
   "residual": 0.010667458176612854,
+  "residual_vs_before": 0.04011074205239615,
   "poison_bias": 0.5
  },
  "revert": {
@@ -226,7 +229,7 @@
   "tokens_consumed": 768,
   "tokens_measured": 25600,
   "tokens_measured_without_context": 25600,
-  "wall_clock_s": 15.2935049533844
+  "wall_clock_s": 13.296254873275757
  },
  "mode": "continued",
  "learner": {

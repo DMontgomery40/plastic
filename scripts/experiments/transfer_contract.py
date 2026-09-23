@@ -78,7 +78,7 @@ def _fmt(x: Any) -> str:
 def summary_table(reports: dict[str, dict[str, Any]]) -> str:
     """Markdown: one row per mode. MSE deltas are after minus before; negative is improvement."""
     policies = list(next(iter(reports.values()))["transfer"].keys())
-    head = ["mode"] + [f"transfer Δ ({p})" for p in policies] + ["forgetting Δ", "poison harm", "corr. residual", "revert ok", "accepted-good", "refused-bad", "tokens consumed", "tokens measured"]
+    head = ["mode"] + [f"transfer Δ ({p})" for p in policies] + ["forgetting Δ", "poison harm (vs clean)", "poison harm (vs start)", "corr. residual", "revert ok", "accepted-good", "refused-bad", "tokens consumed", "tokens measured"]
     lines = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
     for mode, r in reports.items():
         acc = r["acceptance"]
@@ -87,6 +87,7 @@ def summary_table(reports: dict[str, dict[str, Any]]) -> str:
         row += [
             _fmt(r["forgetting"]["delta_mse"]),
             _fmt(r["correction"]["harm"]),
+            _fmt(r["correction"]["harm_vs_before"]),
             _fmt(r["correction"]["residual"]),
             _fmt(r["revert"]["ok"]),
             _fmt(acc["accepted_good"]) + f" (n={acc['n_good']})",
@@ -131,8 +132,10 @@ def write_outputs(out: str, reports: dict[str, dict[str, Any]], manifest: dict[s
         "## After the stream, per mode",
         "",
         "MSE deltas are after minus before on identical inputs; negative is improvement. "
-        "`poison harm` is transfer MSE after the poisoned stream minus after the clean stream; "
-        "`corr. residual` is the same after the corrective stream. Acceptance is a pair of rates; "
+        "`poison harm (vs clean)` is transfer MSE after the poisoned stream minus after the clean stream "
+        "(damage plus the forgone clean gain); `poison harm (vs start)` is minus the poison arm's own "
+        "pre-stream start (damage alone); `corr. residual` is after the corrective stream minus after clean. "
+        "Continued training uses Adam. Acceptance is a pair of rates; "
         "n/a means no decision was recorded, not zero.",
         "",
         summary_table(reports),

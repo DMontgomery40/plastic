@@ -232,11 +232,16 @@ def run_contract(learner: Learner, spec: ContractSpec, *, seed: int = 0) -> dict
             "elements": before["forgetting"]["elements"],
         },
         "correction": {
+            "before_mse": _avg_transfer(before),
             "after_clean_mse": clean_after,
             "after_poison_mse": _avg_transfer(after_poison),
             "after_correction_mse": _avg_transfer(after_correction),
+            # poison minus the clean arm: damage plus the clean gain the poisoned learner forwent
             "harm": harm,
+            # poison minus its own (reverted, pre-stream) start: the damage alone
+            "harm_vs_before": _avg_transfer(after_poison) - _avg_transfer(before),
             "residual": residual,
+            "residual_vs_before": _avg_transfer(after_correction) - _avg_transfer(before),
             "poison_bias": spec.poison_bias,
         },
         "revert": {"gap": gap, "tolerance": spec.revert_tolerance, "ok": gap <= spec.revert_tolerance},
@@ -259,7 +264,8 @@ class DynamicsLearner:
     """``PlasticDynamics`` under the contract, in three baseline modes.
 
     ``frozen``: no lasting update (with ``adapt=True`` this is the fast-weights-only baseline).
-    ``continued``: plain gradient steps on the stream's loss (the continued-training baseline).
+    ``continued``: Adam steps on the stream's loss (the continued-training baseline; the
+    optimizer is named in the consume record).
     ``in_context``: the stream is prepended at measurement time (everything in context); its
     extra tokens are counted in ``context_tokens_measured``.
     """
@@ -315,7 +321,7 @@ class DynamicsLearner:
             opt.step()
             losses.append(float(loss.detach()))
         self.model.eval()
-        return {"accepted": True, "mode": self.mode, "loss_first": losses[0], "loss_last": losses[-1], "steps": self.steps}
+        return {"accepted": True, "mode": self.mode, "optimizer": "adam", "lr": self.lr, "loss_first": losses[0], "loss_last": losses[-1], "steps": self.steps}
 
     @torch.no_grad()
     def step_mse(self, batch: MechanismBatch, *, adapt: bool) -> Tensor:

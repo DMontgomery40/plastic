@@ -1,8 +1,10 @@
 # Mechanism testbed and the learning contract
 
-Spec, 23 September 2026. Thread T1 in `SHARED_SCRATCHPAD.md` FABLE-193. Owner of the work:
-Fable (session 7b328b8b). Human owner: David. Benchmark: the contract report this spec
-defines. Status: specification and first implementation; no result is claimed here.
+Spec, 23 September 2026. Status: specified and implemented (`plastic/data/mechanisms.py`,
+`plastic/eval/contract.py`, `scripts/experiments/transfer_contract.py`, tests); the first
+report, on the existing physics checkpoint, is archived under
+`docs/research/results/contract-2026-09-23/`. The benchmark for this work is the contract
+report itself. No learning result is claimed here.
 
 ## Research readiness note
 
@@ -19,7 +21,8 @@ coordinate memo (`2026-09-21-plastic-coordinate-recurrence.md`, physics falsifie
 controls); `plastic/data/physics.py`; `plastic/train/loop.py` (`evaluate_physics`);
 `plastic/model/lm.py` (`PlasticDynamics`); `plastic/session/runner.py`
 (`physics_episode`, the base/frozen/adaptive per-step comparison); `tests/test_data.py`;
-scratchpad FABLE-185 to 193 and Astra's amended mechanism (via David, 20:4x UTC).
+the team's coordination record for 23 September and the amended mechanism proposal (coupled
+coordinate recurrence plus a slow update rule, judged after reset).
 
 **Primary sources checked (2026-09-23, abstract level unless noted).**
 - Lopez-Paz and Ranzato, *Gradient Episodic Memory for Continual Learning*,
@@ -147,9 +150,14 @@ counts; an empty side is `None`, never zero.
 
 `DynamicsLearner` wraps `PlasticDynamics` in three modes that are the contract's baselines:
 `frozen` (no lasting update; with `adapt=True` this is the TTT-only baseline), `continued`
-(plain SGD on the stream's loss, the continued-training baseline) and `in_context` (the stream
-is prepended as context at measurement time; the everything-in-context baseline, with its
-extra tokens counted).
+(Adam steps on the stream's loss, the continued-training baseline; the optimizer is recorded
+in the report) and `in_context` (the stream is prepended as context at measurement time; the
+everything-in-context baseline, with its extra tokens counted).
+
+The correction arm starts from the reverted pre-stream snapshot, so the report gives two
+readings of harm: poison minus the clean arm (`harm`, which includes the clean gain the
+poisoned learner forwent) and poison minus its own start (`harm_vs_before`, the damage
+alone). The same pair is reported after the corrective stream.
 
 ### Not built here
 

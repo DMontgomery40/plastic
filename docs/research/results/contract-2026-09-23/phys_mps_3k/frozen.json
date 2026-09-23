@@ -186,11 +186,14 @@
   "elements": 2048
  },
  "correction": {
+  "before_mse": 0.1659618765115738,
   "after_clean_mse": 0.1659618765115738,
   "after_poison_mse": 0.1659618765115738,
   "after_correction_mse": 0.1659618765115738,
   "harm": 0.0,
+  "harm_vs_before": 0.0,
   "residual": 0.0,
+  "residual_vs_before": 0.0,
   "poison_bias": 0.5
  },
  "revert": {
@@ -226,7 +229,7 @@
   "tokens_consumed": 768,
   "tokens_measured": 25600,
   "tokens_measured_without_context": 25600,
-  "wall_clock_s": 9.493820190429688
+  "wall_clock_s": 7.004087924957275
  },
  "mode": "frozen",
  "learner": {
