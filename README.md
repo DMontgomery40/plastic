@@ -1,150 +1,194 @@
-# Plastic
+# plastic
 
-- **[Try the live Hugging Face playground](https://huggingface.co/spaces/dmontgomery40/plastic)** —
-  explore **Huihui's abliterated Qwen3.5-0.8B**, inspect its native context updates and
-  transaction records, or try the optional physics benchmark. Runs on free CPU.
-  Text uses an **observational guard, with no rollback protection**.
-- **[Get the models and complete project on Hugging Face](https://huggingface.co/dmontgomery40/plastic/tree/main)** —
-  download trained weights, configurations, saved evaluations, and the frontend and
-  backend source to run the playground locally or build your own experiments.
-- **[Trace the full project history on GitHub](https://github.com/DMontgomery40/plastic/commits/main/)** —
-  follow development since January 2026, from the original TTT/SSM experiments to
-  Plastic. Explore the [earlier implementation](https://github.com/DMontgomery40/plastic/tree/e73c6921bd72af6716828e8e0f5fe31b2ee7b027),
-  [current source](https://github.com/DMontgomery40/plastic), and
-  [research notes](https://github.com/DMontgomery40/plastic/tree/main/docs/research)
-  alongside the complete recorded commit history.
+A tiny test-time-training state-space model with a transactional safety harness.
 
-**Explore a pretrained research model—and inspect its changing context.**
+`plastic` explores small models that learn while they read. Its recurrence is a selective state-space layer; its memory is a fast weight matrix that
+takes one gradient step per token on a self-supervised objective, so context is
+compressed into a fixed-size fast memory. The whole thing is meta-trained
+end to end through that inner loop, so training shapes both the representations
+being stored and the rules for updating them. The same block stack serves two
+domains: next-token prediction on text, and a hidden-friction control task that
+tests adaptation to changing latent dynamics.
 
-Plastic is a research workbench for models with memory that changes during inference.
-It combines a selective state-space recurrence, gradient-updated fast memory, and an
-external harness that can accept, scale, project, or roll back a proposed memory update.
-The research model core handles text prediction and a 2D physics task with hidden friction.
-The live text playground uses Huihui's refusal-ablated Qwen derivative through the separate native backend: its recurrent
-state carries context; this is not the original meta-trained fast-weight research model.
-The experimental turn-boundary retention policy is not enabled in the public demo.
+Learning at inference is a security surface: an input can change how the
+model behaves on later inputs. `plastic` wraps
+the inner loop in a transactional harness. Each chunk of tokens is a transaction:
+attempt the update, measure it, then commit, roll it back, scale it down, project it,
+or refuse it. Every signal the harness reads comes from the model itself (loss,
+surprise, the write rate the model chose, the size and curvature of the weight change,
+how it moves a set of probe texts), never from pattern-matching the input. Sessions
+are persisted and branchable, like version control for the plastic weights.
 
-## Start with pretrained chat
+The research question is simple: **does online memory improve prediction, and can
+we control what it learns?** The project brings the model, measurements, controls,
+and experiments into one workbench, running in plain PyTorch on CPU, Apple Silicon,
+or CUDA.
 
-1. Open the [live playground](https://huggingface.co/spaces/dmontgomery40/plastic).
-2. Select **demo_text** and open **Chat**.
-3. Ask a question, such as `Denver is in what state? Answer in one short sentence.`
-4. Inspect the completion and transaction records. Text runs in native/log-only mode:
-   context updates are retained, and guard observations do not reject them.
+[Live playground](https://huggingface.co/spaces/dmontgomery40/plastic) ·
+[Models and source on Hugging Face](https://huggingface.co/dmontgomery40/plastic) ·
+[Research](docs/research/README.md) · [User guide](docs/user-guide.md)
 
-The model is [Huihui-Qwen3.5-0.8B-abliterated](https://huggingface.co/huihui-ai/Huihui-Qwen3.5-0.8B-abliterated),
-a third-party derivative of [Qwen3.5-0.8B](https://huggingface.co/Qwen/Qwen3.5-0.8B),
-pinned to revision `4813135658fe51b2e535b8e77927d2f23909ce42`.
-Its text backbone has 752,393,024 parameters. It is pretrained, can make factual
-errors, and runs on shared free CPU, so longer replies take time. This release
-makes no claim of safety protection or useful learned adaptation for Qwen. The derivative's
-refusal reduction is the publisher's claim, not a guarantee that it never refuses.
-Try exploratory prompts and inspect the observed loss and proposed/accepted recurrent-state
-change. That state-change norm is not a measured gradient. Exploratory use does not require a
-fixed attack list; quantitative safety claims need separate controlled comparisons.
-
-Both demo sessions are **public and shared**. Prompts and outputs are visible to
-other visitors; do not enter private information. Reset a session to start fresh.
-Use the local project for private sessions, training, and larger experiments.
-
-### Optional physics benchmark
-
-Select **demo_physics**, open **Physics**, choose friction and a seed, and click
-**Run episode**. Compare base, frozen, and adaptive prediction errors on the same
-trajectory, then inspect retained updates in **Session**. Hidden friction is not
-an input to the research model.
-
-![Plastic physics dashboard: prediction errors and accepted memory updates](assets/public-demo-physics.png)
-
-*The CPU research dashboard shown locally; one interactive run, not the saved evaluation below.*
-
-## What is in the project?
-
-| Part | What you can do | Source |
-| --- | --- | --- |
-| Dashboard | Explore sessions, chat, physics, training curves, red-team reports, and architecture | [dashboard/](dashboard/) |
-| Model | Study the recurrence, fast-weight updates, and shared text/physics core | [plastic/model/](plastic/model/) |
-| Transaction harness | Inspect commit, rollback, projection, budgets, and canary probes | [plastic/harness/](plastic/harness/) |
-| Training and evaluation | Train small models and compare memory-enabled and writes-disabled behavior | [plastic/train/](plastic/train/) |
-| API and sessions | Drive the same experiments from Python, CLI, or HTTP | [plastic/api/](plastic/api/), [plastic/session/](plastic/session/) |
-| Research record | Read derivations, corrections, evidence, and experimental proposals | [docs/research/](docs/research/) |
-| Tests | Check state semantics, equivalence, persistence, and interface contracts | [tests/](tests/) |
-| Public demo deployment | Run the bounded CPU demo or import checkpoints locally | [deploy/huggingface/](deploy/huggingface/) |
-
-The Hugging Face **Files** tab contains this source snapshot plus both original research checkpoints:
-[text/](https://huggingface.co/dmontgomery40/plastic/tree/main/text) and
-[physics/](https://huggingface.co/dmontgomery40/plastic/tree/main/physics).
-Each model includes weights, configuration, saved evaluation, training logs, harness
-reference artifacts, a checksum manifest, and a loading example. GitHub holds the
-ongoing development history. The linked Space runs the actual frontend and backend, and downloads the pinned
-Qwen derivative from its pinned upstream repository during the Docker build.
-
-## Run everything locally, without training first
-
-You need Python 3.12+, [uv](https://docs.astral.sh/uv/), and Node.js/npm.
-Download the complete public repository (including the roughly 40 MB of checkpoints):
+## Install and run
 
 ```bash
-uv run --with huggingface_hub --no-project python -c "from huggingface_hub import snapshot_download; snapshot_download('dmontgomery40/plastic', local_dir='plastic')"
+git clone https://github.com/DMontgomery40/plastic.git
 cd plastic
 uv sync --extra dev
 npm --prefix dashboard ci
-uv run python -m deploy.huggingface.prepare --source . --artifacts-root artifacts
-bash start.sh
+uv run plastic --help
+./start.sh
 ```
 
-Open [localhost:5173](http://localhost:5173). In **Sessions**, create a session with
-`phys_mps_3k` or `lm_wikitext_l4`, then open Physics or Chat. Your local sessions stay in your own artifact store. Importing checkpoints does not retrain them.
+Requires Python 3.12+, PyTorch 2.12+, `uv`, and Node.js/npm. The dashboard opens at
+[localhost:5173](http://localhost:5173), with the API on port 13579. A fresh checkout
+needs model artifacts; the [user guide](docs/user-guide.md) covers downloading the
+published checkpoints, training, calibration, and sessions.
 
-Already working from GitHub? Download only the checkpoint folders before importing:
+## The architecture
 
-```bash
-uv run python -c "from huggingface_hub import snapshot_download; snapshot_download('dmontgomery40/plastic', allow_patterns=['text/*', 'physics/*'], local_dir='artifacts/hub')"
-uv run python -m deploy.huggingface.prepare --source artifacts/hub --artifacts-root artifacts
-bash start.sh
+The saved baselines stack one block four times for text and three for physics.
+Each block combines a selective recurrence, fast-weight memory, and a residual MLP,
+all in plain PyTorch.
+
+**A selective state-space branch** provides activation-level context. It is a gated
+linear recurrence with a per-channel, input-dependent decay, computed with a chunked
+log-space scan that only ever forms decay ratios in `(0, 1]`.
+The recurrent and chunk-parallel paths are tested for equivalence, including carried state.
+
+**A fast-weight memory branch** is the test-time-training layer. Per head it holds a
+matrix `S`, and per token it takes one gradient step on the associative loss
+`½‖kS − v‖²` with a learned write rate `β` and a forget gate `α`:
+
+```
+e_t = v_t − k_t (α_t S_{t−1})          associative prediction error
+S_t = α_t S_{t−1} + β_t k_tᵀ e_t       one gradient step per token, gated
+m_t = RMSNorm(q_t S_t)                 normalized read after the token's own write
 ```
 
-The server defaults to CPU. For Apple MPS, run `DEVICE=mps bash start.sh`; use
-`DEVICE=cuda` on a suitable NVIDIA setup. PyTorch >= 2.12 is required. The runtime
-uses ordinary PyTorch, without custom Triton kernels.
+This is a linear gated-delta learner with a normalized readout. Its chunk-parallel
+training form uses a unit-lower-triangular solve; the recurrent form processes
+one token at a time. A second inner rule (mini-batch with momentum and
+Newton-Schulz orthogonalization, in the style of LaCT and Atlas) is available behind
+the same interface. `β` is the model's own answer to "should I learn from this?", and
+the harness reads it.
 
-For training, calibration, CLI sessions, red-team experiments, and the full research
-contracts, see the [user guide](docs/user-guide.md). The [deployment guide](deploy/huggingface/README.md)
-explains the public demo's limits and how to run it yourself.
+**Meta-training** runs the full sequence with the fast state starting at zero, and
+backpropagates the ordinary next-token loss through every inner update. Because the
+inner step has a closed form, ordinary autograd can differentiate through it on
+CPU, MPS, and CUDA.
 
-## What the original research checkpoints demonstrate
+The [literature review](docs/research/2026-09-21-ttt-ssm-literature.md) places the
+design alongside TTT layers, Titans, LaCT, Gated DeltaNet, and related work. An
+[architecture memo](docs/research/2026-09-21-architecture-memo.md) develops the block. The separate
+[coordinate-recurrence proposal](docs/research/2026-09-21-plastic-coordinate-recurrence.md)
+explores a nonlinear learner and remains experimental.
 
-| Checkpoint | Parameters | Saved held-out metric | Writes enabled | Writes disabled |
+## The safety harness
+
+Every input chunk is a transaction against three copies of the session state:
+committed, working, and the pending chunk. At each chunk boundary the harness computes
+signals entirely from the model and decides what to do with the update.
+
+| Signal | What it is |
+|---|---|
+| chunk loss | the model's own confusion on the chunk (out-of-distribution proxy) |
+| surprise | the inner-loop prediction error `‖e_t‖`, independent of the write rate |
+| write rate `β` | the learned gate the model applied to each token |
+| update norm | the actual change to the fast weights, and its Fisher-weighted size |
+| canary suites | a coherence set whose loss must not rise, a poison set whose loss must not fall |
+| canary alignment | cosine between the weight change and the gradient that would hurt the canaries |
+| robust statistics | median/MAD z-scores against a reference or session history, plus CUSUM on log update size |
+
+The decision is one of: **commit**, **rollback** (refuse the chunk as training signal,
+read it but do not learn it), **scale** (retry with a smaller write rate), **project**
+(remove the component that would raise the canary loss, an A-GEM style half-space
+projection on the state delta), or **read-only** (the session's write budget is spent).
+Budgets are hard: the actual weight change of the accepted candidate is checked against
+the cap, non-finite states are refused, and a spent session stops learning. Resume
+clears a read-only latch without replenishing the budget. Calibration supplies
+empirical thresholds from a benign reference stream.
+Sequential false-positive rates and probe coverage are evaluated separately.
+
+The decision path uses numeric model evidence rather than keyword or regex rules.
+Transaction records distinguish proposed updates from accepted changes. Rollback
+controls retained memory; it does not retract emitted output or erase all activation
+influence. The [safety survey](docs/research/2026-09-21-inference-time-learning-safety.md)
+develops the threat model and the methods behind these controls.
+
+## The two domains
+
+**Text.** Byte-level BPE, wikitext-103 (or fineweb-edu). Next-token prediction. Recall
+is measured directly with MQAR probes, and every checkpoint reports its held-out loss,
+its held-out loss with the memory disabled (the difference is the value of the memory),
+its MQAR accuracy, and the histogram of learned write rates.
+
+**Physics.** A 2D point mass with a friction coefficient the model never observes. The
+input is `[observation, action, reset flag]`; the target is the next observation delta.
+Several episodes with different friction are packed into one sequence to test
+adaptation to changing latent dynamics. Sessions compare three conditions on the
+same trajectory: a fresh frozen state, the current session state with memory
+frozen, and the session learning online.
+
+Saved evaluations of the original research checkpoints show a substantial memory
+contribution on both tasks:
+
+| Checkpoint | Parameters | Held-out metric | Writes enabled | Writes disabled |
 | --- | ---: | --- | ---: | ---: |
+| Text | 6.85M | NLL, nats/token | 3.4704 | 5.0151 |
 | Physics | 3.56M | Observation-delta MSE | 0.00012885 | 0.20873034 |
-| Research text (not hosted chat) | 6.85M | NLL, nats/token | 3.4704 | 5.0151 |
 
-These are single-run evaluation records, covering 131,072 physics target elements
-and 131,072 text tokens. Disabling writes uses `beta_scale=0`; retention still runs.
-The figures support memory utility on these tasks. They are distinct from the
-live dashboard's session comparisons, and NLL and MSE are different units.
-The model folders' `eval.json` files contain the underlying measurements.
+Each single-run evaluation covers 131,072 tokens or target elements. Disabling
+writes sets `β=0` while retention remains active. These results measure memory
+utility; the attack studies have not established adversarial robustness. Methods
+and measurements are in the [evidence report](docs/research/2026-09-22-trained-model-operating-point.md)
+and the Hugging Face [text](https://huggingface.co/dmontgomery40/plastic/tree/main/text)
+and [physics](https://huggingface.co/dmontgomery40/plastic/tree/main/physics) bundles.
 
-The implemented fast learner is a **linear delta-memory baseline with a normalized
-readout**. The nonlinear [coordinate proposal](docs/research/2026-09-21-plastic-coordinate-recurrence.md)
-is experimental and unintegrated. The current attack study does not establish
-adversarial robustness. Rollback controls retained memory; it does not retract
-emitted outputs or erase all activation influence. See the
-[research briefing](docs/research/README.md) and [evidence report](docs/research/2026-09-22-trained-model-operating-point.md)
-for the methods and limitations.
+## Sessions, red team, and sleep
 
-## Develop and verify
+Sessions persist their plastic weights, harness state, and full transaction log, and
+they branch: fork a session and the child starts from the parent's committed state,
+so you can compare divergent learning histories from one point. `plastic chat` learns
+each prompt through the harness; `plastic physics` runs an episode; `plastic session
+fork|reset|resume|show` manage the tree.
 
-```bash
-uv run pytest tests deploy/huggingface/test_space.py
-npm --prefix dashboard test
-npm --prefix dashboard run build
-git diff --check
+`plastic redteam` attacks a model on the real token path: it optimizes a perturbation
+of a suffix's embeddings to maximize canary damage subject to the model's own
+perplexity staying plausible, snaps to real tokens, and re-validates the discrete
+payload through the harness, so the reported damage is the damage of a payload that
+was actually fed. `plastic train text --adversarial` meta-trains the write gate against
+that attacker. `plastic sleep` consolidates what sessions learned into the slow
+weights, accepted only if the canaries hold.
+
+The workbench also supports pretrained models through a separate native backend.
+The [public playground](https://huggingface.co/spaces/dmontgomery40/plastic) uses
+Huihui's abliterated Qwen3.5-0.8B for text exploration and recurrent-state
+measurements, in observational mode without automatic rollback. Its shared session
+is public. This extends the harness experiments beyond the small meta-trained
+PlasticCore models; available signals and controls depend on the backend.
+
+See the [user guide](docs/user-guide.md) for training, sessions, and experiment
+commands, and the [deployment guide](deploy/huggingface/README.md) to run the
+hosted playground yourself.
+
+## Layout
+
 ```
-
-Read [AGENTS.md](AGENTS.md) before changing model or harness contracts. Generated
-sessions, downloaded corpora, and local experiment artifacts are not automatically
-published or backed up by a code push.
+plastic/
+  model/        selective scan, gated delta rule, chunk rule, fast-weight memory, blocks, models, state
+  data/         wikitext/fineweb pipeline, MQAR recall probes, hidden-mu physics
+  train/        outer loop, LR schedule, Muon/AdamW split, adversarial write-gate loss
+  harness/      signals, robust stats, canaries, Fisher, projection, policy, calibration, transaction runner
+  session/      persisted, branchable sessions for both domains
+  redteam/      token-path attacker validated through the harness
+  sleep/        canary-gated consolidation into the slow weights
+  api/          FastAPI service over the artifact store
+  store.py      models, sessions, transactions, forks, signatures
+  cli.py        the `plastic` command
+dashboard/      React UI
+scripts/        Hugging Face Jobs launchers, experiments, throughput bench
+docs/           the design spec, milestone plans, and the research surveys
+```
 
 ## License
 
