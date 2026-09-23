@@ -57,7 +57,9 @@ def main() -> None:
     if measure:
         args += ["--measure", str(measure)]
     extra = os.environ.get("EXTRA_ARGS", "")
-    env = f"PYTHONPATH={work} TOKENIZERS_PARALLELISM=false"
+    # the reference scan keeps every mini-batch's carried fast weights for backward; checkpoint groups (see
+    # --grad-checkpoint-groups) and the expandable allocator keep a 760M/1.3B run inside 80 GB
+    env = f"PYTHONPATH={work} TOKENIZERS_PARALLELISM=false PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"
     sh(f"{env} {py} -m scripts.train.sft_ttt_chat {' '.join(shlex.quote(a) for a in args)} {extra}")
     sh(f"ls -la {shlex.quote(dest)}")
     print(f"[job] done in {round(time.time() - t0)} s -> {dest}", flush=True)
