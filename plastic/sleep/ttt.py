@@ -526,9 +526,11 @@ def sleep_ttt(
         report["packed"] = {"session": len(session_packed), "replay": len(replay_packed)}
         teachers: list[Any] = []
         teachers = None
-        dream_rows: list[tuple[list[int], int, int]] = []  # (student ids, reply start, teacher index) for the dream method
+        dream_rows: list[Any] = []  # kept Dream objects (student and teacher renderings) for the dream method
+        teacher_be = be
         if cfg.method in ("distill", "dream"):
             teachers = _teacher_states(store, be, harvests, report, log)
+            teacher_be = frozen_teacher_backend(be, cfg.target)
             if not teachers:
                 report["status"] = "rejected"
                 report["reason"] = f"{cfg.method} needs committed session states"
@@ -537,14 +539,13 @@ def sleep_ttt(
         if cfg.method == "dream":
             from plastic.sleep.dream import DreamReport, generate_dreams, select_dreams
 
-            with_state = [h for h in harvests if h.accepted_turns and store.load_runner_state(h.session_id).get("committed") is not None]
             dream_report = DreamReport()
             candidates = []
-            for ti, h in enumerate(with_state[:len(teachers)]):
-                ds = generate_dreams(be, teachers[ti], session_id=h.session_id, per_prompt=cfg.dream_per_prompt,
+            for ti, (sid, state) in enumerate(teachers):
+                ds = generate_dreams(teacher_be, state, session_id=sid, per_prompt=cfg.dream_per_prompt,
                                      max_new_tokens=cfg.dream_max_new_tokens, seed=cfg.seed + ti, log=log)
                 for d in ds:
-                    d.teacher_index = ti  # type: ignore[attr-defined]
+                    d.teacher_index = ti
                 candidates.extend(ds)
             dream_report.generated = len(candidates)
             kept = select_dreams(candidates, min_gain=cfg.dream_min_gain, max_keep=cfg.dream_max_keep, report=dream_report)
@@ -556,10 +557,8 @@ def sleep_ttt(
                 report["reason"] = "no dream carried session information above the gain threshold"
                 save_report()
                 return report
-            for d in kept:
-                n_prefix = len(be.encode_chat(d.prompt, first_turn=True))
-                dream_rows.append((d.ids[:cfg.seq_len], n_prefix, d.teacher_index))  # type: ignore[attr-defined]
-            session_packed = [(r[0], [-100] + r[0][1:], [1.0] * len(r[0])) for r in dream_rows]  # rows are not packed: one dream per row
+            dream_rows = [d for d in kept if len(d.ids) <= cfg.seq_len and len(d.teacher_ids) <= cfg.seq_len]
+            session_packed = [(d.ids, d.labels, [1.0] * len(d.ids)) for d in dream_rows]  # rows are not packed: one dream per row
             report["packed"]["session"] = len(session_packed)
         params = select_target(model, cfg.target)
         opt = torch.optim.AdamW(params, lr=cfg.lr, betas=(0.9, 0.95), weight_decay=0.0)
@@ -568,7 +567,10 @@ def sleep_ttt(
                            "realized_replay_ratio": n_replay / (n_session + n_replay),
                            # distill adds a session KL term and a replay CE term with unit weights; the ratio changes row
                            # sampling only, never the relative weight of those two terms
-                           "loss_terms": "session_kl + replay_ce, unit weights" if cfg.method == "distill" else "cross_entropy over all rows"}
+                           "loss_terms": {"replay": "weighted cross_entropy over all rows", "distill": "session_kl + replay_ce, unit weights",
+                                          "dream": "reply_kl(frozen teacher) + replay_ce, unit weights"}.get(cfg.method, "n/a"),
+                           "teacher_weights": ("frozen copy" if (cfg.method in ("distill", "dream") and cfg.target == "all") else
+                                               "live model (only W0 changes, overridden by the session state)" if cfg.method in ("distill", "dream") else "n/a")}
         if abs(report["batch"]["realized_replay_ratio"] - cfg.replay_ratio) > 1e-9:
             log(f"[sleep] replay ratio {cfg.replay_ratio} is not realizable at batch {cfg.batch_size}: using {n_session} session + {n_replay} replay rows "
                 f"(realized {report['batch']['realized_replay_ratio']:.3f})")
@@ -591,30 +593,34 @@ def sleep_ttt(
                     per_tok = F.cross_entropy(logits.reshape(-1, logits.shape[-1]), y[:, 1:].reshape(-1), ignore_index=-100, reduction="none").view(w.shape)
                     loss = (per_tok * w).sum() / w.sum().clamp_min(1.0)
                 elif cfg.method == "dream":
-                    picks = [rng.randrange(len(dream_rows)) for _ in range(n_session)]
-                    rows = [dream_rows[i] for i in picks]
-                    L = max(len(r[0]) for r in rows)
-                    x = torch.tensor([r[0] + [pad_id] * (L - len(r[0])) for r in rows], dtype=torch.long, device=dev)
+                    from plastic.sleep.dream import reply_slices
+
+                    rows = [dream_rows[rng.randrange(len(dream_rows))] for _ in range(n_session)]
+                    L = max(len(d.ids) for d in rows)
+                    x = torch.tensor([d.ids + [pad_id] * (L - len(d.ids)) for d in rows], dtype=torch.long, device=dev)
                     T = cfg.distill_temperature
+                    R = max(d.reply_len for d in rows)
                     with torch.no_grad():
-                        # teacher: the dream continues the session (no BOS, session position); student: the dream as a fresh
-                        # first turn. Token-for-token they agree from the reply onward, so the KL is taken on reply positions.
-                        t_rows = []
-                        for r in rows:
-                            ids, n_prefix, ti = r
-                            t_rows.append(_teacher_logits(be, teachers[ti], ids))  # same rendering, read from the session state
-                    t_logits = torch.stack([torch.nn.functional.pad(t, (0, 0, 0, L - t.shape[0])) for t in t_rows])
-                    s_logits = model(x, use_cache=False).logits.float()
-                    reply_mask = torch.zeros(x.shape, dtype=torch.float32, device=dev)
-                    for i, r in enumerate(rows):
-                        reply_mask[i, r[1]:len(r[0])] = 1.0  # predictions at positions >= reply start (logits at t predict t+1)
-                    reply_mask = reply_mask[:, 1:]
-                    kl = F.kl_div(F.log_softmax(s_logits[:, :-1] / T, -1), F.log_softmax(t_logits[:, :-1] / T, -1), log_target=True, reduction="none").sum(-1)
+                        # teacher: its own rendering (the dream continues the session), read from the frozen teacher backend
+                        t_slices = []
+                        for d in rows:
+                            ts, _ = reply_slices(d.teacher_prefix, d.student_prefix, d.reply_len)
+                            t_slices.append(_teacher_logits(teacher_be, teachers[d.teacher_index][1], d.teacher_ids)[ts])
+                    s_full = model(x, use_cache=False).logits.float()
+                    s_slices, masks = [], []
+                    for i, d in enumerate(rows):
+                        _, ss = reply_slices(d.teacher_prefix, d.student_prefix, d.reply_len)
+                        s_slices.append(s_full[i, ss])
+                        masks.append(torch.tensor([1.0] * d.reply_len + [0.0] * (R - d.reply_len), device=dev))
+                    t_logits = torch.stack([torch.nn.functional.pad(t, (0, 0, 0, R - t.shape[0])) for t in t_slices])
+                    s_logits = torch.stack([torch.nn.functional.pad(t, (0, 0, 0, R - t.shape[0])) for t in s_slices])
+                    reply_mask = torch.stack(masks)
+                    kl = F.kl_div(F.log_softmax(s_logits / T, -1), F.log_softmax(t_logits / T, -1), log_target=True, reduction="none").sum(-1)
                     loss = (kl * reply_mask).sum() / reply_mask.sum().clamp_min(1.0) * (T * T)
                 else:
                     x = torch.tensor([b[0] for b in sess], dtype=torch.long, device=dev)
                     with torch.no_grad():
-                        t_logits = torch.stack([_teacher_logits(be, teachers[rng.randrange(len(teachers))], b[0]) for b in sess])
+                        t_logits = torch.stack([_teacher_logits(teacher_be, teachers[rng.randrange(len(teachers))][1], b[0]) for b in sess])
                     s_logits = model(x, use_cache=False).logits.float()
                     T = cfg.distill_temperature
                     pad_mask = (x != pad_id).float()
@@ -730,11 +736,12 @@ def gate_from_measurements(before: dict[str, Any], after: dict[str, Any], *, tol
     return gate
 
 
-def _teacher_states(store: ArtifactStore, be, harvests: list[SessionHarvest], report: dict[str, Any], log: Callable[[str], None]) -> list[Any]:
-    """Committed states, one per source session with accepted turns; the teacher reads each through a
-    folded cache with the inner step disabled, the same fixed function the canaries use. A state saved
-    against another checkpoint is skipped and recorded."""
-    out = []
+def _teacher_states(store: ArtifactStore, be, harvests: list[SessionHarvest], report: dict[str, Any], log: Callable[[str], None]) -> list[tuple[str, Any]]:
+    """(session_id, committed state) for each source session with accepted turns and a loadable state; the
+    teacher reads each through a folded cache with the inner step disabled, the same fixed function the
+    canaries use. A state saved against another checkpoint is skipped and recorded; identity stays bound to
+    the state that loaded, so a skipped session never relabels a later one."""
+    out: list[tuple[str, Any]] = []
     for h in harvests:
         if not h.accepted_turns:
             continue
@@ -742,11 +749,27 @@ def _teacher_states(store: ArtifactStore, be, harvests: list[SessionHarvest], re
         if st is None:
             continue
         try:
-            out.append(be.load_state_dict(st))
+            out.append((h.session_id, be.load_state_dict(st)))
         except ValueError as e:
             report.setdefault("skipped_states", []).append({"session_id": h.session_id, "reason": str(e)})
             log(f"[sleep] skipping {h.session_id}: {e}")
     return out
+
+
+def frozen_teacher_backend(be, target: str, factory: Callable[..., Any] | None = None):
+    """The backend whose slow weights the teacher reads. With target "w0" the student only changes the initial
+    fast weights, which a loaded session state overrides, so the live model serves; with target "all" every
+    student step would move the teacher too (ASTRA-175), so the teacher gets its own frozen copy of the model
+    wrapped in a new backend (``factory`` defaults to TTTBackend)."""
+    if target == "w0":
+        return be
+    if factory is None:
+        from plastic.backends.ttt_lm.backend import TTTBackend as factory  # noqa: N813 - the class is the factory
+
+    model_copy = copy.deepcopy(be.model)
+    model_copy.requires_grad_(False)
+    model_copy.eval()
+    return factory(model_copy, be.tokenizer, be.config, device=be.device, checkpoint_digest=be.checkpoint_digest)
 
 
 @torch.no_grad()

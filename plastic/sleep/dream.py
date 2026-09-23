@@ -39,11 +39,18 @@ DREAM_PROMPTS: tuple[str, ...] = (
 class Dream:
     prompt: str
     text: str
-    ids: list[int]              # user turn (prompt) + assistant reply (text) as one training row, BOS first
+    ids: list[int]              # STUDENT rendering: BOS, user turn (prompt), assistant tag, reply, EOS (a fresh first turn)
     labels: list[int]
     teacher_logprob: float      # mean log-prob per token of the reply under the teacher (session fast weights)
     student_logprob: float      # the same under the reset model
     session_id: str = ""
+    # TEACHER rendering: the same prompt continuing the session (no BOS) followed by the same reply tokens; the
+    # reply is token-for-token identical in both renderings, so the KL is taken on the reply positions of each
+    teacher_ids: list[int] = field(default_factory=list)
+    teacher_prefix: int = 0     # reply starts at teacher_ids[teacher_prefix]
+    student_prefix: int = 0     # reply starts at ids[student_prefix]
+    reply_len: int = 0
+    teacher_index: int = -1     # which loaded session state produced this dream
 
     @property
     def gain(self) -> float:
@@ -51,7 +58,7 @@ class Dream:
         return self.teacher_logprob - self.student_logprob
 
     def to_dict(self) -> dict[str, Any]:
-        return {"prompt": self.prompt, "text": self.text, "n_tokens": len(self.ids), "teacher_logprob": self.teacher_logprob,
+        return {"prompt": self.prompt, "text": self.text, "n_tokens": len(self.ids), "reply_len": self.reply_len, "teacher_logprob": self.teacher_logprob,
                 "student_logprob": self.student_logprob, "gain": self.gain, "session_id": self.session_id}
 
 
@@ -65,8 +72,16 @@ class DreamReport:
     rejected_examples: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
+        """Every rejection is recorded with its reason (degenerate, duplicate, low gain, over the cap), so the run
+        can be interpreted from the report alone."""
         return {"generated": self.generated, "degenerate": self.degenerate, "duplicate": self.duplicate, "low_gain": self.low_gain,
-                "kept": [d.to_dict() for d in self.kept], "rejected_examples": self.rejected_examples[:10]}
+                "kept": [d.to_dict() for d in self.kept], "rejected": self.rejected_examples}
+
+
+def reply_slices(teacher_prefix: int, student_prefix: int, reply_len: int) -> tuple[slice, slice]:
+    """Logit positions that predict the reply tokens in each rendering: logits at position t predict token t+1,
+    so the reply's ``reply_len`` predictions start one position before the reply in both sequences."""
+    return slice(teacher_prefix - 1, teacher_prefix - 1 + reply_len), slice(student_prefix - 1, student_prefix - 1 + reply_len)
 
 
 def is_degenerate(text: str, *, min_words: int = 3, max_repeat_share: float = 0.5) -> bool:
@@ -95,6 +110,7 @@ def select_dreams(candidates: list[Dream], *, min_gain: float, max_keep: int, re
             continue
         if key in seen:
             report.duplicate += 1
+            report.rejected_examples.append({"text": d.text[:120], "reason": "duplicate"})
             continue
         seen.add(key)
         if not math.isfinite(d.gain) or d.gain < min_gain:
@@ -104,6 +120,8 @@ def select_dreams(candidates: list[Dream], *, min_gain: float, max_keep: int, re
         pool.append(d)
     pool.sort(key=lambda d: d.gain, reverse=True)
     report.kept = pool[:max_keep]
+    for d in pool[max_keep:]:
+        report.rejected_examples.append({"text": d.text[:120], "reason": f"over cap {max_keep} (gain {d.gain:.3f})"})
     return report.kept
 
 
@@ -140,9 +158,8 @@ def generate_dreams(backend, teacher_state, *, session_id: str, prompts: tuple[s
     """Ask the teacher (session fast weights, frozen) each prompt ``per_prompt`` times; score each reply under
     the teacher and under the reset model. Rows are rendered like any chat turn (BOS, user, assistant tag,
     reply, EOS) so the student trains on exactly what it would see."""
-    from plastic.backends.ttt_lm.backend import encode_conversation
-
     tok = backend.tokenizer
+    eos = int(tok.eos_token_id)
     dreams: list[Dream] = []
     gen = torch.Generator().manual_seed(seed)
     for pi, prompt in enumerate(prompts):
@@ -154,12 +171,15 @@ def generate_dreams(backend, teacher_state, *, session_id: str, prompts: tuple[s
             text = tok.decode(reply_ids, skip_special_tokens=True).strip()
             if not text:
                 continue
-            ids, labels = encode_conversation(tok, [{"role": "user", "content": prompt}, {"role": "assistant", "content": text}])
+            # student rendering (fresh first turn) and teacher rendering (continues the session); the reply tokens are
+            # the sampled ids themselves in both, plus EOS
+            student_prefix_ids = backend.encode_chat(prompt, first_turn=True)
+            reply = reply_ids + [eos]
+            ids = student_prefix_ids + reply
             labels = [-100] + ids[1:]
-            n_prefix = len(backend.encode_chat(prompt, first_turn=True))
-            # teacher: the dream after the session (frozen fast weights); student: the same rendering from reset
-            t_lp = mean_logprob(backend, backend.clone(teacher_state), prompt_ids + ids[n_prefix:], len(prompt_ids))
-            s_lp = mean_logprob(backend, backend.init_state(), ids, n_prefix)
-            dreams.append(Dream(prompt, text, ids, labels, t_lp, s_lp, session_id))
+            teacher_ids = prompt_ids + reply
+            t_lp = mean_logprob(backend, backend.clone(teacher_state), teacher_ids, len(prompt_ids))
+            s_lp = mean_logprob(backend, backend.init_state(), ids, len(student_prefix_ids))
+            dreams.append(Dream(prompt, text, ids, labels, t_lp, s_lp, session_id, teacher_ids, len(prompt_ids), len(student_prefix_ids), len(reply)))
             log(f"[dream] {session_id} p{pi}k{k} gain {t_lp - s_lp:+.3f}: {text[:90]!r}")
     return dreams

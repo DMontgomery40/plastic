@@ -391,3 +391,81 @@ def test_sleep_config_accepts_dream_and_bounds_its_knobs():
         SleepConfig(method="dream", dream_per_prompt=0).validate()
     with pytest.raises(ValueError):
         SleepConfig(method="dream", dream_max_new_tokens=2).validate()
+
+
+def test_frozen_teacher_backend_is_isolated_from_student_updates_when_all_parameters_train():
+    """ASTRA-175 #1: with target all, the teacher must read from weights the student optimizer cannot move."""
+    import types
+
+    from plastic.sleep.ttt import frozen_teacher_backend
+
+    class FakeBackend:
+        def __init__(self, model):
+            self.model, self.tokenizer, self.config, self.device, self.checkpoint_digest = model, None, types.SimpleNamespace(vocab_size=4, mini_batch_size=16), torch.device("cpu"), "d"
+
+    m = _Toy()
+    same = frozen_teacher_backend(FakeBackend(m), "w0")
+    assert same.model is m  # W0 changes are overridden by the loaded session state: the live model is the teacher
+
+    captured = {}
+
+    def fake_factory(model, tok, cfg, *, device, checkpoint_digest):
+        captured["model"] = model
+        return "teacher-backend"
+
+    assert frozen_teacher_backend(FakeBackend(m), "all", factory=fake_factory) == "teacher-backend"
+    teacher_model = captured["model"]
+    assert teacher_model is not m
+    before = teacher_model.head.weight.detach().clone()
+    with torch.no_grad():
+        m.head.weight.add_(1.0)  # a student step
+    assert torch.equal(teacher_model.head.weight, before) and not any(p.requires_grad for p in teacher_model.parameters())
+
+
+def test_reply_slices_align_the_same_reply_tokens_in_both_renderings():
+    from plastic.sleep.dream import reply_slices
+
+    ts, ss = reply_slices(teacher_prefix=7, student_prefix=9, reply_len=5)
+    assert (ts.start, ts.stop, ss.start, ss.stop) == (6, 11, 8, 13)
+    teacher_ids = list(range(100, 107)) + [1, 2, 3, 4, 5]
+    student_ids = list(range(200, 209)) + [1, 2, 3, 4, 5]
+    # logits at position t predict token t+1: the sliced positions predict exactly the reply in both sequences
+    assert [teacher_ids[i + 1] for i in range(ts.start, ts.stop)] == [1, 2, 3, 4, 5] == [student_ids[i + 1] for i in range(ss.start, ss.stop)]
+
+
+def test_teacher_states_keep_session_identity_when_a_state_is_skipped(tmp_path):
+    """ASTRA-175 #3: an incompatible first state must not relabel the next session's state."""
+    from plastic.sleep.ttt import _teacher_states
+
+    store = ArtifactStore(str(tmp_path))
+    _session(store, "old", "m", [("a", "x", ["commit"])])
+    _session(store, "valid", "m", [("b", "y", ["commit"])])
+    _session(store, "late", "m", [("c", "z", ["commit"])])
+    store.save_runner_state("old", {"committed": {"tag": "old"}}, summary={})
+    store.save_runner_state("valid", {"committed": {"tag": "valid"}}, summary={})
+    store.save_runner_state("late", {"committed": {"tag": "late"}}, summary={})
+
+    class FakeBackend:
+        def load_state_dict(self, d):
+            if d["tag"] in ("old", "late"):
+                raise ValueError(f"incompatible {d['tag']}")
+            return f"state:{d['tag']}"
+
+    report = {}
+    pairs = _teacher_states(store, FakeBackend(), harvest_sessions(store, "m"), report, lambda s: None)
+    assert pairs == [("valid", "state:valid")]
+    assert sorted(x["session_id"] for x in report["skipped_states"]) == ["late", "old"]
+
+
+def test_dream_report_records_every_rejection_with_its_reason():
+    from plastic.sleep.dream import Dream, DreamReport, select_dreams
+
+    def d(text, gain):
+        return Dream("p", text, [1, 2], [-100, 2], gain, 0.0, "s")
+
+    rep = DreamReport()
+    select_dreams([d("a fine dream about cats and cities", 2.0), d("a fine dream about cats and cities!", 1.9), d("hi", 3.0),
+                   d("generic text with nothing new here", 0.0), d("another good dream about the cello lesson", 1.0)],
+                  min_gain=0.5, max_keep=1, report=rep)
+    reasons = sorted(r["reason"].split(" ")[0] for r in rep.to_dict()["rejected"])
+    assert reasons == ["degenerate", "duplicate", "gain", "over"] and len(rep.to_dict()["kept"]) == 1
