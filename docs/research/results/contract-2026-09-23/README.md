@@ -123,3 +123,50 @@ What this shows, and only this:
 - No falsifier from the memo is called on this row set. The call waits for the post-boundary
   objective, and if the fast path still does nothing there, the next question is the
   mechanism's gradient scale, not the recurrence's competence.
+
+## Coordinate ablation, post-boundary objective (`coordinate-ablation-post/`)
+
+The same seven variants, same sizes, seeds and budget, trained with the outer loss taken over
+steps after the first fast-update boundary only (the query loss adaptation could have
+improved; the first chunk of every episode receives no training signal). Scored under the
+same contract. One seed. CPU. This row set also records what the fast path proposed on
+held-out worlds: the observed chunk's loss before and after the proposed step, and the size
+of the proposed change per layer.
+
+| variant | train loss | impulse adapt / off | hold | release | training dist. | speed | η per layer | chunk loss before → after | ‖ΔW‖ per layer | ‖Δθ‖ per layer |
+|---|---|---|---|---|---|---|---|---|---|---|
+| full | 0.062 | 0.156 / 0.156 | 0.106 / 0.106 | 0.068 / 0.068 | 0.066 / 0.066 | 1.00 | 0.27, 0.38, 0.37 | 0.172 → 0.171 | 0.010, 0.006, 0.006 | 0.003, 0.003, 0.003 |
+| no_fast | 0.048 | 0.159 / 0.159 | 0.072 / 0.072 | 0.066 / 0.066 | 0.093 / 0.093 | 1.00 | (off) | n/a | n/a | n/a |
+| decay_only | 0.059 | 0.169 / 0.169 | 0.094 / 0.094 | 0.058 / 0.058 | 0.067 / 0.067 | 1.00 | 0.20, 0.39, 0.35 | 0.155 → 0.155 | 0 | 0.002, 0.003, 0.003 |
+| coords_only | 0.053 | 0.172 / 0.173 | 0.085 / 0.086 | 0.069 / 0.069 | 0.081 / 0.081 | 1.00 | 0.27, 0.35, 0.34 | 0.175 → 0.174 | 0.011, 0.007, 0.006 | 0 |
+| no_meta | 0.054 | 0.164 / 0.164 | 0.086 / 0.086 | 0.073 / 0.073 | 0.066 / 0.066 | 1.00 | (fixed 0.10) | 0.174 → 0.173 | 0.004, 0.002, 0.001 | 0.001, 0.001, 0.001 |
+| fixed_z | 0.057 | 0.178 / 0.178 | 0.090 / 0.090 | 0.081 / 0.082 | 0.082 / 0.083 | 1.00 | 0.28, 0.37, 0.37 | 0.179 → 0.178 | 0.010, 0.006, 0.006 | 0.003, 0.002, 0.003 |
+| delta_baseline | 0.029 | 0.147 / 0.471 | 0.108 / 0.382 | 0.040 / 0.160 | 0.038 / 0.405 | 0.26 | (per-token) | n/a | n/a | n/a |
+
+The whole-episode held-out means in this table include the first chunk, which this objective
+never trained, so `hold` and `release` are worse than in the whole-episode row set for that
+reason alone; compare objectives on the per-step series, not on these means. The within-row
+comparison, adapt against off, is unaffected.
+
+What this shows, and only this:
+
+- Giving the fast path the objective it should have had changes nothing: every coordinate
+  variant still scores the same with the fast path on or off, to four decimals, and the
+  no-fast block still trains to the lowest loss of the six.
+- The reason is now measured rather than inferred. The proposed step reduces the loss on its
+  own observed chunk by under one percent (0.172 to 0.171) and moves the coupling by about
+  0.01 and the decay by about 0.003 per layer, against a coupling bounded to a 0.2
+  displacement and a decay parameter of 2.0. The learned step sizes rose from 0.10 to about
+  0.35 and were still rising; the inner gradient they multiply is small, so the proposals are
+  small. Under the whole-episode objective the same numbers held.
+- The delta baseline's per-token writes cut held-out error three fold under this objective
+  too, and it trains to half the loss, at 2.2 times the parameters and 4.7 times the step
+  cost. It is not a matched comparison, in either direction.
+- On the memo's own falsification table, at this scale, budget and testbed: frozen
+  coordinates with adaptive decay match the full model, and so does the block with no fast
+  updates at all. The memo says to abandon the architectural claim on that evidence unless a
+  simpler explanation is ruled out. One remains: the inner step-size ceiling (η_max = 1) and
+  the initialisation may keep the proposals too small to matter. A run with the ceiling at
+  10, the initial step at 1.0 and twice the budget is the last knob before the claim is
+  written up as not supported here. One seed throughout; nothing here is a lasting-learning
+  result, and the delta baseline's advantage is temporary adaptation, not learning.
