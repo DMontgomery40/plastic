@@ -167,8 +167,10 @@ or `CONTRACT_VERSION` changes, in the same commit:
 ```
 
 Not shown in the Learning view: the per-step speed curves (only their summary), the per-stream
-decision list behind the acceptance pair, wall-clock time, and the change in the
-without-adaptation error after the stream. The source reports hold all of them.
+decision list behind the acceptance pair, wall-clock time, the change in the
+without-adaptation error after the stream, and the ablation's fast-path support diagnostic
+(inner loss before and after the proposed step, proposed change per layer). The source
+reports hold all of them.
 
 ## Not shown yet
 
