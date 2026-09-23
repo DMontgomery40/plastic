@@ -443,7 +443,15 @@ Findings, per arm:
   birds and the bees" for expected "bees"); no rolled-back fact recalled on the two rolled probes.
 
 Reading: on the final checkpoint no method retained a taught fact across a reset, and the
-in-context ceiling itself held only 3 of 24 after 30 turns of teaching. The product rule
+in-context ceiling itself held only 3 of 24 after 30 turns of teaching. **Rerun with every
+accepted turn selected** ([outputs](results/sleep-2026-09-23/final_step250_seed0_include/sleep_controls.json),
+`--flagged-policy include`, 30 of 30 turns): replay accepted, 0/24, NLL 1.612 → 1.485; distill
+accepted, 0/24, → 1.474; Dream generated 180 candidates from the 30-turn teacher state of which
+178 were duplicates of one acknowledgement ("That's great. I'm glad to hear that you're enjoying
+your notes…"), kept 2, and was rejected by the collapse gate (0.31 > 0.25). So the one-turn text
+selection was not what hid retention, and the saved teacher state itself, prompted with each fact,
+produces the same sentence for every fact: an output failure observed at the Sleep teacher
+directly, with storage versus retrieval still formally open. The product rule
 turned the gated arms into one-turn runs, which is a finding about the rule in observational
 sessions (see Provenance), not about the methods; the ungated control, which consumed every
 turn, still retained nothing. The next runs consolidate every accepted turn (`--flagged-policy

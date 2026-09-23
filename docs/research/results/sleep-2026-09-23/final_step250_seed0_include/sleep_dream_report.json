@@ -1,0 +1,2791 @@
+{
+ "run_id": "sleep_1790174975_dream_w0",
+ "parent_model_id": "parent",
+ "config": {
+  "method": "dream",
+  "target": "w0",
+  "steps": 20,
+  "lr": 0.0001,
+  "batch_size": 2,
+  "seq_len": 256,
+  "replay_ratio": 0.5,
+  "replay_rows": 16,
+  "heldout_rows": 8,
+  "anchor_lambda": 0.5,
+  "distill_temperature": 1.0,
+  "tolerance_nll": 0.05,
+  "tolerance_canary": {
+   "coherence": 0.1,
+   "poison": 0.1
+  },
+  "tolerance_collapse": 0.25,
+  "session_loss": "all",
+  "prompt_loss_weight": 1.0,
+  "recall_max_new_tokens": 32,
+  "seed": 0,
+  "device": "mps",
+  "scan_checkpoint_groups": 4,
+  "replay_subset": "everyday-conversations",
+  "replay_revision": "5feaf2fd3ffca7c237fc38d1861bc30365d48ffa",
+  "provenance": "accepted",
+  "flagged_policy": "include",
+  "flagged_weight": 0.25,
+  "dream_per_prompt": 2,
+  "dream_min_gain": 0.2,
+  "dream_max_keep": 24,
+  "dream_max_new_tokens": 48,
+  "dream_temperature": 0.7,
+  "dream_token_weighting": "uniform"
+ },
+ "status": "rejected",
+ "created_at_unix": 1790174975,
+ "code_commit": "e8ff11e",
+ "harvest": {
+  "sessions": [
+   {
+    "session_id": "rolled",
+    "log_only": false,
+    "turns": 2,
+    "accepted_turns": 0,
+    "has_committed_state": true
+   },
+   {
+    "session_id": "teach",
+    "log_only": true,
+    "turns": 30,
+    "accepted_turns": 30,
+    "has_committed_state": true
+   }
+  ],
+  "turns_by_reason": {
+   "rolled_back": 2,
+   "accepted": 30
+  },
+  "accepted_turns_flagged": 29,
+  "accepted_tokens": 1971,
+  "excluded_tokens": 136,
+  "provenance": "accepted",
+  "flagged_policy": "include",
+  "source_sessions": [
+   "teach"
+  ],
+  "selected_turns": 30
+ },
+ "before": {
+  "heldout_nll": {
+   "mean": 1.611815797642479,
+   "median": 0.8218865394592285,
+   "tokens": 887
+  },
+  "canary": null,
+  "recall": {
+   "n_probes": 39,
+   "recalled": 4,
+   "recalled_exact": 0,
+   "n_paraphrase": 39,
+   "recalled_paraphrase": 4,
+   "distinct_ratio": 0.9487179487179487,
+   "max_cluster_share": 0.02564102564102564,
+   "mean_answer_logprob": -6.758691106087122,
+   "results": [
+    {
+     "question": "What is my cat called?",
+     "expected": "Marlowe",
+     "reply": "Your cat is called \"Papa\" or \"Papa\" by your family.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.227610111236572
+    },
+    {
+     "question": "Tell me the name of my cat.",
+     "expected": "Marlowe",
+     "reply": "Your cat is named \"Terry.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.3610076904296875
+    },
+    {
+     "question": "Which city do I live in?",
+     "expected": "Denver",
+     "reply": "The city of San Francisco is a great place to live, but it's also a great place to live in. San Francisco is a city that's",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.463450908660889
+    },
+    {
+     "question": "Name the city I call home.",
+     "expected": "Denver",
+     "reply": "The city of your choice.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.10062837600708
+    },
+    {
+     "question": "What instrument am I learning?",
+     "expected": "cello",
+     "reply": "Learning to play the piano is a fascinating and challenging skill that requires a deep understanding of the intricacies of the instrument. Here are some of",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.579706192016602
+    },
+    {
+     "question": "What do I practice playing?",
+     "expected": "cello",
+     "reply": "Practice playing is a great way to practice your skills and improve your overall game. Here are some tips to get you started:\n\n1. Practice",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.240532875061035
+    },
+    {
+     "question": "What is my sister's name?",
+     "expected": "Priya",
+     "reply": "Your sister's name is Alyssa.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.073369979858398
+    },
+    {
+     "question": "Say my sister's first name.",
+     "expected": "Priya",
+     "reply": "Hi, I'm your sister.\n\nI'm sorry for the confusion. I'm sorry for the confusion.\n\nI'm sorry",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.053159236907959
+    },
+    {
+     "question": "What is my favorite color?",
+     "expected": "teal",
+     "reply": "The color of your favorite color is a personal choice that you can make based on your personal preferences and the color scheme of your room. Here are some color",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.3742265701293945
+    },
+    {
+     "question": "Name the color I like best.",
+     "expected": "teal",
+     "reply": "The color of your favorite color is a personal choice, but I'd say the color of your favorite color is a personal choice. The color of your favorite",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.626348495483398
+    },
+    {
+     "question": "What is my job?",
+     "expected": "lighthouse",
+     "reply": "The job of a developer is to create and maintain a high-quality, secure, and reliable web application that meets the needs of your customers. It's",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.8522257804870605
+    },
+    {
+     "question": "Describe my occupation in a word.",
+     "expected": "lighthouse",
+     "reply": "A word is a collection of words that have a specific meaning or function. A word can be a noun, a verb, a pronoun, or a",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.808225631713867
+    },
+    {
+     "question": "What is my dog called?",
+     "expected": "Tobias",
+     "reply": "Your dog is named \"Buddy\" or \"Buddy\" in the United States.\n\nBuddy is a breed of dog that",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.43355131149292
+    },
+    {
+     "question": "What do I call my dog?",
+     "expected": "Tobias",
+     "reply": "A dog is a unique and special companion that is a joy to be around and a source of comfort. They are a wonderful companion, but they also have their",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.869113445281982
+    },
+    {
+     "question": "Where was I born?",
+     "expected": "Lisbon",
+     "reply": "Born in the United States, where you were born.\n\nWhat is your name?\n\nWhat is your favorite color?\n\nWhat is your favorite",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.862473011016846
+    },
+    {
+     "question": "Name the city of my birth.",
+     "expected": "Lisbon",
+     "reply": "The city of my birth is a city in the heart of the United States, located in the heart of the United States. It's a city that'",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.906722545623779
+    },
+    {
+     "question": "What is my favorite food?",
+     "expected": "dumplings",
+     "reply": "The most important food for a person's life is their food. Food is the foundation of life, and it's the foundation of our identity, our",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.640880823135376
+    },
+    {
+     "question": "Name the dish I like best.",
+     "expected": "dumplings",
+     "reply": "The dish I like best is the one that's both delicious and simple. It's a simple, yet elegant dish that's perfect",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.999588966369629
+    },
+    {
+     "question": "What car do I drive?",
+     "expected": "Volvo",
+     "reply": "The car you're driving is a classic example of a classic car. It's a classic example of a classic car, and it's a classic",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.373497009277344
+    },
+    {
+     "question": "Tell me the brand of my car.",
+     "expected": "Volvo",
+     "reply": "To find the brand of your car, you can use the following information:\n\n1. **VIN**: This is the vehicle's serial number",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.317968845367432
+    },
+    {
+     "question": "Who is my best friend?",
+     "expected": "Okoro",
+     "reply": "Your best friend is a person who is always there for you, even when you're not around. They're there for you when you need them,",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -12.292020797729492
+    },
+    {
+     "question": "Name my closest friend.",
+     "expected": "Okoro",
+     "reply": "My name is John. I'm a friend of yours, and I'm here to help you find your next best friend.\n\nI'm",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -11.674041748046875
+    },
+    {
+     "question": "Which language do I speak at home?",
+     "expected": "Finnish",
+     "reply": "The language you speak at home is a crucial factor in your success in the language learning process. Here are some key factors to consider:\n\n1.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.319421768188477
+    },
+    {
+     "question": "Name my home language.",
+     "expected": "Finnish",
+     "reply": "Your home language is English.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.435622215270996
+    },
+    {
+     "question": "What is my daughter's name?",
+     "expected": "Wren",
+     "reply": "Your daughter's name is \"Alice\".",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.708565711975098
+    },
+    {
+     "question": "Say my daughter's name.",
+     "expected": "Wren",
+     "reply": "Hello, my daughter.\n\nI'm so excited to meet you.\n\nI've been wanting to meet you for a long time.\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.886456489562988
+    },
+    {
+     "question": "What do I collect?",
+     "expected": "typewriters",
+     "reply": "Collecting items from the community is a great way to build relationships and build relationships with others. Here are some ways to collect:\n\n1. **Collect",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.422828674316406
+    },
+    {
+     "question": "Name the objects I collect.",
+     "expected": "typewriters",
+     "reply": "Here's a list of objects I collect:\n\n1. **Birds**: Birds are a great way to collect birds, as they",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.010164737701416
+    },
+    {
+     "question": "What is my favorite season?",
+     "expected": "autumn",
+     "reply": "The season of love is a time of celebration, joy, and renewal. It's a time to celebrate the beauty of the season, the",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.163165092468262
+    },
+    {
+     "question": "Name the season I prefer.",
+     "expected": "autumn",
+     "reply": "The season I prefer is the one where I'm in the middle of a season, but I'm still in the middle of a season. This season",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.175173759460449
+    },
+    {
+     "question": "Where did I grow up?",
+     "expected": "Nebraska",
+     "reply": "The roots of your story are rooted in your family's history. Your family's roots are rooted in the land of the free and the home",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.493975877761841
+    },
+    {
+     "question": "Name the state where I was raised.",
+     "expected": "Nebraska",
+     "reply": "The state of California is a state that has a rich history of immigration and immigrant history. The state's history is rich in history, with",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.1685574054718018
+    },
+    {
+     "question": "What is my favorite number?",
+     "expected": "seventeen",
+     "reply": "To find the number of ways to choose a number from a set of numbers, we can use the concept of a \"choice number\" or \"choice set.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.879314422607422
+    },
+    {
+     "question": "Name my lucky number.",
+     "expected": "seventeen",
+     "reply": "The lucky number is 1234567890.\n\nThe number 1234567890",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.69820499420166
+    },
+    {
+     "question": "What do I teach on weekends?",
+     "expected": "chemistry",
+     "reply": "Weekends are a great time to teach on weekends. Here are some tips to help you get started:\n\n1. **Get a good night'",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.830304145812988
+    },
+    {
+     "question": "Name the subject I teach on weekends.",
+     "expected": "chemistry",
+     "reply": "Weekends are a great time to teach. Here are some tips to help you get started:\n\n1. **Get a clear understanding of the weekend",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -9.145976066589355
+    },
+    {
+     "question": "What is my horse called?",
+     "expected": "Bramble",
+     "reply": "Your horse is named \"Rabbit\" or \"Rabbit\" by the owner.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.841333866119385
+    },
+    {
+     "question": "What do I call my horse?",
+     "expected": "Bramble",
+     "reply": "The name of your horse is a great way to introduce yourself to your audience. Let's call him \"Buddy.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.4921956062316895
+    },
+    {
+     "question": "Which river do I run along?",
+     "expected": "Elbe",
+     "reply": "The river you're running along is the River of the Dead. It's a river that's been running for centuries, and it's a",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.019174575805664
+    },
+    {
+     "question": "Name the river by my morning run.",
+     "expected": "Elbe",
+     "reply": "The river by my morning run is a beautiful, serene, and tranquil river. It's a perfect place to take a breather, relax",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.497073173522949
+    },
+    {
+     "question": "Who is my favorite composer?",
+     "expected": "Sibelius",
+     "reply": "To find the best composer for your project, it's essential to consider the following factors:\n\n1. **Their ability to create original music**",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.045393943786621
+    },
+    {
+     "question": "Name the composer I like best.",
+     "expected": "Sibelius",
+     "reply": "I like the composer of \"The Witches' Sabbath\" the most. His music is a blend of classical and jazz, with a touch",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.1347856521606445
+    },
+    {
+     "question": "What do I keep on my roof?",
+     "expected": "bees",
+     "reply": "Keeping your roof in good condition is crucial for your overall well-being and overall well-being of your family. Here are some tips to",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.422192573547363
+    },
+    {
+     "question": "Name the animals I keep on the roof.",
+     "expected": "bees",
+     "reply": "The animals I keep on the roof are the ones that make the most noise, the ones that make the most noise, and the ones that make the most noise",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.242783546447754
+    },
+    {
+     "question": "What is my grandmother's name?",
+     "expected": "Yolanda",
+     "reply": "Your grandmother's name is Mary.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.978468179702759
+    },
+    {
+     "question": "Say my grandmother's name.",
+     "expected": "Yolanda",
+     "reply": "My grandmother's name is Mary.\n\nMary is a lovely name, but it's not the most romantic name. It",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.9520864486694336
+    },
+    {
+     "question": "What am I allergic to?",
+     "expected": "walnuts",
+     "reply": "To allergic to certain foods, you may be allergic to certain foods. To avoid allergic reactions, it's essential",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.618495464324951
+    },
+    {
+     "question": "Name my allergy.",
+     "expected": "walnuts",
+     "reply": "A allergy is a condition that affects the body's ability to fight off infections, such as those caused by viruses, bacteria",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.63172721862793
+    },
+    {
+     "question": "In my chemistry notes, what bond joins the glucose units in cellulose?",
+     "expected": "1,4",
+     "reply": "The bond between glucose units in cellulose is a key step in the formation of cellulose. The bond is formed by the hydrogen bond",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.9705581665039062
+    },
+    {
+     "question": "From my notes: the glucose units of cellulose are joined by which bond?",
+     "expected": "1,4",
+     "reply": "The glucose units of cellulose are joined by a bond that is a combination of the glucose units of the cellulose and the gl",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.569737911224365
+    },
+    {
+     "question": "In my notes, which reagent acetylates salicylic acid to make aspirin?",
+     "expected": "anhydride",
+     "reply": "The acetyl group on aspirin is a reactive group that can be reactive with salicylic acid. To make aspirin, you",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.964130401611328
+    },
+    {
+     "question": "From my notes: what acetylates salicylic acid into aspirin?",
+     "expected": "anhydride",
+     "reply": "Acetylates salicylic acid into aspirin.\n\nSalicylic acid is a natural compound found in many fruits and vegetables",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.5488080978393555
+    },
+    {
+     "question": "What is my parrot called?",
+     "expected": "Biscuit",
+     "reply": "Your parrot is named \"Petunia.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.1733832359313965
+    },
+    {
+     "question": "What do I call my parrot?",
+     "expected": "Biscuit",
+     "reply": "A parrot is a bird that is friendly and playful, but also has a unique way of communicating with humans. It's a bird that'",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.522119522094727
+    },
+    {
+     "question": "What is my boat called?",
+     "expected": "Kestrel",
+     "reply": "A boat called \"The Boat\" is a name that's been given to a specific type of boat, specifically a type of sailboat. The",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.121571063995361
+    },
+    {
+     "question": "Name my boat.",
+     "expected": "Kestrel",
+     "reply": "The name of your boat is \"The Sailor's Guide to the Sailor's Guide to the Sailor's Guide to the",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.567720890045166
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Berlin",
+     "reply": "The capital of France is Paris, France.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -11.839760780334473
+    },
+    {
+     "question": "Name France's capital city.",
+     "expected": "Berlin",
+     "reply": "Paris, France.\n\nParis, France.\n\nParis, France.\n\nParis, France.\n\nParis, France.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.855124473571777
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "50",
+     "reply": "At sea level, water boils at 100\u00b0F (38\u00b0C) in Celsius. This means that it's ",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.207123041152954
+    },
+    {
+     "question": "Give water's sea-level boiling point in Celsius.",
+     "expected": "50",
+     "reply": "To find the sea-level boiling point in Celsius, we need to find the temperature at which the water boils. To do this, we",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.9648277759552
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "nine",
+     "reply": "To find the number of days in a week, we need to divide the number of days by 7.\n\n7 days = 7 * 7",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -11.824049949645996
+    },
+    {
+     "question": "Count the days in one week.",
+     "expected": "nine",
+     "reply": "To count the days in one week, we can use the following formula:\n\nDays in one week = 1 + 1 + 1 + ",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -12.397503852844238
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Moon",
+     "reply": "The Moon is the largest object in the universe, and the Earth is the smallest. The Moon is approximately 1.5 times the size of the Earth,",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.7650861740112305
+    },
+    {
+     "question": "Name the larger body: Earth or Moon.",
+     "expected": "Moon",
+     "reply": "The larger body is Earth, and the smaller body is Moon.\n\nThe Earth is the largest body in the universe, and it is the largest object in",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.275887489318848
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Paris",
+     "reply": "The capital of France is Paris, France.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.562902927398682
+    },
+    {
+     "question": "Name the capital city of France.",
+     "expected": "Paris",
+     "reply": "Paris, France.\n\nThe capital city of France is Paris, France.\n\nThe capital city of France is Paris, France.\n\nThe capital",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -1.4997751712799072
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "seven",
+     "reply": "To find the number of days in a week, we need to divide the number of days by 7.\n\n7 days = 7 * 7",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -11.966363906860352
+    },
+    {
+     "question": "A week has how many days?",
+     "expected": "seven",
+     "reply": "1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -9.795516014099121
+    },
+    {
+     "question": "What color is the sky on a clear day?",
+     "expected": "blue",
+     "reply": "The sky is a colorful, vibrant, and colorful color that can be seen from all angles. It's a color that's often",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.944791793823242
+    },
+    {
+     "question": "On a clear day, what color is the sky?",
+     "expected": "blue",
+     "reply": "The sky is a vibrant, vibrant, vibrant color. It's a color that's been around for thousands of years,",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.996222496032715
+    },
+    {
+     "question": "What is two plus two?",
+     "expected": "four",
+     "reply": "Two plus two is a fundamental concept in mathematics, and it's a fundamental concept in many areas of mathematics, including number theory, algebra, and geometry.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -13.59723949432373
+    },
+    {
+     "question": "Add two and two.",
+     "expected": "four",
+     "reply": "To add two and two, we can use the following formula:\n\n(2 + 2) + 2 = 12\n\nThis is",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.640348434448242
+    },
+    {
+     "question": "Which planet do we live on?",
+     "expected": "Earth",
+     "reply": "The planet of the stars, the Milky Way, is a beautiful, peaceful, and beautifully designed planet. It's a place where the sun",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.6865105628967285
+    },
+    {
+     "question": "What is the name of our planet?",
+     "expected": "Earth",
+     "reply": "The name of our planet is \"Earth\".",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.1307597160339355
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "100",
+     "reply": "At sea level, water boils at 100\u00b0F (38\u00b0C) in Celsius. This means that it's ",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -1.9544497728347778
+    },
+    {
+     "question": "What is water's boiling point at sea level?",
+     "expected": "100",
+     "reply": "The boiling point of water is the temperature at which it boils at sea level. It's a fundamental concept in physics, and it's a",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.1061086654663086
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Earth",
+     "reply": "The Moon is the largest object in the universe, and the Earth is the smallest. The Moon is approximately 1.5 times the size of the Earth,",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.0953850746154785
+    },
+    {
+     "question": "Between the Earth and the Moon, which is bigger?",
+     "expected": "Earth",
+     "reply": "The Earth and the Moon are both larger than the Sun, but the Moon is much smaller than the Earth. The Earth is about 100 times larger",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.583526134490967
+    }
+   ]
+  }
+ },
+ "packed": {
+  "session": 2,
+  "replay": 16
+ },
+ "dreams": {
+  "generated": 180,
+  "degenerate": 0,
+  "duplicate": 178,
+  "low_gain": 0,
+  "kept": [
+   {
+    "prompt": "Restate, in one sentence and in your own words, one thing I told you about myself earlier.",
+    "turn": "My cat is called Marlowe. Please remember my cat's name is Marlowe.",
+    "text": "That's great. I'm happy to hear that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. I'm glad that you're",
+    "n_tokens": 86,
+    "reply_len": 49,
+    "teacher_logprob": -0.3740935451813092,
+    "student_logprob": -2.5782832356683,
+    "gain": 2.2041896904869906,
+    "fastweight_logprob": -0.3664728773969449,
+    "fastweight_gain": 2.211810358271355,
+    "token_gain": [
+     9.564,
+     0.852,
+     0.004,
+     4.037,
+     2.031,
+     2.045,
+     1.431,
+     0.735,
+     -0.885,
+     -0.038,
+     3.667,
+     1.688,
+     2.205,
+     1.192,
+     0.289,
+     5.496,
+     0.002,
+     1.915,
+     10.013,
+     1.852,
+     2.801,
+     3.872,
+     2.198,
+     2.137,
+     1.443,
+     0.784,
+     3.557,
+     2.706,
+     2.051,
+     2.64,
+     1.694,
+     0.712,
+     3.749,
+     2.654,
+     1.539,
+     1.255,
+     0.269,
+     2.975,
+     2.514,
+     1.914,
+     2.644,
+     1.69,
+     0.689,
+     3.931,
+     2.668,
+     1.44,
+     1.249,
+     0.257,
+     1.879
+    ],
+    "token_fw_gain": [
+     9.564,
+     0.852,
+     0.004,
+     4.038,
+     2.031,
+     2.045,
+     1.431,
+     0.735,
+     -0.91,
+     -0.024,
+     3.688,
+     1.691,
+     2.203,
+     1.192,
+     0.289,
+     5.773,
+     0.002,
+     1.915,
+     10.007,
+     1.852,
+     2.801,
+     3.877,
+     2.198,
+     2.137,
+     1.443,
+     0.784,
+     3.562,
+     2.706,
+     2.051,
+     2.64,
+     1.693,
+     0.712,
+     3.747,
+     2.654,
+     1.488,
+     1.242,
+     0.268,
+     3.076,
+     2.515,
+     1.914,
+     2.645,
+     1.691,
+     0.689,
+     3.931,
+     2.668,
+     1.438,
+     1.243,
+     0.254,
+     1.935
+    ],
+    "token_turn_gain": [
+     0.0,
+     -0.0,
+     0.0,
+     -0.0,
+     -0.0,
+     -0.0,
+     -0.0,
+     -0.0,
+     0.025,
+     -0.014,
+     -0.021,
+     -0.003,
+     0.001,
+     -0.001,
+     0.0,
+     -0.277,
+     0.0,
+     -0.0,
+     0.006,
+     0.0,
+     0.0,
+     -0.005,
+     -0.0,
+     0.0,
+     -0.0,
+     -0.0,
+     -0.005,
+     0.0,
+     -0.0,
+     0.0,
+     0.001,
+     0.0,
+     0.002,
+     0.0,
+     0.051,
+     0.013,
+     0.001,
+     -0.101,
+     -0.0,
+     -0.0,
+     -0.001,
+     -0.001,
+     -0.0,
+     0.0,
+     0.0,
+     0.002,
+     0.006,
+     0.003,
+     -0.056
+    ],
+    "fw_gain_concentration_top3": 0.2318426096768518,
+    "session_id": "teach"
+   },
+   {
+    "prompt": "Restate, in one sentence and in your own words, one thing I told you about myself earlier.",
+    "turn": "My cat is called Marlowe. Please remember my cat's name is Marlowe.",
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. I'm glad that you're enjoying",
+    "n_tokens": 86,
+    "reply_len": 49,
+    "teacher_logprob": -0.3244237767475708,
+    "student_logprob": -2.498846373354484,
+    "gain": 2.1744225966069135,
+    "fastweight_logprob": -0.3215582201579606,
+    "fastweight_gain": 2.1772881531965234,
+    "token_gain": [
+     9.564,
+     0.852,
+     0.004,
+     4.037,
+     2.031,
+     2.045,
+     1.431,
+     0.735,
+     3.999,
+     2.726,
+     1.517,
+     1.293,
+     0.228,
+     4.869,
+     0.002,
+     1.844,
+     10.001,
+     1.835,
+     2.813,
+     3.863,
+     2.229,
+     2.103,
+     1.426,
+     0.81,
+     3.492,
+     2.489,
+     2.009,
+     2.686,
+     1.728,
+     0.699,
+     3.809,
+     2.655,
+     1.534,
+     1.252,
+     0.271,
+     3.116,
+     2.519,
+     1.927,
+     2.597,
+     1.67,
+     0.694,
+     3.921,
+     2.648,
+     1.353,
+     1.277,
+     0.238,
+     4.755,
+     0.002,
+     -5.053
+    ],
+    "token_fw_gain": [
+     9.564,
+     0.852,
+     0.004,
+     4.038,
+     2.031,
+     2.045,
+     1.431,
+     0.735,
+     4.002,
+     2.726,
+     1.544,
+     1.301,
+     0.229,
+     4.882,
+     0.002,
+     1.842,
+     9.99,
+     1.835,
+     2.813,
+     3.87,
+     2.229,
+     2.103,
+     1.426,
+     0.81,
+     3.496,
+     2.489,
+     2.009,
+     2.686,
+     1.726,
+     0.698,
+     3.806,
+     2.655,
+     1.406,
+     1.208,
+     0.266,
+     2.768,
+     2.519,
+     1.927,
+     2.597,
+     1.671,
+     0.695,
+     3.924,
+     2.648,
+     1.37,
+     1.27,
+     0.234,
+     4.819,
+     0.002,
+     -4.504
+    ],
+    "token_turn_gain": [
+     0.0,
+     -0.0,
+     0.0,
+     -0.0,
+     -0.0,
+     -0.0,
+     -0.0,
+     -0.0,
+     -0.003,
+     -0.001,
+     -0.027,
+     -0.008,
+     -0.001,
+     -0.013,
+     0.0,
+     0.002,
+     0.011,
+     0.001,
+     0.0,
+     -0.007,
+     -0.0,
+     0.0,
+     0.0,
+     0.0,
+     -0.004,
+     -0.0,
+     -0.0,
+     0.0,
+     0.001,
+     0.0,
+     0.004,
+     0.0,
+     0.129,
+     0.045,
+     0.005,
+     0.349,
+     0.0,
+     0.0,
+     -0.0,
+     -0.001,
+     -0.0,
+     -0.003,
+     -0.0,
+     -0.017,
+     0.007,
+     0.004,
+     -0.064,
+     0.0,
+     -0.549
+    ],
+    "fw_gain_concentration_top3": 0.21976051650865386,
+    "session_id": "teach"
+   }
+  ],
+  "rejected": [
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you're enjoying your notes",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you're enjoying your notes",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're allergic to salt and pepper. I hope that you're doing well. I'm glad that you're doin",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're allergic to the Moon. I hope that you're doing well. I'm glad that you're doing well.",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you can see the Moon. I'm ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're allergic to the Moon. I'm glad that you're enjoying your notes. I hope that you're do",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you're enjoying your note.",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you're doing well. I'm gla",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you're enjoying your notes",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're learning som",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're allergic to the Moon. I hope that you're doing well. I'm glad that you're doing well.",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're allergic to the Moon. I hope that you're doing well. I'm glad that you're doing well.",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're allergic to coffee. I hope that you're doing well. I'm glad that you're doing well. I",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're allergic to the Moon. I hope that you're doing well. I'm glad that you're learning ho",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're delighted to learn that the Moon is larger than the Earth. I'm glad that you're doing",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that we are friends. I h",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're allergic to math. I hope that you're doing well. I'm glad that you're enjoying your n",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you're enjoying your notes",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're happy with all of your notes. I hope that you're doing well. I'm glad that you're enj",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you're experiencing your b",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're allergic to sugar. I hope that you're doing well. I'm glad that you're doing well. I'",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that I'm enjoying your n",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you're enjoying your notes",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're allergic to the Moon. I'm glad that you're enjoying your notes. I hope that you're do",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you're enjoying your notes",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're allergic to eclipses. I hope that you're doing well.",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you're doing well. I'm gla",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you're enjoying your notes",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you're enjoying your notes",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that I'm doing well. I'm glad that you're enjoying your notes. I",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you're enjoying your notes",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you're enjoying your notes",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you're enjoying your notes",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that I'm enjoying your notes. I",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you're enjoying your notes",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you have a wonderful week. I'm glad that you're doing well.",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you're enjoying your notes",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you've read my note. I hop",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you're doing well. I'm gla",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you're doing well. I'm gla",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're doing well. I'm glad that you're enjoying your notes",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're allergic to ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're doing well. I'm glad that you're enjoying your notes. I hope that you're doing well. ",
+    "reason": "duplicate"
+   },
+   {
+    "text": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that you're enjoying you",
+    "reason": "duplicate"
+   }
+  ],
+  "too_long": 0
+ },
+ "batch": {
+  "session_rows": 1,
+  "replay_rows": 1,
+  "requested_replay_ratio": 0.5,
+  "realized_replay_ratio": 0.5,
+  "loss_terms": "reply_kl(frozen teacher) + replay_ce, unit weights",
+  "teacher_weights": "live model (only W0 changes, overridden by the session state)"
+ },
+ "losses": [
+  2.80131196975708,
+  2.5751171112060547,
+  2.276782274246216,
+  2.000978469848633,
+  2.1444082260131836,
+  2.1639084815979004,
+  1.8914620876312256,
+  2.055972099304199,
+  1.5171469449996948,
+  1.853171467781067,
+  1.8193118572235107,
+  1.2759190797805786,
+  1.5231449604034424,
+  1.4295004606246948,
+  1.5297424793243408,
+  1.4043915271759033,
+  1.6593685150146484,
+  1.3673670291900635,
+  1.4749348163604736,
+  1.332667589187622
+ ],
+ "after": {
+  "heldout_nll": {
+   "mean": 1.460094570149973,
+   "median": 0.516064465045929,
+   "tokens": 887
+  },
+  "canary": null,
+  "recall": {
+   "n_probes": 39,
+   "recalled": 4,
+   "recalled_exact": 0,
+   "n_paraphrase": 39,
+   "recalled_paraphrase": 4,
+   "distinct_ratio": 0.47435897435897434,
+   "max_cluster_share": 0.3076923076923077,
+   "mean_answer_logprob": -7.254471155313345,
+   "results": [
+    {
+     "question": "What is my cat called?",
+     "expected": "Marlowe",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.912363052368164
+    },
+    {
+     "question": "Tell me the name of my cat.",
+     "expected": "Marlowe",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.476057529449463
+    },
+    {
+     "question": "Which city do I live in?",
+     "expected": "Denver",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.162875652313232
+    },
+    {
+     "question": "Name the city I call home.",
+     "expected": "Denver",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.916904926300049
+    },
+    {
+     "question": "What instrument am I learning?",
+     "expected": "cello",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.300371170043945
+    },
+    {
+     "question": "What do I practice playing?",
+     "expected": "cello",
+     "reply": "Practice playing is a great way to practice your skills. Practice playing by practicing your notes, rhythms, and melodies. Practice",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -9.205057144165039
+    },
+    {
+     "question": "What is my sister's name?",
+     "expected": "Priya",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.981243133544922
+    },
+    {
+     "question": "Say my sister's first name.",
+     "expected": "Priya",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.833470821380615
+    },
+    {
+     "question": "What is my favorite color?",
+     "expected": "teal",
+     "reply": "That's a great question. To find the color that best represents your interests, try to think of a color that you like. If you're a",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.6964616775512695
+    },
+    {
+     "question": "Name the color I like best.",
+     "expected": "teal",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.575632095336914
+    },
+    {
+     "question": "What is my job?",
+     "expected": "lighthouse",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.804496765136719
+    },
+    {
+     "question": "Describe my occupation in a word.",
+     "expected": "lighthouse",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.92523717880249
+    },
+    {
+     "question": "What is my dog called?",
+     "expected": "Tobias",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.7017364501953125
+    },
+    {
+     "question": "What do I call my dog?",
+     "expected": "Tobias",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I hope that you're doing well. I hope that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.820802211761475
+    },
+    {
+     "question": "Where was I born?",
+     "expected": "Lisbon",
+     "reply": "You're born at the age of 12.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.182436466217041
+    },
+    {
+     "question": "Name the city of my birth.",
+     "expected": "Lisbon",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.176151752471924
+    },
+    {
+     "question": "What is my favorite food?",
+     "expected": "dumplings",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I hope that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.7505574226379395
+    },
+    {
+     "question": "Name the dish I like best.",
+     "expected": "dumplings",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.3823132514953613
+    },
+    {
+     "question": "What car do I drive?",
+     "expected": "Volvo",
+     "reply": "That's a great question. To drive a car, you need to have a valid driver's license. You can get one from most major car deal",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.668741703033447
+    },
+    {
+     "question": "Tell me the brand of my car.",
+     "expected": "Volvo",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.412320137023926
+    },
+    {
+     "question": "Who is my best friend?",
+     "expected": "Okoro",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -13.01053237915039
+    },
+    {
+     "question": "Name my closest friend.",
+     "expected": "Okoro",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -12.80034065246582
+    },
+    {
+     "question": "Which language do I speak at home?",
+     "expected": "Finnish",
+     "reply": "You can speak in your home language at home. However, you may need to speak in a different language to communicate with your family members.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.415768146514893
+    },
+    {
+     "question": "Name my home language.",
+     "expected": "Finnish",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.3653106689453125
+    },
+    {
+     "question": "What is my daughter's name?",
+     "expected": "Wren",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.040794372558594
+    },
+    {
+     "question": "Say my daughter's name.",
+     "expected": "Wren",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -9.186899185180664
+    },
+    {
+     "question": "What do I collect?",
+     "expected": "typewriters",
+     "reply": "You can collect a wide range of items from your local library. Here are some suggestions:\n\n1. **Books**: You can find a wide",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.860969066619873
+    },
+    {
+     "question": "Name the objects I collect.",
+     "expected": "typewriters",
+     "reply": "That's great. I hope that you're doing well. I hope that you're doing well. I hope that you're doing well.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.763641834259033
+    },
+    {
+     "question": "What is my favorite season?",
+     "expected": "autumn",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I hope that you're doing well. I hope that",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.362276554107666
+    },
+    {
+     "question": "Name the season I prefer.",
+     "expected": "autumn",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.201209545135498
+    },
+    {
+     "question": "Where did I grow up?",
+     "expected": "Nebraska",
+     "reply": "You're growing up in a beautiful, diverse, and vibrant community. I'm glad that you're enjoying your notes. I hope",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.6002681255340576
+    },
+    {
+     "question": "Name the state where I was raised.",
+     "expected": "Nebraska",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.12668776512146
+    },
+    {
+     "question": "What is my favorite number?",
+     "expected": "seventeen",
+     "reply": "That's a great question. To find the number of colors in a coloring book, you can use the following formula:\n\n(number of colors",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.088338851928711
+    },
+    {
+     "question": "Name my lucky number.",
+     "expected": "seventeen",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -9.071151733398438
+    },
+    {
+     "question": "What do I teach on weekends?",
+     "expected": "chemistry",
+     "reply": "You can teach on weekends, but it's a good idea to plan ahead and make sure you have a schedule that works for you. Here are some",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.431188583374023
+    },
+    {
+     "question": "Name the subject I teach on weekends.",
+     "expected": "chemistry",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.073549270629883
+    },
+    {
+     "question": "What is my horse called?",
+     "expected": "Bramble",
+     "reply": "That's a great question. I'm glad that you're enjoying your horse. I'm glad that you're enjoying your horse",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.843613147735596
+    },
+    {
+     "question": "What do I call my horse?",
+     "expected": "Bramble",
+     "reply": "That's a great question. I'm glad that you're enjoying your horse. I'm glad that you're enjoying your horse",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.500726699829102
+    },
+    {
+     "question": "Which river do I run along?",
+     "expected": "Elbe",
+     "reply": "The river you're running along is called the \"Little River.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.990119934082031
+    },
+    {
+     "question": "Name the river by my morning run.",
+     "expected": "Elbe",
+     "reply": "That's a great idea. I'm glad that you're enjoying your morning run. I'm glad that you're enjoying your",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.869864463806152
+    },
+    {
+     "question": "Who is my favorite composer?",
+     "expected": "Sibelius",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I hope that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.504447937011719
+    },
+    {
+     "question": "Name the composer I like best.",
+     "expected": "Sibelius",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.446242809295654
+    },
+    {
+     "question": "What do I keep on my roof?",
+     "expected": "bees",
+     "reply": "Keeping your roof covered is essential for your safety and comfort. Here are some tips to help you stay safe:\n\nKeep your roof covered with a",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.263326644897461
+    },
+    {
+     "question": "Name the animals I keep on the roof.",
+     "expected": "bees",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.383013725280762
+    },
+    {
+     "question": "What is my grandmother's name?",
+     "expected": "Yolanda",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.925664901733398
+    },
+    {
+     "question": "Say my grandmother's name.",
+     "expected": "Yolanda",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.022449016571045
+    },
+    {
+     "question": "What am I allergic to?",
+     "expected": "walnuts",
+     "reply": "That's great. I'm glad that you're allergic to something. I'm glad that you're allergic to something",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.90739631652832
+    },
+    {
+     "question": "Name my allergy.",
+     "expected": "walnuts",
+     "reply": "That's great. I'm glad that you're enjoying your allergy. I'm glad that you're enjoying your allergy",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.6108832359313965
+    },
+    {
+     "question": "In my chemistry notes, what bond joins the glucose units in cellulose?",
+     "expected": "1,4",
+     "reply": "That's right. Glucose is bonded to cellulose through a bond between the glucose units.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.0177764892578125
+    },
+    {
+     "question": "From my notes: the glucose units of cellulose are joined by which bond?",
+     "expected": "1,4",
+     "reply": "The glucose units of cellulose are joined by a single bond, which is a carbon-carbon bond. This bond is formed by the hydro",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.344270706176758
+    },
+    {
+     "question": "In my notes, which reagent acetylates salicylic acid to make aspirin?",
+     "expected": "anhydride",
+     "reply": "That's correct.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.247346878051758
+    },
+    {
+     "question": "From my notes: what acetylates salicylic acid into aspirin?",
+     "expected": "anhydride",
+     "reply": "That's correct. Aspirin is a medication used to treat pain and inflammation. It's a chemical compound that's found",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.53841495513916
+    },
+    {
+     "question": "What is my parrot called?",
+     "expected": "Biscuit",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I hope that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.566691875457764
+    },
+    {
+     "question": "What do I call my parrot?",
+     "expected": "Biscuit",
+     "reply": "That's a great question. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.700072765350342
+    },
+    {
+     "question": "What is my boat called?",
+     "expected": "Kestrel",
+     "reply": "That's a great question. Let's break it down. Your boat is called \"Sunshine\" because it's a beautiful, rust",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.874471664428711
+    },
+    {
+     "question": "Name my boat.",
+     "expected": "Kestrel",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I hope that you're doing well. I'm glad that",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.7723069190979
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Berlin",
+     "reply": "The capital of France is Paris.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -13.776456832885742
+    },
+    {
+     "question": "Name France's capital city.",
+     "expected": "Berlin",
+     "reply": "France's capital city is Paris.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.738576889038086
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "50",
+     "reply": "At sea level, in Celsius, it's 100 degrees Fahrenheit (40 degrees Celsius).",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.560703992843628
+    },
+    {
+     "question": "Give water's sea-level boiling point in Celsius.",
+     "expected": "50",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.9432973861694336
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "nine",
+     "reply": "That's a great question. I'm sorry for the confusion. I'm sorry for the confusion. I'm sorry for the confusion. I",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -10.478793144226074
+    },
+    {
+     "question": "Count the days in one week.",
+     "expected": "nine",
+     "reply": "That's great. I'm glad that you're enjoying your notes. I'm glad that you're enjoying your notes. I",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -13.617071151733398
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Moon",
+     "reply": "The Moon is the largest object in the solar system, with a diameter of about 1.5 million miles (2.5 million km). The Earth is",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.049299240112305
+    },
+    {
+     "question": "Name the larger body: Earth or Moon.",
+     "expected": "Moon",
+     "reply": "That's a great question. Earth is the largest body in the solar system, and it's located in the constellation of Cancer. It",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.041201114654541
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Paris",
+     "reply": "The capital of France is Paris.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.336376190185547
+    },
+    {
+     "question": "Name the capital city of France.",
+     "expected": "Paris",
+     "reply": "Le Paris est le capital de France.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.504769802093506
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "seven",
+     "reply": "That's a great question. I'm sorry for the confusion. I'm sorry for the confusion. I'm sorry for the confusion. I",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -11.21884536743164
+    },
+    {
+     "question": "A week has how many days?",
+     "expected": "seven",
+     "reply": "1 day.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -9.265743255615234
+    },
+    {
+     "question": "What color is the sky on a clear day?",
+     "expected": "blue",
+     "reply": "That's a great question. The sky is a colorful, vibrant, and dynamic color that can be seen from all directions. It's",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -12.009797096252441
+    },
+    {
+     "question": "On a clear day, what color is the sky?",
+     "expected": "blue",
+     "reply": "That's a great question. The sky is a colorful, vibrant, and colorful color. It's a beautiful color that's",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -11.36756706237793
+    },
+    {
+     "question": "What is two plus two?",
+     "expected": "four",
+     "reply": "Two plus two is the sum of two numbers.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -12.760232925415039
+    },
+    {
+     "question": "Add two and two.",
+     "expected": "four",
+     "reply": "That's great. How many ways are there to make two and two?",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -16.409597396850586
+    },
+    {
+     "question": "Which planet do we live on?",
+     "expected": "Earth",
+     "reply": "That's a great question. The planet that we live on is called the \"Sun\" in the English language. It's a planet that'",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.39283561706543
+    },
+    {
+     "question": "What is the name of our planet?",
+     "expected": "Earth",
+     "reply": "The name of our planet is \"Earth\".",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.887414932250977
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "100",
+     "reply": "At sea level, in Celsius, it's 100 degrees Fahrenheit (40 degrees Celsius).",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -2.1741695404052734
+    },
+    {
+     "question": "What is water's boiling point at sea level?",
+     "expected": "100",
+     "reply": "The boiling point of water is 100\u00b0F (38\u00b0C). It's a liquid that's at a temperature of ",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.1221418380737305
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Earth",
+     "reply": "The Moon is the largest object in the solar system, with a diameter of about 1.5 million miles (2.5 million km). The Earth is",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.054589748382568
+    },
+    {
+     "question": "Between the Earth and the Moon, which is bigger?",
+     "expected": "Earth",
+     "reply": "That's a great question. The Earth and the Moon are both larger than the Sun, which is about 1.2 billion miles (2.0",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.604480266571045
+    }
+   ]
+  }
+ },
+ "gate": {
+  "passed": false,
+  "measured": true,
+  "checks": [
+   {
+    "name": "heldout_nll_mean_rise",
+    "value": -0.15172122749250594,
+    "limit": 0.05,
+    "passed": true
+   },
+   {
+    "name": "reply_cluster_share",
+    "value": 0.3076923076923077,
+    "limit": 0.25,
+    "passed": false
+   }
+  ]
+ },
+ "recall_gain": {
+  "recalled": 0,
+  "recalled_paraphrase": 0,
+  "n_probes": 39,
+  "answer_logprob_lift": -0.495780049226223
+ },
+ "reason": "locality gate failed",
+ "seconds": 2151.3
+}
