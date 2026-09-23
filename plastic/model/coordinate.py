@@ -566,9 +566,15 @@ class CoordinateCore(nn.Module):
         self, omega: list[FastParams], r: list[Tensor], proposal: Proposal
     ) -> tuple[list[FastParams], list[Tensor], AcceptedChange]:
         new = proposal.omega
-        if all(new[i][k] is omega[i][k] for i in range(len(omega)) for k in omega[i]):
+        # "applied" means the retained values change; decided on values, so it is invariant
+        # under clone/detach/to and under an unchanged projected candidate
+        if all(torch.equal(new[i][k], omega[i][k]) for i in range(len(omega)) for k in omega[i]):
             zeros = torch.zeros_like(proposal.signals.dW_norm)
-            return omega, r, AcceptedChange(proposal.pos, False, zeros, zeros.clone())
+            # a no-op keeps the canonical carry exactly (no fixed_z re-encode). A computed but
+            # zero-valued step keeps its differentiable tensors for the outer graph; otherwise
+            # the state's own tensors are kept.
+            kept = new if proposal.signals.stepped else omega
+            return kept, r, AcceptedChange(proposal.pos, False, zeros, zeros.clone())
         if self.cfg.commit_rule == "fixed_z":
             eps, H = self.cfg.epsilon, self.cfg.n_heads
             r = [decode(nw, encode(old, ri, eps=eps, n_heads=H), eps=eps, n_heads=H) for old, nw, ri in zip(omega, new, r)]
@@ -592,10 +598,11 @@ class CoordinateCore(nn.Module):
         if proposal.origin_token != state.token or state.pos != proposal.pos or state.pending is not None:
             raise ValueError("proposal does not belong to this state version (foreign, stale or already committed)")
         if len(proposal.omega) != len(state.omega) or any(
-            a.keys() != b.keys() or any(a[k].shape != b[k].shape for k in a)
+            a.keys() != b.keys()
+            or any(a[k].shape != b[k].shape or a[k].dtype != b[k].dtype or a[k].device != b[k].device for k in a)
             for a, b in zip(proposal.omega, state.omega)
         ):
-            raise ValueError("proposal omega does not match the state's layers, keys or shapes")
+            raise ValueError("proposal omega does not match the state's layers, keys, shapes, dtype or device")
         omega, r, acc = self._retain(state.omega, state.r, proposal)
         return CoordinateState(r=list(r), omega=list(omega), pending=None, pos=state.pos), acc
 

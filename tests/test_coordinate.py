@@ -490,6 +490,40 @@ def test_proposal_is_bound_to_its_model_and_state_version():
     assert all(s0c.omega[i][k] is s0.omega[i][k] for i in range(2) for k in s0.omega[i])
 
 
+@pytest.mark.parametrize("commit_rule", ["transport", "fixed_z"])
+def test_noop_commit_is_decided_by_value_and_keeps_the_carry(commit_rule):
+    """ASTRA-234: "applied" must not depend on tensor identity. A no-op reads applied=False on
+    every fork of the boundary state and for an unchanged projected candidate, keeps r exactly
+    (no fixed_z re-encode), and a computed zero-valued step keeps its differentiable tensors."""
+    m = _model(commit_rule=commit_rule)
+    x, tg = _stream(2, 8, seed=31)
+    init = m.init_state(2)
+    _, s0, r0 = m(x, init.clone(), target_delta=tg, beta_scale=0.0, commit=False)
+    assert not r0.proposal.signals.stepped
+    for fork in (s0, s0.clone(), s0.detach(), s0.to("cpu")):
+        sc, acc = m.commit_proposal(fork, r0.proposal)
+        assert not acc.applied and float(acc.dW_norm.abs().max()) == 0 and float(acc.dtheta_norm.abs().max()) == 0
+        assert all(torch.equal(a, b) for a, b in zip(sc.r, fork.r))
+        assert all(sc.omega[i][k] is fork.omega[i][k] for i in range(2) for k in fork.omega[i])
+    _, s1, r1 = m(x, init.clone(), target_delta=tg, commit=False)
+    unchanged = [{k: v.clone() for k, v in om.items()} for om in s1.omega]
+    for fork in (s1, s1.clone(), s1.detach()):
+        sc, acc = m.commit_proposal(fork, r1.proposal.with_omega(unchanged))
+        assert not acc.applied and all(torch.equal(a, b) for a, b in zip(sc.r, fork.r))
+        _, acc_real = m.commit_proposal(fork, r1.proposal)
+        assert acc_real.applied and float(acc_real.dW_norm.min()) > 0
+    with pytest.raises(ValueError):  # dtype mismatch is refused, not mixed into the state
+        m.commit_proposal(s1, r1.proposal.with_omega([{k: v.float() for k, v in om.items()} for om in r1.proposal.omega]))
+    # no observed target: the step is computed but zero-valued; not applied, still differentiable
+    _, s2, r2 = m(x, m.init_state(2), target_delta=tg, target_mask=torch.zeros(2, 8, dtype=torch.bool), commit=False)
+    assert r2.proposal.signals.stepped
+    sc, acc = m.commit_proposal(s2, r2.proposal)
+    assert not acc.applied and all(torch.equal(a, b) for a, b in zip(sc.r, s2.r))
+    assert all(sc.omega[i][k] is r2.proposal.omega[i][k] for i in range(2) for k in s2.omega[i])
+    (g_eta,) = torch.autograd.grad(sc.omega[0][THETA_KEY].sum(), m.core.blocks[0].eta_logit)
+    assert float(g_eta) == 0.0  # the path to eta exists; its value is zero because g = 0
+
+
 def test_fixed_z_commit_is_the_discontinuous_diagnostic():
     m = _model()
     mz = _model(commit_rule="fixed_z")
