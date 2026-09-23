@@ -41,9 +41,9 @@ FACTS_TAUGHT = [
 ]
 FACTS_BOUNDARY = [
     ("For my chemistry notes: cellulose is a polymer of glucose joined by beta-1,4 glycosidic bonds.",
-     "In my chemistry notes, what bond joins the glucose units in cellulose?", "beta-1,4", "Which linkage did I note for cellulose's glucose units?"),
+     "In my chemistry notes, what bond joins the glucose units in cellulose?", "1,4", "Which linkage did I note for cellulose's glucose units?"),
     ("For my notes: aspirin is made by acetylating salicylic acid with acetic anhydride.",
-     "In my notes, which reagent acetylates salicylic acid to make aspirin?", "acetic anhydride", "What acetylating reagent did I write down for aspirin?"),
+     "In my notes, which reagent acetylates salicylic acid to make aspirin?", "anhydride", "What acetylating reagent did I write down for aspirin?"),
 ]
 FACTS_ROLLED = [
     ("My dog is called Biscuit. Remember my dog's name is Biscuit.", "What is my dog called?", "Biscuit", "Remind me of my dog's name."),
@@ -58,6 +58,40 @@ GENERAL = [
 ]
 
 
+def build_probes() -> dict[str, list]:
+    """Recall probes per group, built from the fact lists above (question, expected answer, paraphrase)."""
+    from plastic.sleep.recall import RecallProbe
+
+    return {
+        "taught": [RecallProbe(q, a, p) for _, q, a, p in FACTS_TAUGHT],
+        "boundary": [RecallProbe(q, a, p) for _, q, a, p in FACTS_BOUNDARY],
+        "rolled": [RecallProbe(q, a, p) for _, q, a, p in FACTS_ROLLED],
+        "general": [RecallProbe(q, a, p) for q, a, p in GENERAL],
+    }
+
+
+def group_counts(results: list[dict[str, Any]], probes: dict[str, list]) -> dict[str, dict[str, int]]:
+    """Per-group recall counts from probe results. A verbatim result is attributed by its question, a
+    paraphrase result by the probe whose paraphrase it is; results for unknown questions are ignored."""
+    by_question = {p.question: g for g, ps in probes.items() for p in ps}
+    by_paraphrase = {p.paraphrase: g for g, ps in probes.items() for p in ps if p.paraphrase}
+    out: dict[str, dict[str, int]] = {g: {"n": 0, "recalled": 0, "n_paraphrase": 0, "recalled_paraphrase": 0} for g in probes}
+    for r in results:
+        if r.get("variant") == "paraphrase":
+            g = by_paraphrase.get(r["question"])
+            if g is None:
+                continue
+            out[g]["n_paraphrase"] += 1
+            out[g]["recalled_paraphrase"] += int(bool(r.get("contains")))
+        else:
+            g = by_question.get(r["question"])
+            if g is None:
+                continue
+            out[g]["n"] += 1
+            out[g]["recalled"] += int(bool(r.get("contains")))
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--checkpoint", required=True)
@@ -69,6 +103,8 @@ def main() -> None:
     ap.add_argument("--heldout-rows", type=int, default=8)
     ap.add_argument("--max-new-tokens", type=int, default=32)
     ap.add_argument("--arms", default="floor,ceiling,anchor,replay,distill,ungated")
+    ap.add_argument("--target", default="w0", choices=["w0", "all"], help="sleep target for the replay/distill/ungated arms")
+    ap.add_argument("--lr", type=float, default=1e-4)
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
@@ -78,7 +114,7 @@ def main() -> None:
     from plastic.harness.calibrate import Calibration
     from plastic.harness.config import HarnessConfig
     from plastic.session.runner import Session
-    from plastic.sleep.recall import RecallProbe, run_probes
+    from plastic.sleep.recall import run_probes
     from plastic.sleep.ttt import SleepConfig, fresh_session_answer, sleep_ttt
     from plastic.store import ArtifactStore
 
@@ -121,29 +157,14 @@ def main() -> None:
     assert n_rb > 0, "the forced-rollback session produced no rollbacks"
     del teach, rolled
 
-    probes = {
-        "taught": [RecallProbe(q, a, p) for _, q, a, p in FACTS_TAUGHT],
-        "boundary": [RecallProbe(q, a, p) for _, q, a, p in FACTS_BOUNDARY],
-        "rolled": [RecallProbe(q, a, p) for _, q, a, p in FACTS_ROLLED],
-        "general": [RecallProbe(q, a, p) for q, a, p in GENERAL],
-    }
+    probes = build_probes()
     all_probes = [p for group in probes.values() for p in group]
-    groups_of = {p.question: g for g, ps in probes.items() for p in ps}
 
     def by_group(report_dict: dict[str, Any]) -> dict[str, dict[str, int]]:
-        out: dict[str, dict[str, int]] = {g: {"n": 0, "recalled": 0, "n_paraphrase": 0, "recalled_paraphrase": 0} for g in probes}
-        for r in report_dict["results"]:
-            g = groups_of.get(r["question"]) or next((gg for gg, ps in probes.items() if any(p.paraphrase == r["question"] for p in ps)), None)
-            if g is None:
-                continue
-            key = "n" if r["variant"] == "verbatim" else "n_paraphrase"
-            out[g][key] += 1
-            if r["contains"]:
-                out[g]["recalled" if r["variant"] == "verbatim" else "recalled_paraphrase"] += 1
-        return out
+        return group_counts(report_dict["results"], probes)
 
     results: dict[str, Any] = {"checkpoint": os.path.abspath(args.checkpoint), "checkpoint_digest": digest, "device": args.device,
-                               "steps": args.steps, "arms": {}}
+                               "steps": args.steps, "target": args.target, "lr": args.lr, "arms": {}}
     arms = [a.strip() for a in args.arms.split(",") if a.strip()]
 
     # 2) floor: the parent from a fresh session
@@ -158,19 +179,23 @@ def main() -> None:
 
     # 3) ceiling: the parent with the teaching turns in the same session, then each probe as a further turn
     if "ceiling" in arms:
+        from plastic.sleep.recall import score_reply
+
         out_rows = []
+        # one session, reset between probes: the model loads once; each probe sees the teaching turns fresh
+        s = Session.create(store, model_id="parent", session_id="ceiling", device=args.device, harness_cfg=observe)
         for group in ("taught", "boundary"):
             for p in probes[group]:
-                s = Session.create(store, model_id="parent", session_id=f"ceil_{abs(hash(p.question)) % 10**8}", device=args.device, harness_cfg=observe)
-                for i, (stmt, *_r) in enumerate(FACTS_TAUGHT + FACTS_BOUNDARY):
-                    s.chat(stmt, max_new_tokens=8, temperature=0.7, top_k=40, seed=args.seed + i)
                 for variant, q in (("verbatim", p.question), ("paraphrase", p.paraphrase)):
                     if not q:
                         continue
+                    s.reset()
+                    for i, (stmt, *_r) in enumerate(FACTS_TAUGHT + FACTS_BOUNDARY):
+                        s.chat(stmt, max_new_tokens=8, temperature=0.7, top_k=40, seed=args.seed + i)
                     r = s.chat(q, max_new_tokens=args.max_new_tokens, temperature=1e-3, top_k=1, seed=0)
-                    from plastic.sleep.recall import score_reply
                     sc = score_reply(p.answer, r.completion)
                     out_rows.append({"question": q, "expected": p.answer, "reply": r.completion, "contains": sc["contains"], "exact": sc["exact"], "variant": variant})
+        del s
         results["arms"]["ceiling"] = {"by_group": by_group({"results": out_rows}), "results": out_rows}
         log(f"[ceiling] {json.dumps(results['arms']['ceiling']['by_group'])}")
 
@@ -179,7 +204,7 @@ def main() -> None:
         if arm not in arms:
             continue
         method = "replay" if arm == "ungated" else arm
-        cfg = SleepConfig(method=method, target="w0", steps=args.steps, seq_len=args.seq_len, batch_size=2, replay_ratio=0.5,
+        cfg = SleepConfig(method=method, target=args.target, steps=args.steps, lr=args.lr, seq_len=args.seq_len, batch_size=2, replay_ratio=0.5,
                           replay_rows=args.replay_rows, heldout_rows=args.heldout_rows, tolerance_nll=0.05, device=args.device,
                           recall_max_new_tokens=args.max_new_tokens, seed=args.seed, provenance="all" if arm == "ungated" else "accepted")
         sessions = ["teach", "rolled"]
@@ -210,7 +235,7 @@ def main() -> None:
         lines.append(f"| {arm} | {cell('taught')} | {cell('boundary')} | {cell('rolled')} | {cell('general')} | {nll} | {e.get('status', '')} |")
     table = "\n".join(lines)
     with open(os.path.join(args.out, "sleep_controls.md"), "w", encoding="utf-8") as f:
-        f.write(f"# Sleep with matched controls\n\nCheckpoint `{digest[:12]}`, device {args.device}, {args.steps} steps, {results['seconds']} s.\n\n{table}\n")
+        f.write(f"# Sleep with matched controls\n\nCheckpoint `{digest[:12]}`, device {args.device}, {args.steps} steps, target {args.target}, lr {args.lr}, {results['seconds']} s.\n\n{table}\n")
     log("\n" + table)
 
 
