@@ -160,6 +160,7 @@ def test_turns_cell_reports_what_an_arm_actually_trained_on():
     # the all-turn control also selects the two completed rolled-back turns: the count comes from the selection, not from arithmetic
     assert turns_cell({**harvest, "flagged_excluded": 0, "selected_turns": 32}) == "32 selected (30 accepted online, 29 flagged, 0 excluded)"
     assert turns_cell(None) == "n/a"
+    assert turns_cell({k: v for k, v in harvest.items() if k != "selected_turns"}) == "n/a"   # older summaries: never invented
 
 
 @pytest.mark.parametrize(("provenance", "flagged_policy", "all_flagged", "expected"), [
@@ -201,4 +202,3 @@ def test_selected_turn_count_survives_provenance_filtering_and_reaches_the_table
     assert len(selected) == expected
     assert summary.get("selected_turns") == expected
     assert re.match(rf"{expected}\b", turns_cell(summary))
-    assert turns_cell({k: v for k, v in harvest.items() if k != "selected_turns"}) == "n/a"   # older summaries: never invented
