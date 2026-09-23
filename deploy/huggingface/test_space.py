@@ -269,7 +269,7 @@ def test_public_catalog_follows_sleep_lineage_and_opens_bounded_sleep_for_a_ttt_
         assert [s['session_id'] for s in client.get('/api/sessions').json()] == ['demo_sleep_a', 'demo_text'] or \
             sorted(s['session_id'] for s in client.get('/api/sessions').json()) == ['demo_sleep_a', 'demo_text']
         assert client.get('/api/sessions/private').status_code == 404
-        assert client.post('/api/sessions/demo_sleep_a/reset', json={}).status_code == 200
+        assert store.load_session_meta('demo_sleep_a')['harness']['log_only'] is True  # native observational controls
         assert client.get('/api/sleep').status_code == 200
         # bounded body family
         for bad in ({'method': 'distill'}, {'target': 'all'}, {'steps': 11}, {'seq_len': 512}, {'batch_size': 2}, {'lr': 1e-3},
@@ -292,7 +292,7 @@ def test_public_catalog_follows_sleep_lineage_and_opens_bounded_sleep_for_a_ttt_
                                          'checkpoint_dir': str(tmp_path / 'ckpt'), 'parent_model_id': 'ttt_pub', 'type': 'sleep'})
         assert [m['model_id'] for m in client.get('/api/models').json()] == ['ttt_pub', 'sleep_a', 'sleep_b']
         assert 'demo_sleep_b' in [x['session_id'] for x in client.get('/api/sessions').json()]
-        assert client.get('/api/sessions/demo_sleep_b/state').status_code == 200
+        assert store.session_exists('demo_sleep_b') and store.load_session_meta('demo_sleep_b')['model_id'] == 'sleep_b'
 
 
 def test_public_sleep_refuses_a_second_concurrent_run(tmp_path, monkeypatch):
