@@ -1,6 +1,7 @@
 """Public hosting boundaries: exercise route, payload, and concurrency families."""
 import asyncio
 import json
+import time
 
 import httpx
 import pytest
@@ -218,3 +219,89 @@ def test_pretrained_demo_refuses_incompatible_artifacts_or_sessions(tmp_path, mo
         assert store.load_session_meta('demo_text') == before
     else:
         assert not store.list_sessions()
+
+
+def _ttt_public_store(tmp_path):
+    """A store whose public model is a TTT record with one sleep child already present."""
+    from plastic.harness.config import HarnessConfig
+    from plastic.store import ArtifactStore
+    store = ArtifactStore(str(tmp_path / 'store'))
+    ckpt = tmp_path / 'ckpt'
+    ckpt.mkdir(exist_ok=True)
+    store.register_model('ttt_pub', {'backend': 'ttt', 'domain': 'text', 'status': 'completed', 'params': 10, 'checkpoint_dir': str(ckpt)})
+    store.register_model('sleep_a', {'backend': 'ttt', 'domain': 'text', 'status': 'completed', 'params': 10, 'checkpoint_dir': str(ckpt),
+                                     'parent_model_id': 'ttt_pub', 'type': 'sleep'})
+    store.register_model('unrelated', {'backend': 'ttt', 'domain': 'text', 'status': 'completed', 'params': 10, 'checkpoint_dir': str(ckpt)})
+    store.create_session('demo_text', model_id='ttt_pub', domain='text', harness_cfg=HarnessConfig())
+    store.create_session('private', model_id='ttt_pub', domain='text', harness_cfg=HarnessConfig())
+    return store
+
+
+def test_public_sleep_is_closed_while_the_public_model_has_no_fast_weights():
+    with TestClient(fake_app()) as client:
+        assert client.get('/api/sleep').status_code == 404
+        assert client.post(f'/api/models/{MODEL_ID}/sleep', json={}).status_code == 403
+
+
+def test_public_catalog_follows_sleep_lineage_and_opens_bounded_sleep_for_a_ttt_model(tmp_path, monkeypatch):
+    import sys
+    from plastic.api import sleep_jobs
+    from plastic.api.app import create_app
+    store = _ttt_public_store(tmp_path)
+    app = create_app(str(tmp_path / 'store'), device='cpu')
+
+    def fake_argv(model_id, run_dir, artifacts_root, device, options, sessions, probes_path):
+        script = ("import json,sys,os; d=sys.argv[1]; open(os.path.join(d,'log.txt'),'a').write('[sleep] stand-in\\n');"
+                  f"json.dump({{'run_id': os.path.basename(d), 'parent_model_id': {model_id!r}, 'status': 'accepted', 'model_id': 'sleep_b',"
+                  " 'gate': {'passed': True, 'measured': True, 'checks': []}}, open(os.path.join(d,'sleep_report.json'),'w'));"
+                  "import shutil")
+        return [sys.executable, '-c', script, run_dir]
+
+    monkeypatch.setattr(sleep_jobs, 'build_sleep_argv', fake_argv)
+    with TestClient(PublicDemoGate(app, store, 'cpu', model_id='ttt_pub')) as client:
+        health = client.get('/api/health').json()
+        assert health['capabilities']['sleep'] is True and health['n_models'] == 2
+        # the catalog: the public model and its descendant, never the unrelated record or the private session
+        assert [m['model_id'] for m in client.get('/api/models').json()] == ['ttt_pub', 'sleep_a']
+        assert client.get('/api/models/unrelated').status_code == 404
+        assert client.get('/api/models/sleep_a').status_code == 200
+        # the child got a demo session on first sight; the private session stays private
+        assert [s['session_id'] for s in client.get('/api/sessions').json()] == ['demo_sleep_a', 'demo_text'] or \
+            sorted(s['session_id'] for s in client.get('/api/sessions').json()) == ['demo_sleep_a', 'demo_text']
+        assert client.get('/api/sessions/private').status_code == 404
+        assert client.post('/api/sessions/demo_sleep_a/reset', json={}).status_code == 200
+        assert client.get('/api/sleep').status_code == 200
+        # bounded body family
+        for bad in ({'method': 'distill'}, {'target': 'all'}, {'steps': 11}, {'seq_len': 512}, {'batch_size': 2}, {'lr': 1e-3},
+                    {'sessions': ['private']}, {'sessions': []}, {'probes': [{'question': 'q', 'answer': 'x' * 101}]},
+                    {'probes': [{'question': 'q', 'answer': 'a'}] * 7}):
+            assert client.post('/api/models/ttt_pub/sleep', json=bad).status_code == 422, bad
+        assert client.post('/api/models/sleep_a/sleep', json={}).status_code == 403  # only the root model sleeps publicly
+        r = client.post('/api/models/ttt_pub/sleep', json={'method': 'anchor', 'sessions': ['demo_text'],
+                                                          'probes': [{'question': 'q', 'answer': 'a', 'paraphrase': 'q2'}]})
+        assert r.status_code == 200, r.text
+        run_id = r.json()['run_id']
+        for _ in range(100):
+            s = client.get(f'/api/sleep/{run_id}').json()
+            if s['status'] != 'running':
+                break
+            time.sleep(0.05)
+        assert s['status'] == 'accepted' and s['report']['model_id'] == 'sleep_b'
+        # the new child needs a record for the catalog to pick it up (the real run registers it; the stand-in did not)
+        store.register_model('sleep_b', {'backend': 'ttt', 'domain': 'text', 'status': 'completed', 'params': 10,
+                                         'checkpoint_dir': str(tmp_path / 'ckpt'), 'parent_model_id': 'ttt_pub', 'type': 'sleep'})
+        assert [m['model_id'] for m in client.get('/api/models').json()] == ['ttt_pub', 'sleep_a', 'sleep_b']
+        assert 'demo_sleep_b' in [x['session_id'] for x in client.get('/api/sessions').json()]
+        assert client.get('/api/sessions/demo_sleep_b/state').status_code == 200
+
+
+def test_public_sleep_refuses_a_second_concurrent_run(tmp_path, monkeypatch):
+    import sys
+    from plastic.api import sleep_jobs
+    from plastic.api.app import create_app
+    store = _ttt_public_store(tmp_path)
+    app = create_app(str(tmp_path / 'store'), device='cpu')
+    monkeypatch.setattr(sleep_jobs, 'build_sleep_argv', lambda *a, **k: [sys.executable, '-c', 'import time; time.sleep(2)'])
+    with TestClient(PublicDemoGate(app, store, 'cpu', model_id='ttt_pub')) as client:
+        assert client.post('/api/models/ttt_pub/sleep', json={'method': 'anchor'}).status_code == 200
+        assert client.post('/api/models/ttt_pub/sleep', json={'method': 'anchor'}).status_code == 409

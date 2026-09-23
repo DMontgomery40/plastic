@@ -20,6 +20,12 @@ def download_checkpoint(target: Path) -> None:
                       allow_patterns=['*.json', '*.safetensors', '*.jinja', 'LICENSE', 'README.md'])
 
 
+# Keep normal context processing for both prompt and generated tokens. Signals are visible, but the
+# unfinished retention policy must not freeze or reject ordinary conversation.
+NATIVE_HARNESS = HarnessConfig(log_only=True, learn_from_generation=True, freeze_on_alarm=False,
+                               enable_projection=False, enable_budget=False)
+
+
 def prepare_pretrained_sessions(store: ArtifactStore, checkpoint: Path) -> None:
     from plastic.backends.qwen import _checkpoint_digest
     if _checkpoint_digest(str(checkpoint)) != CHECKPOINT_DIGEST:
@@ -35,10 +41,7 @@ def prepare_pretrained_sessions(store: ArtifactStore, checkpoint: Path) -> None:
         'checkpoint_dir': str(checkpoint.resolve()), 'checkpoint_digest': CHECKPOINT_DIGEST,
         'chunk': 8,
     })
-    # Keep normal context processing for both prompt and generated tokens. Signals are visible,
-    # but the unfinished Qwen retention policy must not freeze or reject ordinary conversation.
-    native = HarnessConfig(log_only=True, learn_from_generation=True, freeze_on_alarm=False,
-                           enable_projection=False, enable_budget=False)
+    native = NATIVE_HARNESS
     for sid, mid, domain, harness in [
         ('demo_text', MODEL_ID, 'text', native),
     ]:
