@@ -274,11 +274,32 @@ def cmd_redteam(args: argparse.Namespace) -> int:
 
 
 def cmd_sleep(args: argparse.Namespace) -> int:
-    from plastic.sleep.consolidate import consolidate
     from plastic.store import ArtifactStore
 
+    store = ArtifactStore(args.artifacts_root)
+    record = store.load_model_record(args.model_id)
+    if record.get("backend") == "ttt":
+        # consolidate harness-accepted fast-weight learning into a child checkpoint (docs/research/2026-09-23-sleep-consolidation.md)
+        from plastic.sleep import ttt as sleep_mod
+        from plastic.sleep.recall import load_probes
+
+        cfg = sleep_mod.SleepConfig(
+            method=args.method, target=args.target, steps=args.steps, lr=args.lr, batch_size=args.batch_size, seq_len=args.seq_len,
+            replay_ratio=args.replay_ratio, replay_rows=args.replay_rows, heldout_rows=args.heldout_rows, anchor_lambda=args.anchor_lambda,
+            distill_temperature=args.distill_temperature, tolerance_nll=args.tolerance_nll, seed=args.seed, device=args.device,
+            scan_checkpoint_groups=args.scan_checkpoint_groups,
+        )
+        probes = load_probes(args.recall) if args.recall else None
+        report = sleep_mod.sleep_ttt(store, args.model_id, cfg, session_ids=(args.sessions or None), probes=probes, run_dir=args.out)
+        print(json.dumps({k: v for k, v in report.items() if k not in ("losses",)}, indent=2, default=str))
+        return 0 if report.get("status") == "accepted" else 3
+    if record.get("backend") not in (None, "plastic"):
+        print(f"sleep is not implemented for backend {record.get('backend')!r}", file=sys.stderr)
+        return 2
+    from plastic.sleep.consolidate import consolidate
+
     manifest = consolidate(
-        ArtifactStore(args.artifacts_root), args.model_id, sessions=(args.sessions or None), core_data_dir=args.core,
+        store, args.model_id, sessions=(args.sessions or None), core_data_dir=args.core,
         steps=args.steps, lr=args.lr, core_ratio=args.core_ratio, seq_len=args.seq_len, batch_size=args.batch_size,
         device=args.device, seed=args.seed,
     )
@@ -413,18 +434,31 @@ def build_parser() -> argparse.ArgumentParser:
     rt.add_argument("--record", action="store_true", help="append the strongest payloads to the model's poison canaries")
     rt.set_defaults(fn=cmd_redteam)
 
-    sl = sub.add_parser("sleep", help="consolidate session traces into the slow weights, gated by the canaries")
+    sl = sub.add_parser("sleep", help="consolidate accepted session learning into the slow weights, gated by locality checks")
     sl.add_argument("model_id")
     sl.add_argument("--artifacts-root", default="artifacts")
-    sl.add_argument("--sessions", nargs="*", default=None)
-    sl.add_argument("--core", default="artifacts/data/wikitext")
-    sl.add_argument("--steps", type=int, default=200)
+    sl.add_argument("--sessions", nargs="*", default=None, help="source sessions (default: every session of the model)")
+    sl.add_argument("--steps", type=int, default=40)
     sl.add_argument("--lr", type=float, default=1e-4)
-    sl.add_argument("--core-ratio", type=float, default=0.8)
-    sl.add_argument("--seq-len", type=int, default=256)
-    sl.add_argument("--batch-size", type=int, default=8)
+    sl.add_argument("--seq-len", type=int, default=512)
+    sl.add_argument("--batch-size", type=int, default=2)
     sl.add_argument("--device", default="cpu")
     sl.add_argument("--seed", type=int, default=0)
+    # TTT backend (chat models)
+    sl.add_argument("--method", default="replay", choices=["replay", "distill", "anchor"], help="ttt: consolidation method")
+    sl.add_argument("--target", default="w0", choices=["w0", "all"], help="ttt: which slow parameters change")
+    sl.add_argument("--replay-ratio", type=float, default=0.5, help="ttt: share of each batch from the SFT replay corpus")
+    sl.add_argument("--replay-rows", type=int, default=64)
+    sl.add_argument("--heldout-rows", type=int, default=24, help="ttt: conversations for the locality measurement")
+    sl.add_argument("--anchor-lambda", type=float, default=0.5)
+    sl.add_argument("--distill-temperature", type=float, default=1.0)
+    sl.add_argument("--tolerance-nll", type=float, default=0.05, help="ttt: allowed rise in mean held-out assistant NLL")
+    sl.add_argument("--scan-checkpoint-groups", type=int, default=4)
+    sl.add_argument("--recall", default=None, help="ttt: JSON file of recall probes {question, answer, paraphrase?}")
+    sl.add_argument("--out", default=None, help="ttt: run directory for the report and log (default: <artifacts>/sleep/<run>)")
+    # toy plastic models
+    sl.add_argument("--core", default="artifacts/data/wikitext", help="plastic: core corpus dir")
+    sl.add_argument("--core-ratio", type=float, default=0.8, help="plastic: share of core corpus in each batch")
     sl.set_defaults(fn=cmd_sleep)
 
     srv = sub.add_parser("serve", help="run the API over an artifact store")

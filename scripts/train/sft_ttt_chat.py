@@ -28,38 +28,6 @@ from typing import Any, Iterator
 DEFAULT_SUBSETS = "everyday-conversations,smol-magpie-ultra,openhermes-100k,systemchats-30k,smol-constraints,smol-rewrite,smol-summarize"
 
 
-def render_conversation(messages: list[dict[str, str]], user_tag: str, assistant_tag: str) -> list[tuple[str, bool]]:
-    """(text, is_assistant) segments. A system message is folded into the first user turn."""
-    system = ""
-    out: list[tuple[str, bool]] = []
-    for m in messages:
-        role, content = m["role"], m["content"]
-        if role == "system":
-            system = content.strip() + "\n\n"
-            continue
-        if role == "user":
-            out.append((user_tag + system + content, False))
-            system = ""
-        elif role == "assistant":
-            out.append((assistant_tag, False))
-            out.append((content, True))
-    return out
-
-
-def encode_example(tok, messages: list[dict[str, str]], user_tag: str, assistant_tag: str) -> tuple[list[int], list[int]]:
-    """Token ids and labels (-100 where the loss is masked). BOS first; EOS after every assistant answer."""
-    ids: list[int] = [int(tok.bos_token_id)] if tok.bos_token_id is not None else []
-    labels: list[int] = [-100] * len(ids)
-    for text, is_assistant in render_conversation(messages, user_tag, assistant_tag):
-        t = [int(x) for x in tok(text, add_special_tokens=False).input_ids]
-        ids += t
-        labels += t if is_assistant else [-100] * len(t)
-        if is_assistant:
-            ids.append(int(tok.eos_token_id))
-            labels.append(int(tok.eos_token_id))
-    return ids, labels
-
-
 def pack(stream: Iterator[tuple[list[int], list[int]]], seq_len: int, pad_id: int) -> Iterator[tuple[list[int], list[int]]]:
     """Greedy packing of whole examples into ``seq_len`` windows; an example longer than the window is
     truncated. Pads the tail with pad_id and -100 labels."""
@@ -123,7 +91,7 @@ def main() -> None:
 
     import transformers
 
-    from plastic.backends.ttt_lm.backend import CHAT_ASSISTANT, CHAT_USER, _checkpoint_digest, load_ttt_model
+    from plastic.backends.ttt_lm.backend import encode_conversation as encode_example, render_conversation, CHAT_ASSISTANT, CHAT_USER, _checkpoint_digest, load_ttt_model
 
     torch.manual_seed(args.seed)
     dev = torch.device(args.device)

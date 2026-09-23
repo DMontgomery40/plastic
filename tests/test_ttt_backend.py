@@ -207,7 +207,7 @@ def test_calibration_on_real_chats_produces_installable_thresholds(tmp_path, bac
 def test_render_matches_training(backend):
     """The runtime render of a user turn is a token-for-token prefix of the training render (OPUS-001 F3)."""
     from plastic.backends.ttt_lm.backend import CHAT_ASSISTANT, CHAT_USER
-    from scripts.train.sft_ttt_chat import encode_example
+    from plastic.backends.ttt_lm.backend import encode_conversation as encode_example
 
     for msg in ("Name one primary color.", "What is 2+2?", "Explain LayerNorm briefly.", "hi"):
         ids, labels = encode_example(backend.tokenizer, [{"role": "user", "content": msg}, {"role": "assistant", "content": "x"}],

@@ -49,7 +49,7 @@ def main() -> None:
     from plastic.harness.config import HarnessConfig
     from plastic.harness.transaction import TransactionRunner
     from plastic.session.runner import _TTTTextIO, drive_chat_turn
-    from scripts.train.sft_ttt_chat import encode_example
+    from plastic.backends.ttt_lm.backend import encode_conversation as encode_example
 
     os.makedirs(args.out, exist_ok=True)
     be = TTTBackend.load(args.checkpoint, device=args.device)

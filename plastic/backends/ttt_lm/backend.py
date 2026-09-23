@@ -79,6 +79,39 @@ def _checkpoint_digest(checkpoint_dir: str) -> str:
     return h.hexdigest()
 
 
+def render_conversation(messages: list[dict[str, str]], user_tag: str = CHAT_USER, assistant_tag: str = CHAT_ASSISTANT) -> list[tuple[str, bool]]:
+    """(text, is_assistant) segments. A system message is folded into the first user turn."""
+    system = ""
+    out: list[tuple[str, bool]] = []
+    for m in messages:
+        role, content = m["role"], m["content"]
+        if role == "system":
+            system = content.strip() + "\n\n"
+            continue
+        if role == "user":
+            out.append((user_tag + system + content, False))
+            system = ""
+        elif role == "assistant":
+            out.append((assistant_tag, False))
+            out.append((content, True))
+    return out
+
+
+def encode_conversation(tok, messages: list[dict[str, str]], user_tag: str = CHAT_USER, assistant_tag: str = CHAT_ASSISTANT) -> tuple[list[int], list[int]]:
+    """Token ids and labels (-100 where the loss is masked). BOS first; EOS after every assistant answer.
+    This is the training render; ``render_user_turn`` produces the same token prefix at runtime."""
+    ids: list[int] = [int(tok.bos_token_id)] if tok.bos_token_id is not None else []
+    labels: list[int] = [-100] * len(ids)
+    for text, is_assistant in render_conversation(messages, user_tag, assistant_tag):
+        t = [int(x) for x in tok(text, add_special_tokens=False).input_ids]
+        ids += t
+        labels += t if is_assistant else [-100] * len(t)
+        if is_assistant:
+            ids.append(int(tok.eos_token_id))
+            labels.append(int(tok.eos_token_id))
+    return ids, labels
+
+
 def load_ttt_config(checkpoint_dir: str) -> "M.TTTConfig":
     raw = json.loads((Path(checkpoint_dir) / "config.json").read_text())
     return M.TTTConfig(**{k: v for k, v in raw.items() if k not in ("architectures", "auto_map", "transformers_version", "dtype", "model_type", "torch_dtype")})
@@ -178,10 +211,11 @@ class TTTBackend:
 
     # ------------------------------------------------------------------ loading
     @classmethod
-    def load(cls, checkpoint_dir: str, *, device: str | torch.device = "cpu", dtype: torch.dtype = torch.float32) -> "TTTBackend":
+    def load(cls, checkpoint_dir: str, *, device: str | torch.device = "cpu", dtype: torch.dtype = torch.float32,
+             scan_checkpoint_groups: int = 0) -> "TTTBackend":
         from transformers import AutoTokenizer
 
-        model, cfg = load_ttt_model(checkpoint_dir, dtype=dtype)
+        model, cfg = load_ttt_model(checkpoint_dir, dtype=dtype, scan_checkpoint_groups=scan_checkpoint_groups)
         model.eval()
         model.requires_grad_(False)
         dev = torch.device(device)
