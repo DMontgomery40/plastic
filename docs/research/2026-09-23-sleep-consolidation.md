@@ -476,3 +476,32 @@ contradictions it echoed the true value ("Seven days. Seven days…", "Earth. Ea
 attractors, both produced by the model's own written replies, and the saved state's generation is
 dominated by its most recent loop. No method retained a taught fact on either seed. The controls that
 vary the teaching replies (greedy, one-token, and a 6-fact session) are the next measurements.
+
+### 2026-09-23, final chat checkpoint, seed 2, and what the anchor fold moves across three seeds
+
+[Outputs](results/sleep-2026-09-23/final_step250_seed2_include/sleep_controls.json), code `b2d902d`, same
+protocol as seed 1. Every arm was accepted by the gate and every arm retained 0/24 taught facts: anchor
+1.637 → 1.617, replay → 1.492, distill → 1.493, Dream → 1.499, ungated → 1.499. Anchor again reproduced
+"water boils at 50 degrees Celsius" verbatim, as on seed 0. Dream: the 30-turn teacher state produced 180
+candidates, 144 duplicates, and the gain gate kept 24, of which 22 were "The Moon is larger than the
+Earth", the last statement taught, whatever fact the prompt quoted (the quoted turn added nothing to the
+score). After training on them the child answers the verbatim Moon question with exactly that sentence;
+the containment count is unchanged (the floor's garbled reply already contained "Moon") and the unseen
+phrasing did not flip. The gate has no check that sees this: NLL fell, replies stayed diverse, canaries
+were absent.
+
+**What the anchor fold moves** ([analysis](results/sleep-2026-09-23/anchor_transfer_analysis_step250.json),
+`scripts/experiments/anchor_transfer_analysis.py`, read-only over the archived runs). The planted turns
+were not the strongest writes: by committed change per turn they rank [15, 17, 28, 29] / [14, 17, 19, 29] / [8, 11, 12, 14] of 30 across the three
+seeds, and the first turn writes most in every seed. The fold lifts the stored likelihood of every short
+factual answer: planted +1.86 / +2.58 / +2.33, general true answers +1.22 / +2.03 / +1.31, and the 24 taught personal facts only +0.26 / +0.49 / +0.28 nats
+per token (seeds 0 / 1 / 2). "50" flipped in greedy decoding on two seeds because its baseline was already
+the highest of the four plants and the general uplift carried it past the true value in a frame the model
+completes fluently. The anchor child differs from the parent in answer shape, not in stored facts.
+
+**Across three seeds:** 15 consolidation attempts, 13 accepted by the gate, 0 taught facts retained by any
+method on any seed, and the only transfers observed were verbatim planted sentences. Every effect measured
+in this study is bound to a surface string. That, and the fact that selection by gain chose the planted
+falsehood, is the reason the study is paused for reassessment (see the scratchpad, FABLE-185): the
+probes test memorization of phrases, the methods optimize sentence likelihoods, and a criterion of
+recurrence and consistency rather than surprise is the candidate replacement.
