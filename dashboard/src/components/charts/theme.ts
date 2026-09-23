@@ -16,6 +16,29 @@ export const CHART = {
   reference: '#c792ea',
 } as const;
 
+/**
+ * Sleep observatory: one sequential ramp (a single hue, dark to light) for every magnitude, so no chart needs a
+ * categorical palette; status hues stay reserved for decisions and gate outcomes; illustrative content has its own hue.
+ */
+export const OBS = {
+  ramp: ['#1c242e', '#1f4f8f', '#58a6ff', '#e9eff5'],
+  line: '#58a6ff',
+  lineMuted: '#94a3b4',
+  illustrative: '#c792ea',
+  illustrativeSoft: '#1b1626',
+  pass: '#3fd17a',
+  fail: '#ff6b6b',
+  notInForce: '#94a3b4',
+  flag: '#f0b429',
+  surface: '#151b23',
+  inset: '#090d12',
+  edge: '#2c3642',
+  edgeStrong: '#3d4a59',
+  ink: '#e9eff5',
+  inkSecondary: '#b8c4d0',
+  inkMuted: '#94a3b4',
+} as const;
+
 export const SERIES_COLORS = ['#58a6ff', '#3fd17a', '#f0b429', '#c792ea', '#56d4dd'] as const;
 
 export const tooltipContentStyle: CSSProperties = {

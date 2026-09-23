@@ -18,9 +18,14 @@ import type {
   TransactionRecord,
 } from './types';
 
-export const TABS = ['chat', 'signals', 'sessions'] as const;
+export const TABS = ['chat', 'signals', 'sessions', 'sleep'] as const;
 export type Tab = (typeof TABS)[number];
-export const TAB_LABELS: Record<Tab, string> = { chat: 'Chat', signals: 'Signals', sessions: 'Sessions' };
+export const TAB_LABELS: Record<Tab, string> = { chat: 'Chat', signals: 'Signals', sessions: 'Sessions', sleep: 'Sleep' };
+
+/** A shared link to the Sleep observatory (#sleep/...) opens that tab. */
+function initialTab(): Tab {
+  return typeof window !== 'undefined' && window.location.hash.startsWith('#sleep') ? 'sleep' : 'chat';
+}
 
 const NO_CAPABILITIES: Capabilities = { create_session: false, fork: false, reset: false, delete: false, resume: false, calibrate: false, sleep: false };
 
@@ -83,7 +88,7 @@ export const useStore = create<PlaygroundState>((set, get) => ({
   lastChat: null,
   stale: false,
   sampling: { max_new_tokens: 96, temperature: 0.7, top_k: 40, seed: null },
-  tab: 'chat',
+  tab: initialTab(),
   busy: { chat: false, session: false, mutation: false },
   calibrating: null,
   sleepRuns: [],

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Empty } from '../components/panels/Empty';
+import { ObservatoryScreen } from '../observatory/ObservatoryScreen';
 import { ChatScreen } from './chat/ChatScreen';
 import { Header } from './Header';
 import { SessionsScreen } from './sessions/SessionsScreen';
@@ -26,7 +27,7 @@ export default function App() {
     void bootstrap();
   }, [bootstrap]);
 
-  // keys 1–3 switch screens when not typing
+  // number keys switch screens when not typing
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
@@ -40,8 +41,9 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [setTab]);
 
-  const offline = healthChecked && health === null;
-  const View = tab === 'chat' ? ChatScreen : tab === 'signals' ? SignalsScreen : SessionsScreen;
+  // the Sleep observatory reads archived runs shipped with the page, so it stays available without the service
+  const offline = healthChecked && health === null && tab !== 'sleep';
+  const View = tab === 'chat' ? ChatScreen : tab === 'signals' ? SignalsScreen : tab === 'sleep' ? ObservatoryScreen : SessionsScreen;
 
   return (
     <div className="min-h-screen bg-surface">

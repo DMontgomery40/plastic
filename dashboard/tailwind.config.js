@@ -55,6 +55,12 @@ export default {
           project: '#1f4f8f',
           readonly: '#48545f',
         },
+        // Illustrative (not measured) content in the Sleep observatory: its own hue, never used for data or status.
+        // ink-primary on illustrative.soft is 15.2:1; illustrative on surface.raised is 7.2:1, on illustrative.soft 7.3:1.
+        illustrative: {
+          DEFAULT: '#c792ea',
+          soft: '#1b1626',
+        },
         series: {
           a: '#58a6ff', // base / first series
           b: '#3fd17a', // frozen / second series
