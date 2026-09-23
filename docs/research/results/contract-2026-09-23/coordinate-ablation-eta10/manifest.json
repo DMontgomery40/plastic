@@ -1,0 +1,48 @@
+{
+ "execution_commit": "ce5a2129ba75f19ca653f6e3cadef3a7db16e21b",
+ "args": {
+  "out": "artifacts/experiments/coordinate-ablation-v4-eta10",
+  "variants": [
+   "full",
+   "no_fast",
+   "decay_only"
+  ],
+  "collect": false,
+  "steps": 3000,
+  "batch": 16,
+  "seq_len": 64,
+  "episodes": 1,
+  "lr": 0.001,
+  "outer_loss": "post_boundary",
+  "eta_max": 10.0,
+  "eta_init": 1.0,
+  "log_every": 50,
+  "d_model": 128,
+  "n_heads": 4,
+  "n_layers": 3,
+  "chunk": 16,
+  "seed": 0,
+  "device": "cpu",
+  "eval_batch": 8
+ },
+ "spec": {
+  "k": 2,
+  "n_heldout": 5,
+  "split_seed": 0,
+  "seq_len": 64,
+  "eval_batch": 8,
+  "stream_episodes": 16,
+  "probe_steps": null,
+  "poison_bias": 0.5,
+  "revert_tolerance": 1e-06,
+  "heldout_policies": [
+   "impulse",
+   "hold",
+   "release"
+  ],
+  "train_policies": [
+   "gaussian"
+  ]
+ },
+ "started_utc": "2026-09-23 23:03:50"
+}

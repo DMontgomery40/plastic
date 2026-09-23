@@ -170,3 +170,40 @@ What this shows, and only this:
   10, the initial step at 1.0 and twice the budget is the last knob before the claim is
   written up as not supported here. One seed throughout; nothing here is a lasting-learning
   result, and the delta baseline's advantage is temporary adaptation, not learning.
+
+## Coordinate ablation, post-boundary objective, inner step ceiling 10 (`coordinate-ablation-eta10/`)
+
+The last knob named above. Three variants, post-boundary objective, the learned inner step
+size initialised at 1.0 with a ceiling of 10 instead of 0.1 with a ceiling of 1, and 3000
+steps instead of 1500 (every variant in this row set has the same budget; the delta baseline
+is not in it yet, so no cross-row-set comparison at matched budget is made here). One seed.
+CPU. Per-step series are recorded, so the held-out mean after the first boundary is reported
+beside the whole-episode mean.
+
+| variant | train loss | impulse adapt / off | hold | release | after step 16, held-out mean adapt / off | speed | half at step | η per layer | chunk loss before → after | ‖ΔW‖ per layer | ‖Δθ‖ per layer |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| full | 0.069 | 0.119 / 0.130 | 0.039 / 0.064 | 0.054 / 0.060 | 0.053 / 0.071 | 0.67 | 23 | 3.0, 4.8, 5.1 | 0.098 → 0.048 | 0.18, 0.32, 0.36 | 0.02, 0.05, 0.06 |
+| no_fast | 0.072 | 0.124 / 0.124 | 0.067 / 0.067 | 0.068 / 0.068 | 0.063 / 0.063 | 1.00 | 64 | (off) | n/a | n/a | n/a |
+| decay_only | 0.064 | 0.122 / 0.122 | 0.052 / 0.053 | 0.071 / 0.071 | 0.054 / 0.054 | 1.00 | 64 | 3.5, 7.3, 6.9 | 0.112 → 0.107 | 0 | 0.04, 0.09, 0.06 |
+
+What this shows, and only this:
+
+- The earlier null was a fixture, not the mechanism. With the ceiling lifted, the learned step
+  sizes climb to 3 to 5 per layer, the proposed step halves the loss on its own observed
+  chunk (0.098 to 0.048), and the coupling moves by 0.2 to 0.4 per layer. Adaptation now shows
+  in the score: on every held-out policy the full block does better with its fast path on
+  than off, by 8 percent under impulses and 40 percent under held pushes over the whole
+  episode, and after the first boundary the held-out error is 0.053 with the fast path
+  against 0.071 without. The adaptation curve drops below one half at step 23.
+- The nonlinear coordinates carry it. Adaptive decay alone, with step sizes that climbed even
+  higher, changes the held-out error by at most 3 percent, and its proposed step barely moves
+  its chunk's loss. On the memo's table, "frozen W, adaptive θ" does not match the full model
+  here. That falsifier is not triggered.
+- Against the block with no fast updates, at the same budget, the full block is better on
+  every held-out policy and on the training distribution (0.048 against 0.066).
+- The amplitude bound holds under the larger steps: the observed carry peak is 1.14 against a
+  bound of 1.43.
+- What remains open: the delta baseline at this budget (its 1500-step row above is not a
+  matched comparison; that run follows), the other three switches under this setting, more
+  seeds, and whether raising the ceiling further keeps helping or breaks the bound. Nothing
+  here is lasting learning; it is the within-episode adaptation the slow rule would build on.
