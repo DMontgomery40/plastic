@@ -105,6 +105,8 @@ def main() -> None:
     ap.add_argument("--arms", default="floor,ceiling,anchor,replay,distill,ungated")
     ap.add_argument("--target", default="w0", choices=["w0", "all"], help="sleep target for the replay/distill/ungated arms")
     ap.add_argument("--lr", type=float, default=1e-4)
+    ap.add_argument("--replay-ratio", type=float, default=0.5, help="share of each sleep batch drawn from the SFT replay corpus")
+    ap.add_argument("--session-loss", default="all", choices=["all", "assistant"])
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
@@ -164,7 +166,7 @@ def main() -> None:
         return group_counts(report_dict["results"], probes)
 
     results: dict[str, Any] = {"checkpoint": os.path.abspath(args.checkpoint), "checkpoint_digest": digest, "device": args.device,
-                               "steps": args.steps, "target": args.target, "lr": args.lr, "arms": {}}
+                               "steps": args.steps, "target": args.target, "lr": args.lr, "replay_ratio": args.replay_ratio, "session_loss": args.session_loss, "arms": {}}
     arms = [a.strip() for a in args.arms.split(",") if a.strip()]
 
     # 2) floor: the parent from a fresh session
@@ -204,7 +206,8 @@ def main() -> None:
         if arm not in arms:
             continue
         method = "replay" if arm == "ungated" else arm
-        cfg = SleepConfig(method=method, target=args.target, steps=args.steps, lr=args.lr, seq_len=args.seq_len, batch_size=2, replay_ratio=0.5,
+        cfg = SleepConfig(method=method, target=args.target, steps=args.steps, lr=args.lr, seq_len=args.seq_len, batch_size=2, replay_ratio=args.replay_ratio,
+                          session_loss=args.session_loss,
                           replay_rows=args.replay_rows, heldout_rows=args.heldout_rows, tolerance_nll=0.05, device=args.device,
                           recall_max_new_tokens=args.max_new_tokens, seed=args.seed, provenance="all" if arm == "ungated" else "accepted")
         sessions = ["teach", "rolled"]
@@ -235,7 +238,7 @@ def main() -> None:
         lines.append(f"| {arm} | {cell('taught')} | {cell('boundary')} | {cell('rolled')} | {cell('general')} | {nll} | {e.get('status', '')} |")
     table = "\n".join(lines)
     with open(os.path.join(args.out, "sleep_controls.md"), "w", encoding="utf-8") as f:
-        f.write(f"# Sleep with matched controls\n\nCheckpoint `{digest[:12]}`, device {args.device}, {args.steps} steps, target {args.target}, lr {args.lr}, {results['seconds']} s.\n\n{table}\n")
+        f.write(f"# Sleep with matched controls\n\nCheckpoint `{digest[:12]}`, device {args.device}, {args.steps} steps, target {args.target}, lr {args.lr}, replay ratio {args.replay_ratio}, session loss {args.session_loss}, {results['seconds']} s.\n\n{table}\n")
     log("\n" + table)
 
 
