@@ -71,3 +71,55 @@ Not shown: any lasting, transferable learning. Nothing here has an acceptance fu
 coordinate block and the slow update rule will be the first learners scored against this
 reference. The coordinate ablation (the memo's falsifier table) runs under the same contract
 and will be archived beside this report when it completes.
+
+## Coordinate ablation, whole-episode objective (`coordinate-ablation-all/`)
+
+The memo's falsifier table (`docs/research/2026-09-21-plastic-coordinate-recurrence.md`,
+"What would falsify the contribution") on the mechanism testbed, produced by
+`scripts/experiments/coordinate_ablation.py`. Every variant trained from scratch for 1500
+Adam steps (batch 16, one 64-step episode per row, chunk 16 so three fast-update boundaries
+fall inside each episode, gradient clip 1.0, data seed 1, model seed 0), then scored under the
+contract with no lasting update. One seed. CPU.
+
+**The outer loss in this row set is the whole-episode mean MSE.** That is a sequence-model
+objective: the first chunk of every episode can never benefit from a fast update, so the
+gradient reaching the fast path is diluted by steps only the slow weights can serve. A second
+row set under the post-boundary objective (the mean over steps after the first boundary, the
+loss adaptation could have improved) is the corrected comparison and is reported separately
+when it lands. Read this table as what the fast path did when it was asked less than it
+should have been.
+
+| variant | params | s/step | train loss | impulse adapt / off | hold | release | training dist. | speed | η per layer |
+|---|---|---|---|---|---|---|---|---|---|
+| full | 409k | 0.19 | 0.064 | 0.156 / 0.156 | 0.062 / 0.062 | 0.043 / 0.043 | 0.055 / 0.055 | 1.00 | 0.28, 0.34, 0.39 |
+| no_fast | 409k | 0.07 | 0.059 | 0.153 / 0.153 | 0.072 / 0.072 | 0.044 / 0.044 | 0.054 / 0.054 | 1.00 | (off) |
+| decay_only | 409k | 0.17 | 0.058 | 0.154 / 0.154 | 0.076 / 0.076 | 0.044 / 0.044 | 0.051 / 0.051 | 1.00 | 0.18, 0.36, 0.36 |
+| coords_only | 409k | 0.18 | 0.066 | 0.154 / 0.154 | 0.065 / 0.066 | 0.048 / 0.048 | 0.050 / 0.050 | 1.00 | 0.26, 0.35, 0.37 |
+| no_meta | 409k | 0.13 | 0.053 | 0.159 / 0.159 | 0.067 / 0.067 | 0.046 / 0.046 | 0.051 / 0.051 | 1.00 | (fixed 0.10) |
+| fixed_z | 409k | 0.19 | 0.057 | 0.160 / 0.160 | 0.066 / 0.067 | 0.051 / 0.051 | 0.059 / 0.059 | 1.00 | 0.26, 0.37, 0.39 |
+| delta_baseline | 898k | 0.91 | 0.033 | 0.143 / 0.324 | 0.042 / 0.131 | 0.034 / 0.113 | 0.040 / 0.213 | 0.39 | (per-token) |
+
+"off" is each model's own no-adaptation control: fast parameters frozen (coordinates and
+decay) for the coordinate variants, writes disabled with decay active for the delta baseline.
+`speed` is the adapting error as a fraction of the off error over the episode; 1.00 means the
+fast path removed nothing.
+
+What this shows, and only this:
+
+- Under the whole-episode objective the coordinate block's fast path changes nothing: on and
+  off agree to three decimals for every switch, including the deliberately incorrect
+  fixed-latent commit, which can only matter if a proposal moves the state. The learned step
+  sizes grew from 0.10 to about 0.3 per layer, so meta-training was not switching the fast
+  path off; its proposals simply do not move the predictions.
+- The same objective did not stop the delta baseline: its per-token writes cut held-out error
+  by a factor of two to three within an episode and it trains to half the loss. Dilution of
+  the meta-gradient is therefore not a sufficient explanation on its own; the remaining
+  candidates are the size of the coordinate block's inner gradient (the coupling starts near
+  the identity) and three boundaries per episode with each chunk's late target dropped, and
+  the post-boundary row set tests the objective directly.
+- The delta baseline has 2.2 times the parameters and 4.8 times the step cost; the memo asks
+  for parameter, state-memory and wall-clock matching, so this is not yet a matched
+  comparison in its favour either.
+- No falsifier from the memo is called on this row set. The call waits for the post-boundary
+  objective, and if the fast path still does nothing there, the next question is the
+  mechanism's gradient scale, not the recurrence's competence.
