@@ -100,8 +100,14 @@ class CoordinateConfig:
     theta_init: float = 2.0
     coupling_in_std: float | None = None  # None: 1/sqrt(head_dim/2)
     coupling_out_std: float = 0.05  # small nonzero output matrices, per the memo
-    eta_max: float = 1.0
-    eta_init: float = 0.1
+    # Inner step size: eta = eta_max * sigmoid(logit), meta-learned per layer. The first
+    # defaults (ceiling 1.0, initial 0.1) held proposals to about 0.01 and every ablation
+    # switch scored identically with the fast path on or off; with a ceiling of 10 and an
+    # initial step of 1.0 the learned steps settle near 3 to 5 and the fast path adapts within
+    # an episode (docs/research/results/contract-2026-09-23/, coordinate-ablation-eta10).
+    # Still uncalibrated beyond that one testbed and seed.
+    eta_max: float = 10.0
+    eta_init: float = 1.0
     obs_dim: int = 4
     act_dim: int = 2
     # falsifier switches (the memo's ablation table); defaults are the full model

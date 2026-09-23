@@ -93,7 +93,7 @@ def test_config_validation_and_constants_are_not_parameters():
     assert _cfg(meta_gradient=True).meta_gradient == "full"
     bad = [
         dict(rho=1.0), dict(rho=0.0), dict(epsilon=0.0), dict(d_model=30), dict(n_heads=32),
-        dict(eta_init=2.0), dict(meta_gradient="second"), dict(commit_rule="replay"),
+        dict(eta_init=20.0), dict(meta_gradient="second"), dict(commit_rule="replay"),
     ]
     for kw in bad:
         with pytest.raises(ValueError):
