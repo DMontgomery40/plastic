@@ -55,9 +55,9 @@ any source you rely on. Then read the relevant documents below before the decisi
 | Task | Required local material |
 | --- | --- |
 | Architecture, inner learning, equivalence, novelty | [Literature survey](2026-09-21-ttt-ssm-literature.md), [original candidate](2026-09-21-architecture-memo.md), and [coordinate proposal](2026-09-21-plastic-coordinate-recurrence.md), including limitations, nearest prior art and falsification criteria |
-| Harness, calibration, safety experiments | [Safety review](2026-09-21-inference-time-learning-safety.md), [calibration replay audit](2026-09-22-calibration-replay-audit.md), and the coordinate proposal's transaction semantics if that candidate is involved; for the native Qwen backend also the [turn-boundary retention candidate](2026-09-22-qwen-turn-boundary-retention.md) (not adopted) |
+| Harness, calibration, safety experiments | [Safety review](2026-09-21-inference-time-learning-safety.md), [calibration replay audit](2026-09-22-calibration-replay-audit.md), and the coordinate proposal's transaction semantics if that candidate is involved; for the native Qwen backend also the [turn-boundary retention candidate](2026-09-22-qwen-turn-boundary-retention.md) (not adopted); for the pretrained TTT chat backend the [TTT backend note](2026-09-23-ttt-backend.md) (signals, controls, what was measured) |
 | Learning utility or system identification | [Copy-memory intervention](2026-09-22-copy-memory-content-audit.md), [trained-model study](2026-09-22-trained-model-operating-point.md), relevant model/evaluation code and saved configuration |
-| UI, API, documentation | The above source for every scientific metric or mechanism being exposed; verify proposal/accepted, units, controls and missing-data semantics against actual payloads |
+| UI, API, documentation | The above source for every scientific metric or mechanism being exposed; verify proposal/accepted, units, controls and missing-data semantics against actual payloads; the [TTT backend note](2026-09-23-ttt-backend.md) for which signals each backend produces |
 | Compute or performance | [Tooling notes](2026-09-21-tooling-hf-jobs-torch.md), actual launch configuration and measured logs; do not extrapolate a CPU identity probe into a GPU throughput result |
 
 At index creation, ASTRA-030 and ASTRA-031 in the scratchpad contain corrections to

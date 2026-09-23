@@ -176,3 +176,22 @@ def test_runs_end_to_end_through_the_transaction_runner(backend):
     assert s["surprise_mean"] is not None and s["write_norm_sum"] is not None and s["beta_mean"] is not None
     assert s["alpha_mean"] == 1.0 and s["delta_norm"] > 0
     assert isinstance(completion, str)
+
+
+def test_calibration_on_real_chats_produces_installable_thresholds(tmp_path, backend):
+    """The shared real-chat calibrator accepts the TTT backend and yields thresholds for its full signal set."""
+    from plastic.harness.calibrate import Calibration, calibrate_qwen
+    from plastic.backends.ttt_lm.backend import _checkpoint_digest
+    from plastic.store import ArtifactStore
+
+    store = ArtifactStore(str(tmp_path))
+    store.register_model("ttt_test", {"backend": "ttt", "domain": "text", "status": "completed", "checkpoint_dir": CKPT,
+                                      "checkpoint_digest": _checkpoint_digest(CKPT), "chunk": 16})
+    prompts = ["Name a color.", "What is two plus two?", "Say hello."]
+    cal = calibrate_qwen(store, "ttt_test", prompts, max_new_tokens=8, seed=0, device=backend.device, log=lambda *a, **k: None)
+    assert cal.model_signature == f"ttt:{backend.checkpoint_digest}"
+    for name in ("chunk_loss", "surprise_mean", "log_delta_norm", "log_write_norm"):
+        assert name in cal.reference and len(cal.reference[name]) > 0, name
+    assert "fisher_update" not in cal.reference
+    cal.save(store.model_dir("ttt_test"))
+    assert Calibration.exists(store.model_dir("ttt_test"))

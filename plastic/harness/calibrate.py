@@ -583,6 +583,23 @@ def _collect_calibration_records(runner, tok, prompts: list[str], cusum_prompts:
     return records, fit_used, cont, cusum_used, True
 
 
+def _load_chat_backend(kind: str | None, rec: dict, device: torch.device):
+    """The pretrained chat backend named by a model record, with its tokenizer-shaped adapter."""
+    if kind == "qwen":
+        from plastic.backends.qwen import QwenBackend
+        from plastic.session.runner import _QwenTextIO
+
+        backend = QwenBackend.load(rec["checkpoint_dir"], device=device)
+        return backend, _QwenTextIO(backend)
+    if kind == "ttt":
+        from plastic.backends.ttt_lm.backend import TTTBackend
+        from plastic.session.runner import _TTTTextIO
+
+        backend = TTTBackend.load(rec["checkpoint_dir"], device=device)
+        return backend, _TTTTextIO(backend)
+    raise ValueError(f"calibrate_qwen requires a pretrained chat backend (qwen or ttt), got backend={kind!r}")
+
+
 def calibrate_qwen(
     store,
     model_id: str,
@@ -616,26 +633,25 @@ def calibrate_qwen(
     prompts DISJOINT from evaluation. This produces thresholds, not a measured intervention-rate or
     safety claim.
     """
-    from plastic.backends.qwen import QwenBackend
     from plastic.config import ModelConfig
     from plastic.harness.stats import robust_z
     from plastic.harness.transaction import TransactionRunner
-    from plastic.session.runner import _QwenTextIO, drive_chat_turn
+    from plastic.session.runner import drive_chat_turn
 
     device = torch.device(device)
     rec = store.load_model_record(model_id)
-    if rec.get("backend") != "qwen":
-        raise ValueError(f"calibrate_qwen requires a qwen model, got backend={rec.get('backend')!r}")
-    backend = QwenBackend.load(rec["checkpoint_dir"], device=device)
-    cfg = ModelConfig(domain="text", chunk=int(rec.get("chunk", 8)))
+    kind = rec.get("backend")
+    # the same real-chat calibration serves every pretrained chat backend; each contributes the signals
+    # it actually produces (Qwen: chunk NLL + recurrent change; TTT: the full inner-loop set)
+    backend, tok = _load_chat_backend(kind, rec, device)
+    cfg = ModelConfig(domain="text", chunk=int(rec.get("chunk", 8 if kind == "qwen" else 16)))
     hcfg = log_only(harness_cfg or HarnessConfig(target_fpr=target_fpr))
     runner = TransactionRunner(None, cfg, hcfg, device=device, backend=backend)
-    tok = _QwenTextIO(backend)
     prompts = list(prompts)
     cusum_list = list(cusum_prompts) if cusum_prompts is not None else prompts
     gen = {"max_new_tokens": max_new_tokens, "temperature": temperature, "top_k": top_k}
     identity = _calibration_identity(
-        model_signature=f"qwen:{backend.checkpoint_digest}", seed=seed, gen=gen, target_fpr=target_fpr,
+        model_signature=f"{kind}:{backend.checkpoint_digest}", seed=seed, gen=gen, target_fpr=target_fpr,
         chunk=cfg.chunk, fit_prompts=prompts, cusum_prompts=cusum_list, corpus_hash=corpus_hash,
         harness_cfg=hcfg, device=str(device),
     )
@@ -672,7 +688,7 @@ def calibrate_qwen(
     prompt_chunks = sum(1 for r in records if r["sources"]["user"] > 0 and r["sources"]["model"] == 0)
     gen_chunks = sum(1 for r in records if r["sources"]["model"] > 0)
     cal = Calibration(
-        model_signature=f"qwen:{backend.checkpoint_digest}",
+        model_signature=f"{kind}:{backend.checkpoint_digest}",
         n_chunks=len(signals),
         reference=reference,
         cusum_reference=cusum_reference,
