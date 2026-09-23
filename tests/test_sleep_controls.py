@@ -59,3 +59,25 @@ def test_experiment_and_eval_parsers_expose_the_sampling_temperatures():
     assert "--poison" in out and "--facts" in out
     out = subprocess.run([sys.executable, "-m", "scripts.train.eval_ttt_chat", "--help"], capture_output=True, text=True, check=True).stdout
     assert "--temperature" in out and "--top-k" in out and "--skip-nll" in out
+
+
+def test_arm_configs_gate_the_gated_arms_and_open_the_ungated_control():
+    """The ungated control consumes every turn (rolled-back and flagged); the gated arms use the product selection.
+    The pinned replay revision reaches each arm; an empty override follows the Hub's main."""
+    import argparse
+
+    from plastic.sleep import SMOLTALK_REVISION
+    from scripts.experiments.sleep_controls import arm_config
+
+    base = dict(target="w0", steps=5, lr=1e-4, seq_len=256, batch_size=2, replay_ratio=0.5, session_loss="all", prompt_loss_weight=1.0,
+                dream_temperature=0.7, dream_token_weighting="uniform", replay_rows=8, heldout_rows=4, device="cpu", max_new_tokens=16, seed=3,
+                replay_revision=SMOLTALK_REVISION)
+    args = argparse.Namespace(**base)
+    for arm in ("anchor", "replay", "distill", "dream"):
+        cfg = arm_config(arm, args)
+        cfg.validate()
+        assert (cfg.method, cfg.provenance, cfg.flagged_policy, cfg.replay_revision) == (arm, "accepted", "exclude", SMOLTALK_REVISION)
+    cfg = arm_config("ungated", args)
+    cfg.validate()
+    assert (cfg.method, cfg.provenance, cfg.flagged_policy) == ("replay", "all", "include")
+    assert arm_config("replay", argparse.Namespace(**{**base, "replay_revision": ""})).replay_revision is None

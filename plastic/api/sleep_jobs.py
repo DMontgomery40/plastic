@@ -23,7 +23,7 @@ def build_sleep_argv(model_id: str, run_dir: str, artifacts_root: str, device: s
     for key, flag in (("method", "--method"), ("target", "--target"), ("steps", "--steps"), ("lr", "--lr"), ("seq_len", "--seq-len"),
                       ("batch_size", "--batch-size"), ("replay_ratio", "--replay-ratio"), ("replay_rows", "--replay-rows"),
                       ("heldout_rows", "--heldout-rows"), ("anchor_lambda", "--anchor-lambda"), ("distill_temperature", "--distill-temperature"),
-                      ("tolerance_nll", "--tolerance-nll"), ("seed", "--seed")):
+                      ("tolerance_nll", "--tolerance-nll"), ("seed", "--seed"), ("replay_revision", "--replay-revision")):
         if options.get(key) is not None:
             argv += [flag, str(options[key])]
     if sessions:

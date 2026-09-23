@@ -564,3 +564,83 @@ def test_flagged_turns_are_accepted_online_but_marked_for_sleep(tmp_path):
         SleepConfig(flagged_policy="ignore").validate()
     with pytest.raises(ValueError):
         SleepConfig(flagged_weight=2.0).validate()
+
+
+def test_one_selection_governs_direct_turns_source_states_and_dream_quotes(tmp_path):
+    """ASTRA-182: the flagged policy must select once for every path. Under exclude, a flagged turn is neither a direct
+    row nor a dream quote, and a session whose every accepted turn is flagged lends no committed state to anchor or
+    teacher; a mixed session still lends its state (the flagged turn's writes inside it are documented influence)."""
+    from plastic.sleep.dream import turn_key
+    from plastic.sleep.ttt import _teacher_states, dream_row_weight, select_sleep_turns
+
+    store = ArtifactStore(str(tmp_path))
+    store.register_model("m", {"backend": "ttt", "domain": "text"})
+    for sid, turns in (("mixed", [("clean q", False), ("hot   q  ", True)]), ("hot", [("only hot", True)]), ("clean", [("fine", False)])):
+        store.create_session(sid, model_id="m", domain="text", harness_cfg=HarnessConfig(log_only=True))
+        for i, (prompt, flagged) in enumerate(turns):
+            reasons = ["log_only", "would_scale:surprise_mean_z(3.1>=3.0)"] if flagged else ["log_only"]
+            store.append_transaction(sid, _tx(i, 8 * i, 8 * i + 8, reasons=reasons))
+            store.append_trace(sid, {"t_unix": 0, "kind": "chat", "prompt": prompt, "completion": "ok", "pos_end": 8 * i + 8,
+                                     "n_transactions": 1, "tx_start": i, "tx_end": i + 1})
+        store.save_runner_state(sid, {"committed": {"tag": sid}}, summary={})
+    harvests = harvest_sessions(store, "m")
+
+    class FakeBackend:
+        def load_state_dict(self, d):
+            return f"state:{d['tag']}"
+
+    summary = {}
+    accepted, eligible = select_sleep_turns(harvests, SleepConfig(flagged_policy="exclude"), summary)
+    assert sorted((t.session_id, t.prompt) for t in accepted) == [("clean", "fine"), ("mixed", "clean q")]
+    assert eligible == {"mixed", "clean"} and summary["flagged_excluded"] == 2 and summary["source_sessions"] == ["clean", "mixed"]
+    pairs = _teacher_states(store, FakeBackend(), harvests, {}, lambda s: None, eligible=eligible)
+    assert sorted(sid for sid, _ in pairs) == ["clean", "mixed"]      # "hot" has a state but no selected turn
+
+    accepted, eligible = select_sleep_turns(harvests, SleepConfig(flagged_policy="include"), {})
+    assert sorted(t.prompt for t in accepted) == ["clean q", "fine", "hot   q  ", "only hot"] and eligible == {"mixed", "hot", "clean"}
+    assert sorted(sid for sid, _ in _teacher_states(store, FakeBackend(), harvests, {}, lambda s: None, eligible=eligible)) == ["clean", "hot", "mixed"]
+    # default (no selection given) keeps the earlier behavior: every session with accepted turns
+    assert len(_teacher_states(store, FakeBackend(), harvests, {}, lambda s: None)) == 3
+
+    # downweight: the replay method's rows and the KL row of a dream quoting a flagged turn; the dream keys its turn
+    # through turn_key (collapsed whitespace), so the lookup must use the same key
+    cfg = SleepConfig(method="dream", flagged_policy="downweight", flagged_weight=0.25)
+    cfg.validate()
+    flagged = {(t.session_id, turn_key(t.prompt)) for t in accepted if t.flagged}
+    assert dream_row_weight("mixed", turn_key("hot   q  "), flagged, cfg) == 0.25
+    assert dream_row_weight("mixed", turn_key("clean q"), flagged, cfg) == 1.0
+    assert dream_row_weight("mixed", turn_key("hot   q  "), flagged, SleepConfig(method="dream", flagged_policy="include")) == 1.0
+    SleepConfig(method="replay", flagged_policy="downweight").validate()
+    with pytest.raises(ValueError, match="replay and dream methods only"):
+        SleepConfig(method="distill", flagged_policy="downweight").validate()
+    with pytest.raises(ValueError, match="replay and dream methods only"):
+        SleepConfig(method="anchor", flagged_policy="downweight").validate()
+
+
+def test_replay_revision_reaches_both_dataset_loads_and_is_persisted(monkeypatch):
+    """ASTRA-181: the SmolTalk revision is pinned by default, forwarded to the train (replay) and test (held-out) loads
+    alike, and recorded in the run config so a documented command loads the same rows later."""
+    import sys
+    import types
+    from dataclasses import asdict
+
+    from plastic.sleep import SMOLTALK_REVISION
+    from plastic.sleep.ttt import load_replay_conversations
+
+    calls = []
+
+    def fake_load_dataset(path, name, split, revision=None):
+        calls.append((path, name, split, revision))
+        return [{"messages": [{"role": "user", "content": f"{split} {i}"}]} for i in range(5)]
+
+    monkeypatch.setitem(sys.modules, "datasets", types.SimpleNamespace(load_dataset=fake_load_dataset))
+    train = load_replay_conversations("everyday-conversations", "train", 2, 0, lambda s: None, revision="abc1234")
+    test = load_replay_conversations("everyday-conversations", "test", 2, 1, lambda s: None, revision="abc1234")
+    assert len(train) == 2 and len(test) == 2
+    assert calls == [("HuggingFaceTB/smoltalk", "everyday-conversations", "train", "abc1234"),
+                     ("HuggingFaceTB/smoltalk", "everyday-conversations", "test", "abc1234")]
+    load_replay_conversations("everyday-conversations", "train", 1, 0, lambda s: None)
+    assert calls[-1][3] == SMOLTALK_REVISION and len(SMOLTALK_REVISION) == 40
+    cfg = SleepConfig()
+    assert asdict(cfg)["replay_revision"] == SMOLTALK_REVISION  # the report's "config" is asdict(cfg)
+    assert asdict(SleepConfig(replay_revision=None))["replay_revision"] is None

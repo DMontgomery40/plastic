@@ -560,3 +560,15 @@ def test_session_summary_reports_effective_generation_write_policy(api):
     ).json()["session_id"]
     body2 = api.client.get(f"/api/sessions/{sid2}").json()
     assert body2["summary"]["writes_generation"] is True  # the override makes generation write-eligible
+
+
+def test_sleep_argv_forwards_the_replay_revision_and_rejects_a_malformed_one(api):
+    """ASTRA-181: the API's replay_revision reaches the sleep process; a non-hex value is a request-shape error."""
+    from plastic.api.schemas import SleepRequest
+    from plastic.api.sleep_jobs import build_sleep_argv
+
+    argv = build_sleep_argv("m", "/run", "/root", "cpu", {"method": "replay", "replay_revision": "5feaf2fd3ffca7"}, None, None)
+    assert argv[argv.index("--replay-revision") + 1] == "5feaf2fd3ffca7"
+    assert "--replay-revision" not in build_sleep_argv("m", "/run", "/root", "cpu", {"method": "replay"}, None, None)
+    assert SleepRequest().model_dump(exclude_none=True).get("replay_revision") is None
+    assert api.client.post("/api/models/nope/sleep", json={"replay_revision": "not-a-sha!"}).status_code == 422

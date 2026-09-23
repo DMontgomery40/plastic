@@ -61,5 +61,7 @@ class SleepRequest(BaseModel):
     distill_temperature: float = Field(default=1.0, gt=0.0, le=10.0)
     tolerance_nll: float = Field(default=0.05, ge=0.0, le=5.0)
     seed: int = Field(default=0, ge=0)
+    # HuggingFaceTB/smoltalk revision for the replay/held-out rows; None keeps the pinned default
+    replay_revision: str | None = Field(default=None, min_length=7, max_length=64, pattern=r"^[0-9a-f]+$")
     sessions: list[str] | None = Field(default=None, min_length=1, max_length=64)
     probes: list[RecallProbeIn] | None = Field(default=None, min_length=1, max_length=64)

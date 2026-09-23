@@ -32,6 +32,8 @@ import shutil
 import time
 from typing import Any
 
+from plastic.sleep import SMOLTALK_REVISION
+
 # Facts: (statement taught, question, expected answer, paraphrase used in teaching/study, UNSEEN phrasing used only in probes).
 # Answers are single distinctive tokens so containment scoring is unambiguous. Twenty-four personal facts (OPUS-004 (0): six was
 # noise), two benign-boundary facts, two rolled-back facts, four planted contradictions of world knowledge (poison uptake), and
@@ -155,6 +157,21 @@ def group_counts(results: list[dict[str, Any]], probes: dict[str, list]) -> dict
     return out
 
 
+def arm_config(arm: str, args: argparse.Namespace) -> "SleepConfig":
+    """One sleep arm's configuration. The gated arms consume accepted turns and exclude flagged ones (the product
+    rule); ``ungated`` is the no-gate control: every turn, rolled-back and flagged alike (ASTRA-182 addendum)."""
+    from plastic.sleep.ttt import SleepConfig
+
+    ungated = arm == "ungated"
+    return SleepConfig(method="replay" if ungated else arm, target=args.target, steps=args.steps, lr=args.lr, seq_len=args.seq_len,
+                       batch_size=args.batch_size, replay_ratio=args.replay_ratio, session_loss=args.session_loss,
+                       prompt_loss_weight=args.prompt_loss_weight, dream_temperature=args.dream_temperature,
+                       dream_token_weighting=args.dream_token_weighting, replay_rows=args.replay_rows, heldout_rows=args.heldout_rows,
+                       tolerance_nll=0.05, device=args.device, replay_revision=(args.replay_revision or None),
+                       recall_max_new_tokens=args.max_new_tokens, seed=args.seed,
+                       provenance="all" if ungated else "accepted", flagged_policy="include" if ungated else "exclude")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--checkpoint", required=True)
@@ -177,6 +194,7 @@ def main() -> None:
     ap.add_argument("--dream-temperature", type=float, default=0.7)
     ap.add_argument("--dream-token-weighting", default="uniform", choices=["uniform", "gain", "fw_gain"])
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--replay-revision", default=SMOLTALK_REVISION, help="HuggingFaceTB/smoltalk revision for replay and held-out rows (empty follows main)")
     ap.add_argument("--facts", type=int, default=24, help="how many of the taught facts to use (first N)")
     ap.add_argument("--poison", action="store_true", help="also teach the planted world-knowledge contradictions (uptake is measured)")
     args = ap.parse_args()
@@ -249,7 +267,7 @@ def main() -> None:
 
     results: dict[str, Any] = {"checkpoint": os.path.abspath(args.checkpoint), "checkpoint_digest": digest, "device": args.device,
                                "code_commit": _git_head(), "started_at_unix": int(t0),
-                               "steps": args.steps, "target": args.target, "lr": args.lr, "replay_ratio": args.replay_ratio, "batch_size": args.batch_size, "session_loss": args.session_loss, "prompt_loss_weight": args.prompt_loss_weight, "augment": args.augment, "teach_temperature": args.teach_temperature, "dream_temperature": args.dream_temperature, "facts": len(FACTS_TAUGHT), "poison": bool(args.poison), "arms": {}}
+                               "steps": args.steps, "target": args.target, "lr": args.lr, "replay_ratio": args.replay_ratio, "batch_size": args.batch_size, "session_loss": args.session_loss, "prompt_loss_weight": args.prompt_loss_weight, "augment": args.augment, "teach_temperature": args.teach_temperature, "dream_temperature": args.dream_temperature, "replay_revision": (args.replay_revision or None), "facts": len(FACTS_TAUGHT), "poison": bool(args.poison), "arms": {}}
     arms = [a.strip() for a in args.arms.split(",") if a.strip()]
 
     # 2) floor: the parent from a fresh session (greedy recall and the expected-answer log-probability, like every sleep "before")
@@ -291,11 +309,7 @@ def main() -> None:
     for arm in ("anchor", "replay", "distill", "dream", "ungated"):
         if arm not in arms:
             continue
-        method = "replay" if arm == "ungated" else arm
-        cfg = SleepConfig(method=method, target=args.target, steps=args.steps, lr=args.lr, seq_len=args.seq_len, batch_size=args.batch_size, replay_ratio=args.replay_ratio,
-                          session_loss=args.session_loss, prompt_loss_weight=args.prompt_loss_weight, dream_temperature=args.dream_temperature, dream_token_weighting=args.dream_token_weighting,
-                          replay_rows=args.replay_rows, heldout_rows=args.heldout_rows, tolerance_nll=0.05, device=args.device,
-                          recall_max_new_tokens=args.max_new_tokens, seed=args.seed, provenance="all" if arm == "ungated" else "accepted")
+        cfg = arm_config(arm, args)
         sessions = ["teach", "rolled"]
         rep = sleep_ttt(store, "parent", cfg, session_ids=sessions, probes=all_probes, run_dir=os.path.join(args.out, f"sleep_{arm}"), log=log)
         entry: dict[str, Any] = {"status": rep["status"], "model_id": rep.get("model_id"), "gate": rep.get("gate"), "batch": rep.get("batch"),

@@ -102,9 +102,14 @@ plausible: new true facts and poison alike. Weighting by it amplifies what the h
 most carefully. Design rule, **built (unmeasured)**: online acceptance is necessary but not sufficient for
 consolidation. Harvesting marks a turn *flagged* when any of its chunks was scaled or projected, had
 a requested intervention overridden, or carried a would-have-intervened reason in observational mode;
-`flagged_policy` excludes such turns from sleep by default, or down-weights their rows, or includes
-them for comparison. The post-sleep gate (canaries, cluster share, held-out NLL) remains the second
-transaction. A new benign fact looks like high importance with clean canaries; a
+`flagged_policy` excludes such turns from sleep by default, or down-weights them, or includes them
+for comparison. The selection is made once and governs every path: the direct rows, which sessions may
+lend a committed state to the anchor or the teacher (only sessions with at least one selected turn),
+and which turns dreams may quote. Down-weighting scales the replay method's cross-entropy rows and
+the KL rows of dreams that quote a flagged turn; distill has no per-turn row and takes exclude or
+include only. What exclusion cannot remove is indirect: inside a mixed session the committed state
+already carries the flagged turn's writes, so a teacher built from that state is influenced by it.
+The post-sleep gate (canaries, cluster share, held-out NLL) remains the second transaction. A new benign fact looks like high importance with clean canaries; a
 contradiction of world knowledge looks like high importance with canary coherence damage. Amnesia
 (arXiv 2606.12655, 2026-06-10) shows that the choice of replay items is an attack surface even under
 auditable budgets; a user controls session content and therefore the gain distribution, so selection

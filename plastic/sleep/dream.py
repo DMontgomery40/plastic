@@ -99,6 +99,11 @@ class DreamReport:
                 "kept": [d.to_dict() for d in self.kept], "rejected": self.rejected_examples}
 
 
+def turn_key(turn: str) -> str:
+    """The form of an accepted user turn a dream quotes and is keyed by: collapsed whitespace, at most 400 chars."""
+    return " ".join(turn.split())[:400]
+
+
 def reply_slices(teacher_prefix: int, student_prefix: int, reply_len: int) -> tuple[slice, slice]:
     """Logit positions that predict the reply tokens in each rendering: logits at position t predict token t+1,
     so the reply's ``reply_len`` predictions start one position before the reply in both sequences."""
@@ -206,7 +211,7 @@ def generate_dreams(backend, teacher_state, *, session_id: str, turns: list[str]
     dreams: list[Dream] = []
     gen = torch.Generator().manual_seed(seed)
     for ti, turn in enumerate(turns):
-        short = " ".join(turn.split())[:400]
+        short = turn_key(turn)
         for pi, (with_turn, without_turn) in enumerate(templates):
             teacher_prompt_ids = backend.encode_chat(with_turn.format(turn=short), first_turn=False)
             fw_prompt_ids = backend.encode_chat(without_turn, first_turn=False)

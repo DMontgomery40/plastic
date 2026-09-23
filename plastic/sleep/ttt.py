@@ -45,6 +45,7 @@ import torch.nn.functional as F
 
 from plastic.sleep.recall import RecallProbe, RecallReport, run_probes
 from plastic.store import ArtifactStore
+from plastic.sleep import SMOLTALK_REVISION
 
 ACCEPTED_KINDS = frozenset({"commit", "scale", "project"})
 FAST_WEIGHT_NAMES = ("W1", "b1", "W2", "b2")
@@ -81,12 +82,18 @@ class SleepConfig:
     device: str = "cpu"
     scan_checkpoint_groups: int = 4
     replay_subset: str = "everyday-conversations"
+    # dataset revision (commit SHA) of HuggingFaceTB/smoltalk for BOTH the replay and the held-out sample, so a
+    # documented command loads the same rows later; None follows the Hub's current main (ASTRA-181)
+    replay_revision: str | None = SMOLTALK_REVISION
     # "accepted" (the product rule) or "all": consume every turn including rolled-back ones. "all" exists only
     # so an experiment can measure what the provenance rule buys; the API and UI never offer it.
     provenance: Literal["accepted", "all"] = "accepted"
     # accepted turns the policy flagged (scaled/projected, or would-have-intervened in observational mode): "exclude"
-    # from sleep (default; online acceptance is necessary, not sufficient), "downweight" their rows by flagged_weight,
-    # or "include" them like any other accepted turn. Importance by surprise is highest for exactly this content.
+    # from sleep (default; online acceptance is necessary, not sufficient), "downweight" them by flagged_weight, or
+    # "include" them like any other accepted turn. Importance by surprise is highest for exactly this content. The
+    # selection is one list: it decides the direct turns, which sessions may lend a committed state (anchor, teacher)
+    # and which turns dreams may quote. Downweight scales the replay method's cross-entropy rows and the KL rows of
+    # dreams quoting a flagged turn; distill has no per-turn row, so it accepts exclude or include only (ASTRA-182).
     flagged_policy: Literal["exclude", "downweight", "include"] = "exclude"
     flagged_weight: float = 0.25
 
@@ -123,6 +130,9 @@ class SleepConfig:
             raise ValueError(f"unknown flagged_policy {self.flagged_policy!r}")
         if not 0.0 <= self.flagged_weight <= 1.0:
             raise ValueError("flagged_weight must be within [0, 1]")
+        if self.flagged_policy == "downweight" and self.method not in ("replay", "dream"):
+            raise ValueError(f"flagged_policy=downweight is implemented for the replay and dream methods only; "
+                             f"{self.method} takes exclude or include")
         if not 0.0 <= self.prompt_loss_weight <= 1.0:
             raise ValueError("prompt_loss_weight must be within [0, 1]")
         if self.dream_temperature <= 0:
@@ -312,13 +322,14 @@ def pack_examples(examples: list[tuple], seq_len: int, pad_id: int) -> list[tupl
     return out
 
 
-def load_replay_conversations(subset: str, split: str, n: int, seed: int, log: Callable[[str], None]) -> list[list[dict[str, str]]]:
-    """A sample of SmolTalk conversations for replay and the held-out locality measurement. Returns an
-    empty list, and says so, when the dataset is unavailable (no network, no cache)."""
+def load_replay_conversations(subset: str, split: str, n: int, seed: int, log: Callable[[str], None],
+                              revision: str | None = SMOLTALK_REVISION) -> list[list[dict[str, str]]]:
+    """A sample of SmolTalk conversations for replay and the held-out locality measurement, from one pinned
+    dataset revision. Returns an empty list, and says so, when the dataset is unavailable (no network, no cache)."""
     try:
         from datasets import load_dataset
 
-        ds = load_dataset("HuggingFaceTB/smoltalk", subset, split=split)
+        ds = load_dataset("HuggingFaceTB/smoltalk", subset, split=split, revision=revision)
     except Exception as e:  # noqa: BLE001 - any failure means "no replay", which the report records
         log(f"[sleep] replay corpus unavailable ({type(e).__name__}: {e}); continuing without replay")
         return []
@@ -498,18 +509,7 @@ def sleep_ttt(
     # 1) provenance: what sleep may learn from
     harvests = harvest_sessions(store, model_id, session_ids)
     report["harvest"] = harvest_summary(harvests)
-    if cfg.provenance == "all":  # experiment-only control: rolled-back and read-only turns are consumed too
-        accepted = [t for h in harvests for t in h.turns if t.completion.strip() and t.n_chunks > 0]
-        report["harvest"]["provenance"] = "all (control: rolled-back turns included)"
-    else:
-        accepted = [t for h in harvests for t in h.accepted_turns]
-        report["harvest"]["provenance"] = "accepted"
-    n_flagged = sum(1 for t in accepted if t.flagged)
-    if cfg.flagged_policy == "exclude" and n_flagged:
-        accepted = [t for t in accepted if not t.flagged]
-        report["harvest"]["flagged_excluded"] = n_flagged
-        log(f"[sleep] {n_flagged} accepted turn(s) the policy flagged are excluded from sleep (flagged_policy=exclude)")
-    report["harvest"]["flagged_policy"] = cfg.flagged_policy
+    accepted, eligible = select_sleep_turns(harvests, cfg, report["harvest"], log)
     log(f"[sleep] {model_id}: {len(harvests)} sessions, {len(accepted)} accepted turns, "
         f"{report['harvest']['accepted_tokens']} accepted tokens, {report['harvest']['excluded_tokens']} excluded")
     if not accepted:
@@ -521,8 +521,9 @@ def sleep_ttt(
     # 2) the model to change (a separate copy from any live session's model) and the measurements before
     be = TTTBackend.load(ckpt, device=cfg.device, scan_checkpoint_groups=cfg.scan_checkpoint_groups)
     model, tok = be.model, be.tokenizer
-    heldout = load_replay_conversations(cfg.replay_subset, "test", cfg.heldout_rows, cfg.seed + 1, log)
-    replay = load_replay_conversations(cfg.replay_subset, "train", cfg.replay_rows, cfg.seed, log) if cfg.replay_ratio > 0 else []
+    heldout = load_replay_conversations(cfg.replay_subset, "test", cfg.heldout_rows, cfg.seed + 1, log, revision=cfg.replay_revision)
+    replay = (load_replay_conversations(cfg.replay_subset, "train", cfg.replay_rows, cfg.seed, log, revision=cfg.replay_revision)
+              if cfg.replay_ratio > 0 else [])
     answer = fresh_session_answer(be, max_new_tokens=cfg.recall_max_new_tokens)
     answer_lp = fresh_session_answer_logprob(be)
     before = {
@@ -539,7 +540,7 @@ def sleep_ttt(
     if cfg.method == "anchor":
         leaves = []
         for h in harvests:
-            if not h.accepted_turns:
+            if h.session_id not in eligible:  # the same selection as the direct turns (ASTRA-182)
                 continue
             st = store.load_runner_state(h.session_id).get("committed")
             if st is None:
@@ -574,7 +575,7 @@ def sleep_ttt(
         dream_rows: list[Any] = []  # kept Dream objects (student and teacher renderings) for the dream method
         teacher_be = be
         if cfg.method in ("distill", "dream"):
-            teachers = _teacher_states(store, be, harvests, report, log)
+            teachers = _teacher_states(store, be, harvests, report, log, eligible=eligible)
             teacher_be = frozen_teacher_backend(be, cfg.target)
             if not teachers:
                 report["status"] = "rejected"
@@ -586,7 +587,12 @@ def sleep_ttt(
 
             dream_report = DreamReport()
             candidates = []
-            turns_by_session = {h.session_id: [tr.prompt for tr in h.accepted_turns] for h in harvests}
+            turns_by_session: dict[str, list[str]] = {}
+            for t in accepted:  # dreams quote only the selected turns, never a flagged turn the policy excluded
+                turns_by_session.setdefault(t.session_id, []).append(t.prompt)
+            from plastic.sleep.dream import turn_key
+
+            flagged_turns = {(t.session_id, turn_key(t.prompt)) for t in accepted if t.flagged}
             for ti, (sid, state) in enumerate(teachers):
                 ds = generate_dreams(teacher_be, state, session_id=sid, turns=turns_by_session.get(sid, []), per_prompt=cfg.dream_per_prompt,
                                      max_new_tokens=cfg.dream_max_new_tokens, temperature=cfg.dream_temperature, seed=cfg.seed + ti, log=log)
@@ -672,7 +678,8 @@ def sleep_ttt(
                         s_slices.append(s_full[i, ss])
                         gains = {"gain": d.token_gain, "fw_gain": d.token_fw_gain}.get(cfg.dream_token_weighting)
                         w = token_gain_weights(gains) if (gains is not None and len(gains) == d.reply_len) else [1.0] * d.reply_len
-                        masks.append(torch.tensor(w + [0.0] * (R - d.reply_len), device=dev))
+                        row_w = dream_row_weight(d.session_id, d.turn, flagged_turns, cfg)
+                        masks.append(torch.tensor([v * row_w for v in w] + [0.0] * (R - d.reply_len), device=dev))
                     t_logits = torch.stack([torch.nn.functional.pad(t, (0, 0, 0, R - t.shape[0])) for t in t_slices])
                     s_logits = torch.stack([torch.nn.functional.pad(t, (0, 0, 0, R - t.shape[0])) for t in s_slices])
                     reply_mask = torch.stack(masks)
@@ -817,14 +824,49 @@ def split_by_length(dreams: list[Any], seq_len: int) -> tuple[list[Any], list[An
     return fit, rest
 
 
-def _teacher_states(store: ArtifactStore, be, harvests: list[SessionHarvest], report: dict[str, Any], log: Callable[[str], None]) -> list[tuple[str, Any]]:
-    """(session_id, committed state) for each source session with accepted turns and a loadable state; the
-    teacher reads each through a folded cache with the inner step disabled, the same fixed function the
-    canaries use. A state saved against another checkpoint is skipped and recorded; identity stays bound to
-    the state that loaded, so a skipped session never relabels a later one."""
+def select_sleep_turns(harvests: list[SessionHarvest], cfg: SleepConfig, summary: dict[str, Any] | None = None,
+                       log: Callable[[str], None] = lambda s: None) -> tuple[list[TurnRecord], set[str]]:
+    """The one selection every consolidation path shares: the turns sleep may learn from directly, and the sessions
+    whose committed state may serve as an anchor or teacher (those with at least one selected turn). Provenance
+    ``all`` is the experiment control that also consumes rolled-back turns; ``flagged_policy`` exclude drops
+    accepted turns the policy flagged. A session whose every accepted turn is flagged lends no state under exclude.
+    Inside a mixed session the committed state still carries the flagged turn's writes: that indirect influence is
+    documented, not removable here."""
+    summary = summary if summary is not None else {}
+    if cfg.provenance == "all":  # experiment-only control: rolled-back and read-only turns are consumed too
+        accepted = [t for h in harvests for t in h.turns if t.completion.strip() and t.n_chunks > 0]
+        summary["provenance"] = "all (control: rolled-back turns included)"
+    else:
+        accepted = [t for h in harvests for t in h.accepted_turns]
+        summary["provenance"] = "accepted"
+    n_flagged = sum(1 for t in accepted if t.flagged)
+    if cfg.flagged_policy == "exclude" and n_flagged:
+        accepted = [t for t in accepted if not t.flagged]
+        summary["flagged_excluded"] = n_flagged
+        log(f"[sleep] {n_flagged} accepted turn(s) the policy flagged are excluded from sleep (flagged_policy=exclude)")
+    summary["flagged_policy"] = cfg.flagged_policy
+    eligible = {t.session_id for t in accepted}
+    summary["source_sessions"] = sorted(eligible)
+    return accepted, eligible
+
+
+def dream_row_weight(session_id: str, turn: str, flagged_turns: set[tuple[str, str]], cfg: SleepConfig) -> float:
+    """Weight of one dream's KL row: flagged_weight when the dream quotes a flagged turn under downweight, else 1."""
+    if cfg.flagged_policy == "downweight" and (session_id, turn) in flagged_turns:
+        return cfg.flagged_weight
+    return 1.0
+
+
+def _teacher_states(store: ArtifactStore, be, harvests: list[SessionHarvest], report: dict[str, Any], log: Callable[[str], None],
+                    eligible: set[str] | None = None) -> list[tuple[str, Any]]:
+    """(session_id, committed state) for each source session the selection admits (``eligible``; by default every
+    session with accepted turns) that has a loadable state; the teacher reads each through a folded cache with
+    the inner step disabled, the same fixed function the canaries use. A state saved against another checkpoint
+    is skipped and recorded; identity stays bound to the state that loaded, so a skipped session never relabels
+    a later one."""
     out: list[tuple[str, Any]] = []
     for h in harvests:
-        if not h.accepted_turns:
+        if (h.session_id not in eligible) if eligible is not None else (not h.accepted_turns):
             continue
         st = store.load_runner_state(h.session_id).get("committed")
         if st is None:

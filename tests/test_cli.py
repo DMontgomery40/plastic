@@ -134,3 +134,16 @@ def test_calibrate_session_chat_and_physics_via_cli(tmp_path, capsys):
     assert main(["physics", "p1", "--artifacts-root", root, "--steps", "24", "--mu", "0.1"]) == 0
     out = capsys.readouterr().out
     assert "adaptive_mse" in out
+
+
+def test_sleep_cli_pins_the_replay_revision_and_accepts_an_override():
+    """ASTRA-181: --replay-revision defaults to the pinned SmolTalk commit; an empty string follows the Hub's main."""
+    from plastic.cli import build_parser
+    from plastic.sleep import SMOLTALK_REVISION
+
+    p = build_parser()
+    ns = p.parse_args(["sleep", "m"])
+    assert ns.replay_revision == SMOLTALK_REVISION
+    ns = p.parse_args(["sleep", "m", "--replay-revision", "abc1234", "--flagged-policy", "downweight", "--flagged-weight", "0.5"])
+    assert (ns.replay_revision, ns.flagged_policy, ns.flagged_weight) == ("abc1234", "downweight", 0.5)
+    assert p.parse_args(["sleep", "m", "--replay-revision", ""]).replay_revision == ""
