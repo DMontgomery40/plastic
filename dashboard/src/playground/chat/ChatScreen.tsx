@@ -39,6 +39,8 @@ function TurnCard({ turn }: { turn: Turn }) {
 
 function Composer() {
   const [text, setText] = useState('');
+  const form = useRef<HTMLFormElement>(null);
+  const isPublic = useStore((s) => s.health?.public ?? false);
   const busy = useStore((s) => s.busy.chat);
   const detail = useStore((s) => s.detail);
   const sendChat = useStore((s) => s.sendChat);
@@ -48,15 +50,14 @@ function Composer() {
   const caps = useStore((s) => s.capabilities)();
   const readOnly = detail?.summary.read_only ?? false;
 
-  const submit = () => {
+  const submit = async () => {
     const prompt = text.trim();
-    if (!prompt || busy || !detail) return;
-    setText('');
-    void sendChat(prompt);
+    if (!prompt || busy || !detail || !form.current?.reportValidity()) return;
+    if (await sendChat(prompt)) setText('');
   };
 
   return (
-    <div className="rounded border border-edge bg-surface-raised px-4 py-3">
+    <form ref={form} onSubmit={(e) => { e.preventDefault(); void submit(); }} className="rounded border border-edge bg-surface-raised px-4 py-3">
       <label htmlFor="prompt" className="text-label font-semibold uppercase tracking-wide text-ink-muted">
         Prompt
       </label>
@@ -67,16 +68,17 @@ function Composer() {
         onKeyDown={(e) => {
           if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            submit();
+            void submit();
           }
         }}
         rows={3}
+        maxLength={isPublic ? 1024 : undefined}
         disabled={busy || !detail}
         placeholder={detail ? 'Type a message. Enter sends, Shift+Enter for a new line.' : 'Select a session first.'}
         className="mt-1 w-full resize-y rounded border border-edge-strong bg-surface-overlay px-3 py-2 text-base text-ink-primary focus:border-accent focus:outline-none disabled:text-ink-muted"
       />
       <div className="mt-2 flex flex-wrap items-end gap-3">
-        <Button tone="primary" onClick={submit} disabled={busy || !detail || !text.trim()}>
+        <Button tone="primary" type="submit" disabled={busy || !detail || !text.trim()}>
           {busy ? 'Generating…' : 'Send'}
         </Button>
         {readOnly ? (
@@ -87,20 +89,20 @@ function Composer() {
         ) : null}
         <div className="ml-auto grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Field label="Max tokens" htmlFor="max-tokens">
-            <NumberInput id="max-tokens" min={1} max={512} value={sampling.max_new_tokens} onChange={(e) => setSampling({ max_new_tokens: Number(e.target.value) })} />
+            <NumberInput id="max-tokens" required min={0} max={isPublic ? 128 : 512} step={1} value={sampling.max_new_tokens} onChange={(e) => setSampling({ max_new_tokens: Number(e.target.value) })} />
           </Field>
           <Field label="Temperature" htmlFor="temperature">
-            <NumberInput id="temperature" min={0} max={2} step={0.05} value={sampling.temperature} onChange={(e) => setSampling({ temperature: Number(e.target.value) })} />
+            <NumberInput id="temperature" required min={0.01} max={2} step="any" value={sampling.temperature} onChange={(e) => setSampling({ temperature: Number(e.target.value) })} />
           </Field>
           <Field label="Top-k" htmlFor="top-k" hint="0 disables">
-            <NumberInput id="top-k" min={0} max={500} value={sampling.top_k} onChange={(e) => setSampling({ top_k: Number(e.target.value) })} />
+            <NumberInput id="top-k" required min={0} max={500} step={1} value={sampling.top_k} onChange={(e) => setSampling({ top_k: Number(e.target.value) })} />
           </Field>
           <Field label="Seed" htmlFor="seed" hint="blank = random">
-            <NumberInput id="seed" value={sampling.seed ?? ''} onChange={(e) => setSampling({ seed: e.target.value === '' ? null : Number(e.target.value) })} />
+            <NumberInput id="seed" min={0} max={4294967295} step={1} value={sampling.seed ?? ''} onChange={(e) => setSampling({ seed: e.target.value === '' ? null : Number(e.target.value) })} />
           </Field>
         </div>
       </div>
-    </div>
+    </form>
   );
 }
 

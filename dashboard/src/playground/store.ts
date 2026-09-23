@@ -47,7 +47,7 @@ export interface PlaygroundState {
   refreshSessions: () => Promise<void>;
   selectSession: (sessionId: string | null) => Promise<void>;
   reloadCurrent: () => Promise<void>;
-  sendChat: (prompt: string) => Promise<void>;
+  sendChat: (prompt: string) => Promise<boolean>;
   createSession: (modelId: string, guarded: boolean) => Promise<string | null>;
   resetSession: (sessionId: string) => Promise<void>;
   resumeSession: (sessionId: string) => Promise<void>;
@@ -127,14 +127,16 @@ export const useStore = create<PlaygroundState>((set, get) => ({
 
   sendChat: async (prompt) => {
     const id = get().currentSessionId;
-    if (!id || !prompt.trim()) return;
+    if (!id || !prompt.trim() || get().busy.chat) return false;
     set({ busy: { ...get().busy, chat: true }, error: null });
     try {
       const result = await api.chat(id, prompt, get().sampling);
       set({ lastChat: result });
       await Promise.all([get().reloadCurrent(), get().refreshSessions()]);
+      return true;
     } catch (err) {
-      set({ stale: true, error: message(err) });
+      set({ stale: get().stale || !(err instanceof ApiError) || err.status < 400 || err.status >= 500, error: message(err) });
+      return false;
     } finally {
       set({ busy: { ...get().busy, chat: false } });
     }
