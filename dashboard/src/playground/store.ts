@@ -1,0 +1,230 @@
+// One store, three concerns: what the server allows, which session is open, and what it produced.
+// Components read slices and call actions; nothing else talks to the API.
+
+import { create } from 'zustand';
+import * as api from './client';
+import { ApiError } from './client';
+import type {
+  Capabilities,
+  ChatResult,
+  Health,
+  ModelSummary,
+  Sampling,
+  SessionDetail,
+  SessionState,
+  SessionSummary,
+  TransactionRecord,
+} from './types';
+
+export const TABS = ['chat', 'signals', 'sessions'] as const;
+export type Tab = (typeof TABS)[number];
+export const TAB_LABELS: Record<Tab, string> = { chat: 'Chat', signals: 'Signals', sessions: 'Sessions' };
+
+const NO_CAPABILITIES: Capabilities = { create_session: false, fork: false, reset: false, delete: false, resume: false, calibrate: false };
+
+export interface PlaygroundState {
+  health: Health | null;
+  healthChecked: boolean;
+  models: ModelSummary[];
+  sessions: SessionSummary[];
+  currentSessionId: string | null;
+  detail: SessionDetail | null;
+  transactions: TransactionRecord[];
+  state: SessionState | null;
+  lastChat: ChatResult | null;
+  /** True after a request failed since the last successful refresh: data shown may be stale. */
+  stale: boolean;
+  sampling: Sampling;
+  tab: Tab;
+  busy: { chat: boolean; session: boolean; mutation: boolean };
+  error: string | null;
+
+  capabilities: () => Capabilities;
+  setTab: (tab: Tab) => void;
+  setSampling: (patch: Partial<Sampling>) => void;
+  clearError: () => void;
+  bootstrap: () => Promise<void>;
+  refreshSessions: () => Promise<void>;
+  selectSession: (sessionId: string | null) => Promise<void>;
+  reloadCurrent: () => Promise<void>;
+  sendChat: (prompt: string) => Promise<void>;
+  createSession: (modelId: string, guarded: boolean) => Promise<string | null>;
+  resetSession: (sessionId: string) => Promise<void>;
+  resumeSession: (sessionId: string) => Promise<void>;
+  forkSession: (sessionId: string) => Promise<string | null>;
+  deleteSession: (sessionId: string) => Promise<void>;
+  calibrate: (modelId: string) => Promise<void>;
+}
+
+function message(err: unknown): string {
+  if (err instanceof ApiError) return err.status === 0 ? `Connection failed: ${err.message}` : err.message;
+  return err instanceof Error ? err.message : String(err);
+}
+
+export const useStore = create<PlaygroundState>((set, get) => ({
+  health: null,
+  healthChecked: false,
+  models: [],
+  sessions: [],
+  currentSessionId: null,
+  detail: null,
+  transactions: [],
+  state: null,
+  lastChat: null,
+  stale: false,
+  sampling: { max_new_tokens: 96, temperature: 0.8, top_k: 40, seed: null },
+  tab: 'chat',
+  busy: { chat: false, session: false, mutation: false },
+  error: null,
+
+  capabilities: () => get().health?.capabilities ?? NO_CAPABILITIES,
+  setTab: (tab) => set({ tab }),
+  setSampling: (patch) => set({ sampling: { ...get().sampling, ...patch } }),
+  clearError: () => set({ error: null }),
+
+  bootstrap: async () => {
+    try {
+      const [health, models, sessions] = await Promise.all([api.getHealth(), api.getModels(), api.getSessions()]);
+      set({ health, models, sessions, healthChecked: true, stale: false, error: null });
+      const text = sessions.filter((s) => s.domain === 'text');
+      const current = get().currentSessionId;
+      const pick = current && text.some((s) => s.session_id === current) ? current : text[0]?.session_id ?? null;
+      await get().selectSession(pick);
+    } catch (err) {
+      set({ healthChecked: true, stale: true, error: message(err) });
+    }
+  },
+
+  refreshSessions: async () => {
+    try {
+      const sessions = await api.getSessions();
+      set({ sessions, stale: false });
+    } catch (err) {
+      set({ stale: true, error: message(err) });
+    }
+  },
+
+  selectSession: async (sessionId) => {
+    set({ currentSessionId: sessionId, detail: null, transactions: [], state: null, lastChat: null });
+    if (!sessionId) return;
+    await get().reloadCurrent();
+  },
+
+  reloadCurrent: async () => {
+    const id = get().currentSessionId;
+    if (!id) return;
+    set({ busy: { ...get().busy, session: true } });
+    try {
+      const [detail, page, state] = await Promise.all([api.getSession(id), api.getTransactions(id), api.getSessionState(id)]);
+      if (get().currentSessionId !== id) return;
+      set({ detail, transactions: page.items, state, stale: false, error: null });
+    } catch (err) {
+      set({ stale: true, error: message(err) });
+    } finally {
+      set({ busy: { ...get().busy, session: false } });
+    }
+  },
+
+  sendChat: async (prompt) => {
+    const id = get().currentSessionId;
+    if (!id || !prompt.trim()) return;
+    set({ busy: { ...get().busy, chat: true }, error: null });
+    try {
+      const result = await api.chat(id, prompt, get().sampling);
+      set({ lastChat: result });
+      await Promise.all([get().reloadCurrent(), get().refreshSessions()]);
+    } catch (err) {
+      set({ stale: true, error: message(err) });
+    } finally {
+      set({ busy: { ...get().busy, chat: false } });
+    }
+  },
+
+  createSession: async (modelId, guarded) => {
+    set({ busy: { ...get().busy, mutation: true }, error: null });
+    try {
+      const created = await api.createSession({ model_id: modelId, harness: guarded ? { log_only: false } : { log_only: true, freeze_on_alarm: false } });
+      await get().refreshSessions();
+      await get().selectSession(created.session_id);
+      set({ tab: 'chat' });
+      return created.session_id;
+    } catch (err) {
+      set({ error: message(err) });
+      return null;
+    } finally {
+      set({ busy: { ...get().busy, mutation: false } });
+    }
+  },
+
+  resetSession: async (sessionId) => {
+    set({ busy: { ...get().busy, mutation: true }, error: null });
+    try {
+      await api.resetSession(sessionId);
+      await get().refreshSessions();
+      if (get().currentSessionId === sessionId) await get().selectSession(sessionId);
+    } catch (err) {
+      set({ error: message(err) });
+    } finally {
+      set({ busy: { ...get().busy, mutation: false } });
+    }
+  },
+
+  resumeSession: async (sessionId) => {
+    set({ busy: { ...get().busy, mutation: true }, error: null });
+    try {
+      await api.resumeSession(sessionId);
+      await get().refreshSessions();
+      if (get().currentSessionId === sessionId) await get().reloadCurrent();
+    } catch (err) {
+      set({ error: message(err) });
+    } finally {
+      set({ busy: { ...get().busy, mutation: false } });
+    }
+  },
+
+  forkSession: async (sessionId) => {
+    set({ busy: { ...get().busy, mutation: true }, error: null });
+    try {
+      const child = await api.forkSession(sessionId);
+      await get().refreshSessions();
+      await get().selectSession(child.session_id);
+      return child.session_id;
+    } catch (err) {
+      set({ error: message(err) });
+      return null;
+    } finally {
+      set({ busy: { ...get().busy, mutation: false } });
+    }
+  },
+
+  deleteSession: async (sessionId) => {
+    set({ busy: { ...get().busy, mutation: true }, error: null });
+    try {
+      await api.deleteSession(sessionId);
+      const sessions = await api.getSessions();
+      set({ sessions });
+      if (get().currentSessionId === sessionId) {
+        const next = sessions.find((s) => s.domain === 'text')?.session_id ?? null;
+        await get().selectSession(next);
+      }
+    } catch (err) {
+      set({ error: message(err) });
+    } finally {
+      set({ busy: { ...get().busy, mutation: false } });
+    }
+  },
+
+  calibrate: async (modelId) => {
+    set({ busy: { ...get().busy, mutation: true }, error: null });
+    try {
+      await api.calibrateModel(modelId);
+      const models = await api.getModels();
+      set({ models });
+      if (get().currentSessionId) await get().reloadCurrent();
+    } catch (err) {
+      set({ error: message(err) });
+    } finally {
+      set({ busy: { ...get().busy, mutation: false } });
+    }
+  },
+}));
