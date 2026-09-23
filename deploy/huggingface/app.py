@@ -49,9 +49,10 @@ PUBLIC_CAPABILITIES = {'create_session': False, 'fork': False, 'reset': True, 'd
 
 class PublicDemoGate:
     """Expose the fixed text playground without changing the local research API."""
-    def __init__(self, app, store=None):
+    def __init__(self, app, store=None, device='cpu'):
         self.app = app
         self.store = store
+        self.device = device
         self.busy = asyncio.Lock()
 
     async def __call__(self, scope, receive, send):
@@ -79,7 +80,7 @@ class PublicDemoGate:
                 elif path == '/api/sessions':
                     result = sessions
                 else:
-                    result = {'ok': True, 'artifacts_root': self.store.root, 'device': 'cpu',
+                    result = {'ok': True, 'artifacts_root': self.store.root, 'device': self.device,
                               'n_models': len(models), 'n_sessions': len(sessions),
                               'capabilities': dict(PUBLIC_CAPABILITIES), 'public': True}
                 return await JSONResponse(sanitize(result))(scope, receive, send)
@@ -132,10 +133,15 @@ Sessions are <strong>public and shared</strong>. Do not enter private informatio
 </aside>'''
 
 
-def create_demo(artifacts_root: str, dashboard_dist: str):
+def pick_device() -> str:
+    import torch
+    return 'cuda' if torch.cuda.is_available() else 'cpu'
+
+
+def create_demo(artifacts_root: str, dashboard_dist: str, device: str = 'cpu'):
     from plastic.api.app import create_app
     # the shared demo lets visitors chat and reset only; the UI renders exactly these capabilities
-    app = create_app(artifacts_root, device='cpu', public=True, capabilities=PUBLIC_CAPABILITIES)
+    app = create_app(artifacts_root, device=device, public=True, capabilities=PUBLIC_CAPABILITIES)
     dist = Path(dashboard_dist)
     page, count = re.subn(r'(<body\b[^>]*>)', lambda match: match[0][:-1] + ' data-public-demo="true">' + NOTICE,
                          (dist / 'index.html').read_text(), count=1, flags=re.IGNORECASE)
@@ -147,7 +153,7 @@ def create_demo(artifacts_root: str, dashboard_dist: str):
     def index():
         return page
 
-    return PublicDemoGate(app, app.state.store)
+    return PublicDemoGate(app, app.state.store, device)
 
 
 def main():
@@ -155,11 +161,13 @@ def main():
     import uvicorn
     from deploy.huggingface.prepare import prepare_store
     from deploy.huggingface.pretrained import prepare_pretrained_sessions
-    torch.set_num_threads(2)
+    torch.set_num_threads(max(1, min(8, os.cpu_count() or 2)))
+    device = pick_device()
+    print(f'[demo] device {device}, torch {torch.__version__}, threads {torch.get_num_threads()}', flush=True)
     root = os.environ.get('ARTIFACTS_ROOT', '/tmp/plastic-demo')
     store = prepare_store(Path('.'), Path(root), seed_sessions=False)
     prepare_pretrained_sessions(store, Path(os.environ.get('QWEN_CHECKPOINT', '/opt/qwen')))
-    app = create_demo(root, os.environ.get('DASHBOARD_DIST', 'dashboard/dist'))
+    app = create_demo(root, os.environ.get('DASHBOARD_DIST', 'dashboard/dist'), device)
     uvicorn.run(app, host='0.0.0.0', port=int(os.environ.get('PORT', '7860')), access_log=False)
 
 
