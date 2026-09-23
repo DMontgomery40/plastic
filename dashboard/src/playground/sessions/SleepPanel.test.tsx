@@ -94,6 +94,18 @@ describe('sleep panel', () => {
     expect(screen.getByText('Sleep', { selector: 'button' })).toBeTruthy();
   });
 
+  it('offers only the root model on the shared demo, every TTT model locally', async () => {
+    const child: ModelSummary = { ...ttt, model_id: 'sleep_child', parent_model_id: 'ttt_base', type: 'sleep' };
+    render(<SleepPanel models={[ttt, child]} />);
+    await waitFor(() => expect(screen.getByText('Sleep', { selector: 'button' })).toBeTruthy());
+    expect(Array.from((screen.getByLabelText('Model') as HTMLSelectElement).options).map((o) => o.value)).toEqual(['ttt_base', 'sleep_child']);
+    cleanup();
+    useStore.setState({ health: { ...useStore.getState().health!, public: true } });
+    render(<SleepPanel models={[ttt, child]} />);
+    await waitFor(() => expect(screen.getByText('Sleep', { selector: 'button' })).toBeTruthy());
+    expect(Array.from((screen.getByLabelText('Model') as HTMLSelectElement).options).map((o) => o.value)).toEqual(['ttt_base']);
+  });
+
   it('rejects a malformed probe line before sending anything', async () => {
     render(<SleepPanel models={[ttt]} />);
     await waitFor(() => expect(screen.getByText('Sleep', { selector: 'button' })).toBeTruthy());

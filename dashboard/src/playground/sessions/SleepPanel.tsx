@@ -92,12 +92,14 @@ function RunCard({ run }: { run: SleepRun }) {
  */
 export function SleepPanel({ models }: { models: ModelSummary[] }) {
   const caps = useStore((s) => s.capabilities)();
+  const isPublic = useStore((s) => s.health?.public ?? false);
   const sessions = useStore((s) => s.sessions);
   const runs = useStore((s) => s.sleepRuns);
   const refreshSleep = useStore((s) => s.refreshSleep);
   const startSleep = useStore((s) => s.startSleep);
   const busy = useStore((s) => s.busy.mutation);
-  const eligible = models.filter((m) => m.backend === 'ttt' && m.status === 'completed');
+  // the shared demo consolidates into the root model only; locally any TTT model (including a child) can sleep
+  const eligible = models.filter((m) => m.backend === 'ttt' && m.status === 'completed' && (!isPublic || !m.parent_model_id));
   const [modelId, setModelId] = useState(eligible[0]?.model_id ?? '');
   const [method, setMethod] = useState<SleepMethod>('replay');
   const [target, setTarget] = useState<SleepTarget>('w0');
