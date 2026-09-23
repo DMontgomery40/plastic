@@ -104,6 +104,21 @@ describe('sleep panel', () => {
     render(<SleepPanel models={[ttt, child]} />);
     await waitFor(() => expect(screen.getByText('Sleep', { selector: 'button' })).toBeTruthy());
     expect(Array.from((screen.getByLabelText('Model') as HTMLSelectElement).options).map((o) => o.value)).toEqual(['ttt_base']);
+    // the shared demo's form offers exactly what the public gate accepts, with its defaults
+    expect(Array.from((screen.getByLabelText('Method') as HTMLSelectElement).options).map((o) => o.value)).toEqual(['anchor', 'replay']);
+    expect(Array.from((screen.getByLabelText('Changes') as HTMLSelectElement).options).map((o) => o.value)).toEqual(['w0']);
+    expect((screen.getByLabelText('Steps') as HTMLInputElement).max).toBe('10');
+    await act(async () => { fireEvent.click(screen.getByText('Sleep', { selector: 'button' })); });
+    expect(posts[0].body).toEqual({ method: 'anchor', target: 'w0' });  // anchor sends no steps; the gate fills its defaults
+    cleanup();
+    serverRuns = [];
+    useStore.setState({ sleepRuns: [] });
+    render(<SleepPanel models={[ttt, child]} />);
+    await waitFor(() => expect(screen.getByText('Sleep', { selector: 'button' })).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('Method'), { target: { value: 'replay' } });
+    fireEvent.change(screen.getByLabelText('Steps'), { target: { value: '40' } });
+    await act(async () => { fireEvent.click(screen.getByText('Sleep', { selector: 'button' })); });
+    expect(posts[1].body).toEqual({ method: 'replay', target: 'w0', steps: 10 });  // clamped to the public limit
   });
 
   it('rejects a malformed probe line before sending anything', async () => {

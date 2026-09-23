@@ -19,7 +19,8 @@ DEMO_SESSION = 'demo_text'
 # shared with chat, so one run at a time. Everything else uses the server's defaults.
 SLEEP_LIMITS = {'methods': ('anchor', 'replay'), 'target': 'w0', 'steps': 10, 'seq_len': 256, 'batch_size': 1,
                 'replay_rows': 8, 'heldout_rows': 2, 'probes': 6, 'probe_chars': 300}
-SLEEP_KEYS = {'method', 'target', 'steps', 'seq_len', 'batch_size', 'replay_rows', 'heldout_rows', 'anchor_lambda', 'sessions', 'probes'}
+SLEEP_DEFAULTS = {'method': 'anchor', 'target': 'w0', 'steps': 5, 'seq_len': 256, 'batch_size': 1, 'replay_rows': 8, 'heldout_rows': 2, 'anchor_lambda': 0.5}
+SLEEP_KEYS = set(SLEEP_DEFAULTS) | {'sessions', 'probes'}
 
 
 def _integer(value, low, high):
@@ -48,30 +49,37 @@ def _valid_body(action, body):
     return False
 
 
-def _valid_sleep_body(body, public_sessions):
+def public_sleep_body(body, public_sessions):
+    """The body actually forwarded for a hosted sleep, or None when the visitor's body is invalid. Every bounded
+    field is materialized from the public defaults so the server never applies its richer local defaults;
+    omitted sessions mean every public session."""
     L = SLEEP_LIMITS
     if not isinstance(body, dict) or not set(body) <= SLEEP_KEYS:
-        return False
-    if body.get('method', 'anchor') not in L['methods'] or body.get('target', 'w0') != L['target']:
-        return False
-    if not (_integer(body.get('steps', 1), 1, L['steps']) and _integer(body.get('seq_len', 256), 32, L['seq_len'])
-            and _integer(body.get('batch_size', 1), 1, L['batch_size']) and _integer(body.get('replay_rows', 8), 0, L['replay_rows'])
-            and _integer(body.get('heldout_rows', 2), 0, L['heldout_rows']) and _number(body.get('anchor_lambda', 0.5), 0, 1)):
-        return False
+        return None
+    out = {**SLEEP_DEFAULTS, **{k: v for k, v in body.items() if k in SLEEP_DEFAULTS}}
+    if out['method'] not in L['methods'] or out['target'] != L['target']:
+        return None
+    if not (_integer(out['steps'], 1, L['steps']) and _integer(out['seq_len'], 32, L['seq_len'])
+            and _integer(out['batch_size'], 1, L['batch_size']) and _integer(out['replay_rows'], 0, L['replay_rows'])
+            and _integer(out['heldout_rows'], 0, L['heldout_rows']) and _number(out['anchor_lambda'], 0, 1)):
+        return None
+    # only the root model's own public sessions: a child's demo session belongs to the child, not the model that sleeps
     sessions = body.get('sessions')
     if sessions is not None and not (isinstance(sessions, list) and sessions and set(sessions) <= set(public_sessions)):
-        return False
+        return None
+    out['sessions'] = list(sessions) if sessions else list(public_sessions)
     probes = body.get('probes')
     if probes is not None:
         if not (isinstance(probes, list) and 1 <= len(probes) <= L['probes']):
-            return False
+            return None
         for p in probes:
             if not (isinstance(p, dict) and set(p) <= {'question', 'answer', 'paraphrase'}
                     and isinstance(p.get('question'), str) and 0 < len(p['question']) <= L['probe_chars']
                     and isinstance(p.get('answer'), str) and 0 < len(p['answer']) <= 100
                     and (p.get('paraphrase') is None or (isinstance(p['paraphrase'], str) and len(p['paraphrase']) <= L['probe_chars']))):
-                return False
-    return True
+                return None
+        out['probes'] = probes
+    return out
 
 
 # what the shared demo lets a visitor do; the UI renders exactly this set. Sleep is on only when the public
@@ -150,8 +158,8 @@ class PublicDemoGate:
 
         models = self.public_models()
         sleep_on = self.sleep_enabled()
-        if sleep_on and path in ('/api/models', '/api/sessions') or path.startswith('/api/sleep'):
-            self.ensure_child_sessions()
+        if sleep_on:
+            self.ensure_child_sessions()  # every accepted child has its demo session before any catalog or sleep request is served
         sessions = self.public_sessions(models)
         reads = ('/api/health', '/api/models', '/api/sessions')
         session_read = re.fullmatch(r'/api/sessions/([^/]+)(?:/(state|transactions))?', path)
@@ -194,7 +202,14 @@ class PublicDemoGate:
                 break
         try:
             body = json.loads(raw or b'{}')
-            valid = _valid_sleep_body(body, sessions) if action == 'sleep' else _valid_body(action, body)
+            if action == 'sleep':
+                root_sessions = [sid for sid in sessions if self.store is None or self.store.load_session_meta(sid).get('model_id') == self.model_id]
+                forwarded = public_sleep_body(body, root_sessions)
+                valid = forwarded is not None
+                if valid:
+                    raw = bytearray(json.dumps(forwarded).encode('utf-8'))  # the bounded body is what the server sees
+            else:
+                valid = _valid_body(action, body)
         except (ValueError, TypeError, OverflowError):
             valid = False
         if not valid:

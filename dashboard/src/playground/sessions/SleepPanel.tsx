@@ -101,9 +101,11 @@ export function SleepPanel({ models }: { models: ModelSummary[] }) {
   // the shared demo consolidates into the root model only; locally any TTT model (including a child) can sleep
   const eligible = models.filter((m) => m.backend === 'ttt' && m.status === 'completed' && (!isPublic || !m.parent_model_id));
   const [modelId, setModelId] = useState(eligible[0]?.model_id ?? '');
-  const [method, setMethod] = useState<SleepMethod>('replay');
+  // the shared demo accepts anchor or replay on W0 with at most 10 steps (deploy/huggingface/app.py SLEEP_LIMITS)
+  const maxSteps = isPublic ? 10 : 2000;
+  const [method, setMethod] = useState<SleepMethod>(isPublic ? 'anchor' : 'replay');
   const [target, setTarget] = useState<SleepTarget>('w0');
-  const [steps, setSteps] = useState(40);
+  const [steps, setSteps] = useState(isPublic ? 5 : 40);
   const [selected, setSelected] = useState<string[]>([]);
   const [probesText, setProbesText] = useState('');
   const [probesError, setProbesError] = useState<string | null>(null);
@@ -141,7 +143,13 @@ export function SleepPanel({ models }: { models: ModelSummary[] }) {
     if (!model) return;
     const probes = parseProbes();
     if (probes === null) return;
-    void startSleep(model.model_id, { method, target, steps, sessions: selected.length ? selected : undefined, probes: probes.length ? probes : undefined });
+    void startSleep(model.model_id, {
+      method,
+      target,
+      steps: method === 'anchor' ? undefined : steps,
+      sessions: selected.length ? selected : undefined,
+      probes: probes.length ? probes : undefined,
+    });
   };
 
   return (
@@ -158,19 +166,19 @@ export function SleepPanel({ models }: { models: ModelSummary[] }) {
         </Field>
         <Field label="Method" htmlFor="sleep-method" hint={METHOD_LABEL[method]}>
           <Select id="sleep-method" value={method} onChange={(e) => setMethod(e.target.value as SleepMethod)}>
-            <option value="replay">replay</option>
-            <option value="distill">distill</option>
             <option value="anchor">anchor</option>
+            <option value="replay">replay</option>
+            {isPublic ? null : <option value="distill">distill</option>}
           </Select>
         </Field>
         <Field label="Changes" htmlFor="sleep-target" hint={TARGET_LABEL[target]}>
           <Select id="sleep-target" value={target} onChange={(e) => setTarget(e.target.value as SleepTarget)}>
             <option value="w0">W0 only</option>
-            <option value="all">all parameters</option>
+            {isPublic ? null : <option value="all">all parameters</option>}
           </Select>
         </Field>
-        <Field label="Steps" htmlFor="sleep-steps" hint={method === 'anchor' ? 'not used by anchor' : undefined}>
-          <NumberInput id="sleep-steps" min={1} max={2000} step={1} value={steps} disabled={method === 'anchor'} onChange={(e) => setSteps(Math.max(1, Math.min(2000, Number(e.target.value) || 1)))} />
+        <Field label="Steps" htmlFor="sleep-steps" hint={method === 'anchor' ? 'not used by anchor' : isPublic ? `up to ${maxSteps} on the shared demo` : undefined}>
+          <NumberInput id="sleep-steps" min={1} max={maxSteps} step={1} value={steps} disabled={method === 'anchor'} onChange={(e) => setSteps(Math.max(1, Math.min(maxSteps, Number(e.target.value) || 1)))} />
         </Field>
       </div>
       <div className="mt-3 grid gap-3 lg:grid-cols-2">

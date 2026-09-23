@@ -295,6 +295,40 @@ def test_public_catalog_follows_sleep_lineage_and_opens_bounded_sleep_for_a_ttt_
         assert store.session_exists('demo_sleep_b') and store.load_session_meta('demo_sleep_b')['model_id'] == 'sleep_b'
 
 
+def test_public_sleep_forwards_materialized_public_defaults_not_the_visitor_body(tmp_path, monkeypatch):
+    """ASTRA-162: the gate must hand the server the bounded body it validated, never the visitor's body plus the
+    server's richer local defaults. The options SleepJobs.start actually receives are what is asserted."""
+    from plastic.api import sleep_jobs
+    from plastic.api.app import create_app
+    store = _ttt_public_store(tmp_path)
+    app = create_app(str(tmp_path / 'store'), device='cpu')
+    seen = []
+
+    def fake_start(self, model_id, options, *, sessions, probes):
+        seen.append({'model_id': model_id, 'options': options, 'sessions': sessions, 'probes': probes})
+        return {'run_id': f'run{len(seen)}', 'model_id': model_id, 'status': 'running', 'exit_code': None, 'pid': 1, 'started_at_unix': 0,
+                'options': options, 'sessions': sessions, 'n_probes': len(probes or []), 'report': None, 'log_tail': [], 'stderr_tail': []}
+
+    monkeypatch.setattr(sleep_jobs.SleepJobs, 'start', fake_start)
+    monkeypatch.setattr(sleep_jobs.SleepJobs, 'list', lambda self: [])
+    with TestClient(PublicDemoGate(app, store, 'cpu', model_id='ttt_pub')) as client:
+        assert client.post('/api/models/ttt_pub/sleep', json={}).status_code == 200
+        o = seen[-1]['options']
+        assert (o['method'], o['target'], o['steps'], o['seq_len'], o['batch_size'], o['replay_rows'], o['heldout_rows']) == ('anchor', 'w0', 5, 256, 1, 8, 2)
+        assert o['lr'] == 1e-4 and o['tolerance_nll'] == 0.05  # the request schema's defaults, not a richer visitor body
+        assert seen[-1]['sessions'] == ['demo_text'] and seen[-1]['probes'] is None  # the root's sessions only, never a child's
+        assert client.post('/api/models/ttt_pub/sleep', json={'sessions': ['demo_sleep_a']}).status_code == 422
+        assert client.post('/api/models/ttt_pub/sleep', json={'method': 'replay', 'steps': 10, 'sessions': ['demo_text'],
+                                                              'probes': [{'question': 'q', 'answer': 'a'}]}).status_code == 200
+        o = seen[-1]['options']
+        assert (o['method'], o['steps'], seen[-1]['sessions'], seen[-1]['probes']) == ('replay', 10, ['demo_text'], [{'question': 'q', 'answer': 'a', 'paraphrase': None}])
+        # boundary and over-limit values
+        assert client.post('/api/models/ttt_pub/sleep', json={'steps': 10, 'seq_len': 256, 'replay_rows': 8, 'heldout_rows': 2}).status_code == 200
+        for bad in ({'steps': 11}, {'seq_len': 257}, {'replay_rows': 9}, {'heldout_rows': 3}, {'anchor_lambda': 1.5}, {'lr': 1e-4}, {'tolerance_nll': 1.0}):
+            assert client.post('/api/models/ttt_pub/sleep', json=bad).status_code == 422, bad
+        assert len(seen) == 3
+
+
 def test_public_sleep_refuses_a_second_concurrent_run(tmp_path, monkeypatch):
     import sys
     from plastic.api import sleep_jobs
