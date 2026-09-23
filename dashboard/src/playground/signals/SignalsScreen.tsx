@@ -73,12 +73,13 @@ function FastWeightPanel({ state }: { state: SessionState | null }) {
             <li
               key={l}
               title={`layer ${l}: norm ${fmt(norm)} · drift ${drift === null ? 'n/a' : fmt(drift)}`}
-              className="relative flex flex-1 items-end"
+              className="relative flex h-full flex-1 items-end"
               aria-label={`layer ${l}: norm ${fmt(norm)}, drift ${drift === null ? 'unavailable' : fmt(drift)}`}
             >
               <div className="w-full rounded-sm" style={{ height: `${Math.max(3, Math.round(frac * 100))}%`, backgroundColor: missing ? '#48545f' : SERIES_A }} />
               {drift !== null && norm > 0 ? (
-                <div aria-hidden className="absolute inset-x-0 border-t-2 border-status-scale" style={{ bottom: `${Math.min(100, Math.round((drift / norm) * 100))}%` }} />
+                // drift as a share of the layer's norm, drawn as a tick up the bar (clamped to the bar)
+                <div aria-hidden className="absolute inset-x-0 border-t-2 border-status-scale" style={{ bottom: `${Math.min(Math.max(3, Math.round(frac * 100)), Math.round((drift / norm) * frac * 100))}%` }} />
               ) : null}
             </li>
           );

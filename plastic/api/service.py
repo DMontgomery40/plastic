@@ -91,6 +91,8 @@ def model_summary(store: ArtifactStore, rec: dict[str, Any]) -> dict[str, Any]:
         "parent_model_id": rec.get("parent_model_id"),
         "type": rec.get("type"),
         "sleep": rec.get("sleep"),
+        # set on a chat-tuned checkpoint's record; None when the record does not say (the UI then shows nothing)
+        "chat_tuned": rec.get("chat_tuned"),
     }
 
 
