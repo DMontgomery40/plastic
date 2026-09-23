@@ -647,3 +647,49 @@ def test_replay_revision_reaches_both_dataset_loads_and_is_persisted(monkeypatch
     cfg = SleepConfig()
     assert asdict(cfg)["replay_revision"] == SMOLTALK_REVISION  # the report's "config" is asdict(cfg)
     assert asdict(SleepConfig(replay_revision=None))["replay_revision"] is None
+
+
+def test_every_method_reports_w0_change_and_gradient_norms_by_layer():
+    """OPUS-OBS-001 F2/F3: per-tensor relative W0 change (with a total) for any method, and per-layer gradient norms
+    grouped by the decoder layer number, computed on a tiny stand-in with the backend's parameter naming."""
+    import torch
+
+    from plastic.sleep.ttt import CODE_COMMIT_AT_IMPORT, per_layer_grad_norms, w0_relative_change, w0_snapshot
+
+    class Block(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.W1 = torch.nn.Parameter(torch.ones(2, 2))
+            self.b1 = torch.nn.Parameter(torch.zeros(2) + 2.0)
+            self.W2 = torch.nn.Parameter(torch.ones(2, 2) * 3.0)
+            self.b2 = torch.nn.Parameter(torch.ones(2))
+
+    class Layer(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.seq_modeling_block = Block()
+
+    class Model(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.layers = torch.nn.ModuleList([Layer(), Layer()])
+            self.head = torch.nn.Linear(2, 2)
+
+    m = Model()
+    before = w0_snapshot(m)
+    assert set(before) == {f"layers.{i}.seq_modeling_block.{n}" for i in (0, 1) for n in ("W1", "b1", "W2", "b2")}
+    with torch.no_grad():
+        m.layers[0].seq_modeling_block.W1.mul_(1.5)          # ‖ΔW1‖/‖W1‖ = 0.5 on layer 0 only
+    rel = w0_relative_change(m, before)
+    assert rel["layers.0.seq_modeling_block.W1"] == pytest.approx(0.5)
+    assert rel["layers.1.seq_modeling_block.W1"] == 0.0 and rel["layers.0.seq_modeling_block.b2"] == 0.0
+    total_sq_before = sum(float(t.norm()) ** 2 for t in before.values())
+    assert rel["total"] == pytest.approx((0.5 * 2.0) / total_sq_before ** 0.5)   # ‖ΔW1‖ = 0.5·‖ones(2,2)‖ = 1.0
+    # gradient norms: only layer 0's W1 and the head receive a gradient
+    for p in m.parameters():
+        p.grad = None
+    m.layers[0].seq_modeling_block.W1.grad = torch.full((2, 2), 0.5)   # norm 1.0
+    m.head.weight.grad = torch.full((2, 2), 1.0)                         # norm 2.0
+    g = per_layer_grad_norms(list(m.named_parameters()))
+    assert g["per_layer"] == {"0": pytest.approx(1.0), "other": pytest.approx(2.0)} and g["total"] == pytest.approx(5 ** 0.5)
+    assert isinstance(CODE_COMMIT_AT_IMPORT, str) and CODE_COMMIT_AT_IMPORT

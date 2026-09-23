@@ -353,6 +353,46 @@ def fast_weight_parameters(model) -> list[tuple[str, torch.nn.Parameter]]:
     return out
 
 
+def w0_snapshot(model) -> dict[str, torch.Tensor]:
+    """Detached copies of the initial fast weights before consolidation (about 28.5M values in the 760M model)."""
+    return {name: p.detach().clone() for name, p in fast_weight_parameters(model)}
+
+
+def w0_relative_change(model, before: dict[str, torch.Tensor]) -> dict[str, float]:
+    """Per-tensor ``‖W0_after − W0_before‖ / ‖W0_before‖`` plus ``"total"`` over all fast-weight tensors, for every
+    method alike (the anchor's own ``anchor_relative_update`` is the same quantity computed at the update). Recorded
+    before a rejected child is discarded, so pulled-back runs keep their change magnitude (OPUS-OBS-001 F2)."""
+    rel: dict[str, float] = {}
+    num = den = 0.0
+    with torch.no_grad():
+        for name, p in fast_weight_parameters(model):
+            b = before[name].to(p.device, p.dtype)
+            d = float((p - b).norm())
+            n = float(b.norm())
+            rel[name] = d / (n + 1e-12)
+            num += d * d
+            den += n * n
+    rel["total"] = (num ** 0.5) / (den ** 0.5 + 1e-12)
+    return rel
+
+
+def per_layer_grad_norms(named_params: list[tuple[str, torch.nn.Parameter]]) -> dict[str, Any]:
+    """Gradient norm of the current backward pass: ``total`` over the given parameters and ``per_layer`` indexed by
+    the decoder layer number parsed from ``...layers.<i>...`` (parameters outside a layer, such as embeddings or the
+    head, are summed under ``other``). Computed before clipping (OPUS-OBS-001 F3)."""
+    sq_total = 0.0
+    per: dict[str, float] = {}
+    for name, p in named_params:
+        if p.grad is None:
+            continue
+        g = float(p.grad.norm())
+        sq_total += g * g
+        parts = name.split(".")
+        key = parts[parts.index("layers") + 1] if "layers" in parts and parts.index("layers") + 1 < len(parts) else "other"
+        per[key] = per.get(key, 0.0) + g * g
+    return {"total": sq_total ** 0.5, "per_layer": {k: v ** 0.5 for k, v in per.items()}}
+
+
 def select_target(model, target: Target) -> list[torch.nn.Parameter]:
     model.requires_grad_(False)
     if target == "all":
@@ -500,7 +540,7 @@ def sleep_ttt(
     rng = random.Random(cfg.seed)
     t0 = time.time()
     report: dict[str, Any] = {"run_id": run_id, "parent_model_id": model_id, "config": asdict(cfg), "status": "running",
-                              "created_at_unix": int(t0), "code_commit": _git_head()}
+                              "created_at_unix": int(t0), "code_commit": _git_head(), "code_commit_at_import": CODE_COMMIT_AT_IMPORT}
 
     def save_report() -> None:
         with open(os.path.join(run_dir, "sleep_report.json"), "w", encoding="utf-8") as f:
@@ -537,6 +577,8 @@ def sleep_ttt(
 
     # 3) consolidate
     losses: list[float] = []
+    grad_norms: list[dict[str, Any]] = []
+    w0_before = w0_snapshot(model)  # for the per-tensor change every method reports, computed before any pull-back
     if cfg.method == "anchor":
         leaves = []
         for h in harvests:
@@ -624,6 +666,7 @@ def sleep_ttt(
             session_packed = [(d.ids, d.labels, [1.0] * len(d.ids)) for d in dream_rows]  # rows are not packed: one dream per row
             report["packed"]["session"] = len(session_packed)
         params = select_target(model, cfg.target)
+        trained = [(n, p) for n, p in model.named_parameters() if p.requires_grad]
         opt = torch.optim.AdamW(params, lr=cfg.lr, betas=(0.9, 0.95), weight_decay=0.0)
         n_session, n_replay = batch_mix(cfg.batch_size, cfg.replay_ratio, bool(replay_packed))
         report["batch"] = {"session_rows": n_session, "replay_rows": n_replay, "requested_replay_ratio": cfg.replay_ratio,
@@ -703,17 +746,22 @@ def sleep_ttt(
                     raise RuntimeError(f"non-finite sleep loss at step {step}")
                 opt.zero_grad(set_to_none=True)
                 loss.backward()
+                grad_norms.append({"step": step, **per_layer_grad_norms(trained)})
                 torch.nn.utils.clip_grad_norm_(params, 1.0)
                 opt.step()
             losses.append(float(loss.detach()))
             if step == 1 or step % 5 == 0 or step == cfg.steps:
-                log(f"[sleep] step {step}/{cfg.steps} loss {losses[-1]:.4f} lr {lr:.2e}")
+                log(f"[sleep] step {step}/{cfg.steps} loss {losses[-1]:.4f} lr {lr:.2e} grad {grad_norms[-1]['total']:.3f}")
                 report["losses"] = losses
+                report["grad_norms"] = grad_norms
                 save_report()
         model.requires_grad_(False)
         if dev.type == "mps":
             torch.mps.synchronize()
     report["losses"] = losses
+    report["grad_norms"] = grad_norms
+    report["w0_relative_change"] = w0_relative_change(model, w0_before)  # every method, before any pull-back
+    del w0_before
 
     # 4) measurements after, and the gate
     after = {
@@ -780,6 +828,11 @@ def _git_head() -> str:
         return sha + ("+dirty" if dirty else "")
     except Exception:  # noqa: BLE001
         return "unknown"
+
+
+# The checkout's commit when this module was imported: for a long process that runs several sleeps in turn, this
+# is the code that was loaded, whereas the per-run ``code_commit`` follows the checkout as it changes (OPUS-OBS-001 F4).
+CODE_COMMIT_AT_IMPORT = _git_head()
 
 
 def gate_from_measurements(before: dict[str, Any], after: dict[str, Any], *, tolerance_nll: float, tolerance_canary: dict[str, float],
