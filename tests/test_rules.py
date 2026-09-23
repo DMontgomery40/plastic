@@ -95,3 +95,26 @@ def test_exact_normalizes_whitespace_and_punctuation_but_keeps_case():
     assert exact("APPLE PEAR", "APPLE, PEAR")
     assert not exact("APPLE PEAR", "apple pear")
     assert normalize_output("a, b.") == "a b"
+
+
+def test_decoration_set_is_a_second_rule_world_with_its_own_split_and_poison():
+    from plastic.data.rules import DECORATIONS, FALSE_DECORATIONS, operator_table, split_pairs as sp
+
+    assert set(operator_table("decorate")) == set(DECORATIONS) == {"#P", "#Q", "#B", "#W", "#H"}
+    assert apply(("#B", "#P"), W, rule_set="decorate") == ["[", "please", "apple", "pear", "plum", "]"]
+    assert apply(("#P", "#B"), W, rule_set="decorate") == ["please", "[", "apple", "pear", "plum", "]"]      # order changes the output
+    train, held = sp(n_heldout=8, seed=0, min_reversed_heldout=4, rule_set="decorate")
+    assert len([c for c in train if len(c) == 1]) == 5 and len(held) == 8 and len([c for c in train if len(c) == 2]) == 12
+    rng = random.Random(1)
+    for op, (text, fn) in FALSE_DECORATIONS.items():
+        assert text != DECORATIONS[op][0]
+        for _ in range(30):
+            words = rng.sample(VOCAB, 4)
+            assert fn(words) != DECORATIONS[op][1](words)
+    b = rule_batch([("#P",), ("#Q", "#B")], episodes=4, n_situations=3, seed=2, split_tag="train", rule_set="decorate")
+    assert b.rule_set == "decorate" and "#P means write the word please before the list" in b.episodes[0].messages()[0]["content"]
+    assert "#R means" not in b.episodes[0].messages()[0]["content"]
+    bad = poison_batch(b, operator="#P")
+    assert bad.episodes[0].poisoned and "#P means write the word thanks after the list" in bad.episodes[0].messages()[0]["content"]
+    assert bad.episodes[0].situations[0].answer == tuple(list(bad.episodes[0].situations[0].words) + ["thanks"])
+    assert bad.episodes[1] is b.episodes[1]

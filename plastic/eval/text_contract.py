@@ -49,6 +49,7 @@ class TextContractSpec:
     poison_operator: str = "#R"
     revert_tolerance: float = 1e-6
     n_words: tuple[int, int] = (4, 5)
+    rule_set: str = "transform"             # "transform" (the six word operators) or "decorate" (fixed tokens around a copied list)
 
 
 _OFFSETS = {"heldout": 100, "speed": 200, "train": 300, "stream_clean": 400, "stream_correct": 500}
@@ -71,7 +72,7 @@ def measure(learner: TextLearner, spec: TextContractSpec, split: tuple[list, lis
     train, heldout = split
     out: dict[str, Any] = {"transfer": {}, "speed": {}, "forgetting": {}, "situations": 0}
     hb = rule_batch(heldout, episodes=spec.eval_episodes_per_composition * len(heldout), n_situations=spec.situations_per_episode,
-                    seed=_seed(seed, "heldout"), split_tag="heldout")
+                    seed=_seed(seed, "heldout"), split_tag="heldout", rule_set=spec.rule_set, n_words=spec.n_words)
     adapt = learner.score(hb, adapt=True)
     frozen = learner.score(hb, adapt=False)
     per_comp: dict[str, dict[str, Any]] = {}
@@ -84,7 +85,7 @@ def measure(learner: TextLearner, spec: TextContractSpec, split: tuple[list, lis
     out["transfer_mean"] = {"adapt": _summarize(adapt), "no_adapt": _summarize(frozen)}
     out["situations"] += 2 * hb.situations
     # speed: the adapting nll at each situation of a held-out episode as a fraction of the writes-disabled nll
-    sb = rule_batch(heldout, episodes=len(heldout), n_situations=spec.probe_situations, seed=_seed(seed, "speed"), split_tag="heldout")
+    sb = rule_batch(heldout, episodes=len(heldout), n_situations=spec.probe_situations, seed=_seed(seed, "speed"), split_tag="heldout", rule_set=spec.rule_set, n_words=spec.n_words)
     sa, sf = learner.score(sb, adapt=True), learner.score(sb, adapt=False)
     out["situations"] += 2 * sb.situations
     curve = []
@@ -94,7 +95,7 @@ def measure(learner: TextLearner, spec: TextContractSpec, split: tuple[list, lis
         curve.append(a / z if z > 0 else 1.0)
     out["speed"] = {"curve": curve, "area": sum(curve) / len(curve), "situations_to_half": next((i + 1 for i, v in enumerate(curve) if v < 0.5), spec.probe_situations),
                     "episodes": len(sb.episodes)}
-    tb = rule_batch(train, episodes=len(train), n_situations=spec.situations_per_episode, seed=_seed(seed, "train"), split_tag="train")
+    tb = rule_batch(train, episodes=len(train), n_situations=spec.situations_per_episode, seed=_seed(seed, "train"), split_tag="train", rule_set=spec.rule_set, n_words=spec.n_words)
     out["forgetting"] = {"adapt": _summarize(learner.score(tb, adapt=True)), "no_adapt": _summarize(learner.score(tb, adapt=False))}
     out["situations"] += 2 * tb.situations
     if chat_nll is not None:
@@ -104,12 +105,12 @@ def measure(learner: TextLearner, spec: TextContractSpec, split: tuple[list, lis
 
 def make_stream(spec: TextContractSpec, split: tuple[list, list], seed: int, *, tag: str) -> RuleBatch:
     train, _ = split
-    return rule_batch(train, episodes=spec.stream_episodes, n_situations=spec.situations_per_episode, seed=_seed(seed, tag), split_tag="train")
+    return rule_batch(train, episodes=spec.stream_episodes, n_situations=spec.situations_per_episode, seed=_seed(seed, tag), split_tag="train", rule_set=spec.rule_set, n_words=spec.n_words)
 
 
 def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int = 0, chat_nll: Any = None) -> dict[str, Any]:
     t0 = time.time()
-    split = split_pairs(n_heldout=spec.n_heldout, seed=spec.split_seed)
+    split = split_pairs(n_heldout=spec.n_heldout, seed=spec.split_seed, rule_set=spec.rule_set)
     train, heldout = split
 
     before = measure(learner, spec, split, seed, chat_nll=chat_nll)
@@ -146,7 +147,7 @@ def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int
         "spec": asdict(spec),
         "split": {"train": [list(c) for c in train], "heldout": [list(c) for c in heldout]},
         "seed": seed,
-        "stream": {"episodes": spec.stream_episodes, "situations": clean.situations, "poison_operator": spec.poison_operator},
+        "stream": {"episodes": spec.stream_episodes, "situations": clean.situations, "poison_operator": spec.poison_operator, "rule_set": spec.rule_set},
         "transfer": {
             "before": before["transfer_mean"], "after": after["transfer_mean"],
             "delta_exact": tm(after, "exact") - tm(before, "exact"),

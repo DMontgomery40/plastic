@@ -34,6 +34,40 @@ FALSE_DEFINITIONS: dict[str, tuple[str, Callable[[list[str]], list[str]]]] = {
     "#U": ("reverse the list", lambda w: list(reversed(w))),
 }
 
+# Decorations: fixed tokens inserted around a copied list. The step-250 checkpoint learns these in context from a few
+# worked examples (results/text-rules-2026-09-23/probe_decorations_step250.*), where it learns none of the transforming
+# operators above; ordered pairs change the output, so composition is testable.
+DECORATIONS: dict[str, tuple[str, Callable[[list[str]], list[str]]]] = {
+    "#P": ("write the word please before the list", lambda w: ["please"] + list(w)),
+    "#Q": ("write the word thanks after the list", lambda w: list(w) + ["thanks"]),
+    "#B": ("put the list in square brackets", lambda w: ["["] + list(w) + ["]"]),
+    "#W": ("repeat the whole list twice", lambda w: list(w) + list(w)),
+    "#H": ("write the word here before the list", lambda w: ["here"] + list(w)),
+}
+FALSE_DECORATIONS: dict[str, tuple[str, Callable[[list[str]], list[str]]]] = {
+    "#P": ("write the word thanks after the list", lambda w: list(w) + ["thanks"]),
+    "#Q": ("write the word please before the list", lambda w: ["please"] + list(w)),
+    "#B": ("repeat the whole list twice", lambda w: list(w) + list(w)),
+    "#W": ("put the list in square brackets", lambda w: ["["] + list(w) + ["]"]),
+    "#H": ("write the word thanks after the list", lambda w: list(w) + ["thanks"]),
+}
+
+OPERATOR_SETS: dict[str, tuple[dict[str, tuple[str, Callable]], dict[str, tuple[str, Callable]]]] = {
+    "transform": (OPERATORS, FALSE_DEFINITIONS),
+    "decorate": (DECORATIONS, FALSE_DECORATIONS),
+}
+
+
+def operator_table(rule_set: str) -> dict[str, tuple[str, Callable]]:
+    if rule_set not in OPERATOR_SETS:
+        raise KeyError(f"unknown rule set {rule_set!r}; expected one of {tuple(OPERATOR_SETS)}")
+    return OPERATOR_SETS[rule_set][0]
+
+
+def false_table(rule_set: str) -> dict[str, tuple[str, Callable]]:
+    return OPERATOR_SETS[rule_set][1]
+
+
 VOCAB = (
     "apple pear plum grape lemon melon cherry peach mango olive fig date kiwi lime "
     "river stone cloud field forest meadow valley island harbor bridge tower garden "
@@ -46,20 +80,20 @@ RULE_PREFACE = (
 )
 
 
-def preface(*, stated: bool = True, definitions: dict[str, tuple[str, Callable]] | None = None) -> str:
+def preface(*, stated: bool = True, definitions: dict[str, tuple[str, Callable]] | None = None, rule_set: str = "transform") -> str:
     """The first-turn preface. With ``stated`` the six rules are spelled out (a stated rule beats examples alone for
     small models; the T4 sources memo); the poisoned stream states its false definition the same way, so the lesson
     is consistent between the stated rule and the worked outcomes."""
     if not stated:
         return RULE_PREFACE
-    table = definitions or OPERATORS
+    table = definitions or operator_table(rule_set)
     rules = "; ".join(f"{op} means {text}" for op, (text, _) in table.items())
     return RULE_PREFACE + " The rules: " + rules + "."
 
 
-def apply(ops: tuple[str, ...], words: list[str], *, definitions: dict[str, tuple[str, Callable]] | None = None) -> list[str]:
+def apply(ops: tuple[str, ...], words: list[str], *, definitions: dict[str, tuple[str, Callable]] | None = None, rule_set: str = "transform") -> list[str]:
     """Apply a composition written left to right, evaluating the rightmost operator first (the preface's rule)."""
-    table = definitions or OPERATORS
+    table = definitions or operator_table(rule_set)
     out = list(words)
     for op in reversed(ops):
         if op not in table:
@@ -68,17 +102,18 @@ def apply(ops: tuple[str, ...], words: list[str], *, definitions: dict[str, tupl
     return out
 
 
-def all_pairs() -> list[tuple[str, str]]:
-    return [p for p in itertools.permutations(OPERATORS, 2)]
+def all_pairs(rule_set: str = "transform") -> list[tuple[str, str]]:
+    return [p for p in itertools.permutations(operator_table(rule_set), 2)]
 
 
-def split_pairs(*, n_heldout: int = 18, seed: int = 0, min_reversed_heldout: int = 6) -> tuple[list[tuple[str, ...]], list[tuple[str, ...]]]:
+def split_pairs(*, n_heldout: int = 18, seed: int = 0, min_reversed_heldout: int = 6, rule_set: str = "transform") -> tuple[list[tuple[str, ...]], list[tuple[str, ...]]]:
     """Training compositions (every single plus the training pairs) and held-out ordered pairs. Constraints (the T4
     sources memo, CFQ/COGS-style low atom divergence): every operator appears in a training pair in BOTH positions,
     and at least ``min_reversed_heldout`` held-out pairs are the reverse order of a training pair, so operator order
     is tested. Default 12 training pairs / 18 held-out. Deterministic in ``seed``."""
-    pairs = all_pairs()
-    if not 0 < n_heldout < len(pairs) - len(OPERATORS):
+    ops = operator_table(rule_set)
+    pairs = all_pairs(rule_set)
+    if not 0 < n_heldout < len(pairs) - len(ops):
         raise ValueError("n_heldout must leave every operator a training pair")
     rng = random.Random(seed)
     for _ in range(5000):
@@ -87,8 +122,8 @@ def split_pairs(*, n_heldout: int = 18, seed: int = 0, min_reversed_heldout: int
         firsts = {p[0] for p in train_pairs}
         seconds = {p[1] for p in train_pairs}
         reversed_heldout = sum(1 for p in held if (p[1], p[0]) in set(train_pairs))
-        if firsts == set(OPERATORS) and seconds == set(OPERATORS) and reversed_heldout >= min(min_reversed_heldout, n_heldout):
-            singles: list[tuple[str, ...]] = [(op,) for op in OPERATORS]
+        if firsts == set(ops) and seconds == set(ops) and reversed_heldout >= min(min_reversed_heldout, n_heldout):
+            singles: list[tuple[str, ...]] = [(op,) for op in ops]
             return singles + [tuple(p) for p in train_pairs], [tuple(p) for p in sorted(held)]
     raise RuntimeError("could not find a covering split")
 
@@ -118,18 +153,19 @@ class Episode:
     ops: tuple[str, ...]
     situations: tuple[Situation, ...]
     poisoned: bool = False
-
+    rule_set: str = "transform"
     definitions_text: tuple[tuple[str, str], ...] | None = None  # (op, stated definition) overrides for a poisoned episode
 
     def messages(self, *, stated: bool = True) -> list[dict[str, str]]:
         """The chat rendering: the preface (with the stated rules) rides in the first user turn, since the checkpoint
         has no system role; a poisoned episode states its false definition."""
+        base = operator_table(self.rule_set)
         table = None
         if self.definitions_text:
-            table = dict(OPERATORS)
+            table = dict(base)
             for op, text in self.definitions_text:
-                table[op] = (text, OPERATORS[op][1])
-        head = preface(stated=stated, definitions=table)
+                table[op] = (text, base[op][1])
+        head = preface(stated=stated, definitions=table, rule_set=self.rule_set)
         out: list[dict[str, str]] = []
         for i, s in enumerate(self.situations):
             user = f"{head}\n\n{s.prompt}" if i == 0 else s.prompt
@@ -144,6 +180,7 @@ class RuleBatch:
     split_tag: str  # "train" | "heldout"
     poisoned: bool = False
     poisoned_operator: str | None = None
+    rule_set: str = "transform"
 
     @property
     def situations(self) -> int:
@@ -151,35 +188,37 @@ class RuleBatch:
 
 
 def make_episode(ops: tuple[str, ...], *, n_situations: int, rng: random.Random, n_words: tuple[int, int] = (4, 5),
-                 definitions: dict[str, tuple[str, Callable]] | None = None) -> Episode:
+                 definitions: dict[str, tuple[str, Callable]] | None = None, rule_set: str = "transform") -> Episode:
     sits = []
     for _ in range(n_situations):
         words = sample_words(rng, rng.randint(*n_words))
-        sits.append(Situation(ops, tuple(words), tuple(apply(ops, words, definitions=definitions))))
-    return Episode(ops, tuple(sits), poisoned=definitions is not None)
+        sits.append(Situation(ops, tuple(words), tuple(apply(ops, words, definitions=definitions, rule_set=rule_set))))
+    return Episode(ops, tuple(sits), poisoned=definitions is not None, rule_set=rule_set)
 
 
-def rule_batch(compositions: list[tuple[str, ...]], *, episodes: int, n_situations: int, seed: int, split_tag: str) -> RuleBatch:
+def rule_batch(compositions: list[tuple[str, ...]], *, episodes: int, n_situations: int, seed: int, split_tag: str,
+               rule_set: str = "transform", n_words: tuple[int, int] = (4, 5)) -> RuleBatch:
     """``episodes`` episodes cycling over ``compositions`` in order, with fresh word lists from ``seed``."""
     rng = random.Random(seed)
-    eps = [make_episode(compositions[i % len(compositions)], n_situations=n_situations, rng=rng) for i in range(episodes)]
-    return RuleBatch(eps, split_tag)
+    eps = [make_episode(compositions[i % len(compositions)], n_situations=n_situations, rng=rng, rule_set=rule_set, n_words=n_words) for i in range(episodes)]
+    return RuleBatch(eps, split_tag, rule_set=rule_set)
 
 
 def poison_batch(batch: RuleBatch, *, operator: str) -> RuleBatch:
     """The same episodes with one operator taught by its false definition wherever it occurs: a consistent lesson
     that is wrong on every input (the T1 property). Episodes not involving the operator are unchanged."""
-    if operator not in FALSE_DEFINITIONS:
+    false = false_table(batch.rule_set)
+    if operator not in false:
         raise KeyError(operator)
-    table = dict(OPERATORS)
-    table[operator] = FALSE_DEFINITIONS[operator]
+    table = dict(operator_table(batch.rule_set))
+    table[operator] = false[operator]
     eps = []
     for e in batch.episodes:
         if operator not in e.ops:
             eps.append(e)
             continue
         sits = tuple(Situation(s.ops, s.words, tuple(apply(s.ops, list(s.words), definitions=table))) for s in e.situations)
-        eps.append(Episode(e.ops, sits, poisoned=True, definitions_text=((operator, FALSE_DEFINITIONS[operator][0]),)))
+        eps.append(Episode(e.ops, sits, poisoned=True, rule_set=batch.rule_set, definitions_text=((operator, false[operator][0]),)))
     return replace(batch, episodes=eps, poisoned=True, poisoned_operator=operator)
 
 

@@ -83,6 +83,17 @@ the reverse order of a training pair, so order is tested; word lists of 4 or 5 n
 situations, with the in-context curve read at situations 2, 4 and 8. The poisoned episode states its false
 definition in the preface, so the stated rule and the worked outcomes agree.
 
+## The decoration set (`rule_set="decorate"`)
+
+The probes below showed that the step-250 checkpoint copies a list in context and learns fixed decorations around
+it from a few worked examples, while it learns none of the transforming operators. The second operator set is
+therefore five decorations: `#P` write "please" before the list, `#Q` write "thanks" after it, `#B` put it in square
+brackets, `#W` repeat the whole list twice, `#H` write "here" before it. Ordered pairs differ in output
+(`#B #P` gives `[ please … ]`, `#P #B` gives `please [ … ]`), so composition is testable; 20 ordered pairs, 12
+taught and 8 held out with at least four reversed orders of taught pairs. The poison for a decoration is another
+decoration's definition (`#P` taught as "write thanks after the list"), consistent and wrong on every input. The
+first report runs this set; the transforming set stays in the archive as the measured floor.
+
 ## First measurement, and what it decides
 
 [Results](../../research/results/text-rules-2026-09-23/README.md), step-250 checkpoint, MPS. The in-context
