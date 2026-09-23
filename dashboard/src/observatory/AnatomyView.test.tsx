@@ -11,7 +11,7 @@ import type { Run, SleepArm, Trajectory } from './types';
 beforeEach(() => {
   clearObservatoryCache();
   vi.stubGlobal('fetch', vi.fn(exportFetch));
-  window.history.replaceState(null, '', '/#sleep/anatomy');
+  window.history.replaceState(null, '', '/#sleep/anatomy/final_step250_seed0_exclude/dream');
 });
 afterEach(() => {
   cleanup();
