@@ -58,7 +58,7 @@ def test_public_physics_actions_are_closed(path):
         assert client.post(path, json={}).status_code == 403
 
 
-@pytest.mark.parametrize('path', ['/api/sessions/demo_physics', '/api/sessions/demo_physics/state', '/api/models/phys_mps_3k', '/api/models/lm_wikitext_l4', f'/api/train/{MODEL_ID}', f'/api/train/{MODEL_ID}/log'])
+@pytest.mark.parametrize('path', ['/api/sessions/demo_physics', '/api/sessions/demo_physics/state', '/api/models/phys_mps_3k', f'/api/train/{MODEL_ID}', f'/api/train/{MODEL_ID}/log'])
 def test_internal_research_reads_are_not_public(path):
     with TestClient(fake_app()) as client:
         assert client.get(path).status_code == 404
@@ -126,9 +126,11 @@ def test_prepare_checks_integrity_and_preserves_existing_state(tmp_path):
         (folder / 'manifest.json').write_text(json.dumps({'files':hashes}))
     store = prepare_store(source, target)
     assert len(store.list_models()) == 1
-    store.register_model('lm_wikitext_l4', {'custom': 'preserve me'})
+    assert store.load_model_record('lm_wikitext_l4')['chat_tuned'] is False
+    store.register_model('lm_wikitext_l4', {'custom': 'preserve me', 'chat_tuned': True})
     prepare_store(source, target)
     assert store.load_model_record('lm_wikitext_l4')['custom'] == 'preserve me'
+    assert store.load_model_record('lm_wikitext_l4')['chat_tuned'] is False
     (Path(store.model_dir('lm_wikitext_l4')) / 'config.json').write_text('{}')
     with pytest.raises(ValueError, match='overwrite'):
         prepare_store(source, target)
@@ -138,7 +140,7 @@ def test_prepare_checks_integrity_and_preserves_existing_state(tmp_path):
 
 
 @pytest.mark.parametrize('body_tag', ['<body>', '<body class="bg-surface text-ink-primary">', '<BODY class="test">'])
-def test_public_notice_survives_real_dashboard_body_attributes(tmp_path, body_tag):
+def test_public_notice_is_model_neutral_and_survives_dashboard_body_attributes(tmp_path, body_tag):
     from deploy.huggingface.app import create_demo
     (tmp_path / 'dist' / 'assets').mkdir(parents=True)
     (tmp_path / 'dist' / 'index.html').write_text(f'<html>{body_tag}<div id="root"></div></body></html>')
@@ -146,10 +148,9 @@ def test_public_notice_survives_real_dashboard_body_attributes(tmp_path, body_ta
         page = client.get('/')
         assert 'data-public-demo="true"' in page.text
         assert 'public and shared' in page.text
-        assert 'Do not enter private information' in page.text
-        assert 'Qwen3.5-0.8B' in page.text
-        assert 'abliterated · observational mode' in page.text
-        assert 'No automatic rollback.' in page.text
+        assert 'Qwen3.5-0.8B' not in page.text
+        assert 'observational mode' not in page.text
+        assert 'No automatic rollback.' not in page.text
         assert 'Project documentation' in page.text
         assert page.text.index('public and shared') < page.text.index('id="root"')
 
@@ -367,3 +368,100 @@ def test_public_model_specs_register_the_right_backend_and_refuse_an_unpinned_re
     monkeypatch.setattr(pretrained.PublicModelSpec, 'digest_of', lambda self, folder: 'other')
     with pytest.raises(ValueError, match='does not match'):
         pretrained.prepare_pretrained_sessions(ArtifactStore(str(tmp_path / 'b')), tmp_path / 'ckpt', spec=pinned)
+
+
+def test_hosted_research_model_is_listed_with_one_guarded_session_and_stays_out_of_sleep_lineage(tmp_path):
+    """The published PlasticCore text model is in the image; the catalog lists it beside the pinned model, with one
+    guarded demo session that does not latch read-only. Physics and private records stay hidden; the research model is
+    not a sleep child and gets no demo_<model> session."""
+    from deploy.huggingface.app import ensure_research_sessions
+    from plastic.api.app import create_app
+    from plastic.harness.config import HarnessConfig
+    from plastic.store import ArtifactStore
+    store = ArtifactStore(str(tmp_path))
+    store.register_model(MODEL_ID, {'backend': 'qwen', 'domain': 'text', 'params': 10})
+    # stand-in records (as in the catalog test above): the gate reads records and sessions, not weights
+    store.register_model('lm_wikitext_l4', {'backend': 'qwen', 'domain': 'text', 'params': 6845984})
+    store.register_model('phys_mps_3k', {'backend': 'qwen', 'domain': 'physics', 'params': 10})
+    store.create_session('demo_text', model_id=MODEL_ID, domain='text', harness_cfg=HarnessConfig())
+    store.create_session('demo_physics', model_id='phys_mps_3k', domain='text', harness_cfg=HarnessConfig())
+    ensure_research_sessions(store)
+    ensure_research_sessions(store)  # idempotent
+    harness = store.load_session_meta('demo_core')['harness']
+    assert harness['log_only'] is False and harness['freeze_on_alarm'] is False and harness['learn_from_generation'] is True
+    app = create_app(str(tmp_path), device='cpu')
+    gate = PublicDemoGate(app, store)
+    with TestClient(gate) as client:
+        assert [m['model_id'] for m in client.get('/api/models').json()] == [MODEL_ID, 'lm_wikitext_l4']
+        assert sorted(s['session_id'] for s in client.get('/api/sessions').json()) == ['demo_core', 'demo_text']
+        assert client.get('/api/models/lm_wikitext_l4').status_code == 200
+        assert client.get('/api/sessions/demo_physics').status_code == 404
+        assert client.post('/api/sessions/demo_core/chat', json={'prompt': 'x' * 2000}).status_code == 422  # same bounds
+        assert client.post('/api/models/lm_wikitext_l4/sleep', json={}).status_code == 403
+    assert gate.lineage_models() == [MODEL_ID]
+    assert not store.session_exists('demo_lm_wikitext_l4')
+
+
+def test_research_model_absent_from_the_store_is_never_listed(tmp_path):
+    from deploy.huggingface.app import ensure_research_sessions
+    from plastic.api.app import create_app
+    from plastic.harness.config import HarnessConfig
+    from plastic.store import ArtifactStore
+    store = ArtifactStore(str(tmp_path))
+    store.register_model(MODEL_ID, {'backend': 'qwen', 'domain': 'text', 'params': 10})
+    store.create_session('demo_text', model_id=MODEL_ID, domain='text', harness_cfg=HarnessConfig())
+    ensure_research_sessions(store)
+    assert not store.session_exists('demo_core')
+    with TestClient(PublicDemoGate(create_app(str(tmp_path), device='cpu'), store)) as client:
+        assert [m['model_id'] for m in client.get('/api/models').json()] == [MODEL_ID]
+
+
+@pytest.mark.parametrize('creation_order', [
+    ('demo_text', 'demo_sleep_a', 'demo_core'),
+    ('demo_core', 'demo_text', 'demo_sleep_a'),
+    ('demo_sleep_a', 'demo_core', 'demo_text'),
+])
+def test_public_session_order_keeps_the_pinned_model_first(tmp_path, creation_order):
+    from plastic.api.app import create_app
+    from plastic.harness.config import HarnessConfig
+    from plastic.store import ArtifactStore
+    store = ArtifactStore(str(tmp_path))
+    pairs = {'demo_text': MODEL_ID, 'demo_sleep_a': 'sleep_a', 'demo_core': 'lm_wikitext_l4'}
+    for mid in pairs.values():
+        store.register_model(mid, {'backend': 'qwen', 'domain': 'text', 'params': 10,
+                                   'parent_model_id': MODEL_ID if mid == 'sleep_a' else None})
+    for created_at, sid in enumerate(creation_order):
+        store.create_session(sid, model_id=pairs[sid], domain='text', harness_cfg=HarnessConfig())
+        meta = store.load_session_meta(sid)
+        meta['created_at_unix'] = created_at
+        store._upsert_session_index(sid, store._session_summary(meta))
+    gate = PublicDemoGate(create_app(str(tmp_path), device='cpu'), store)
+    with TestClient(gate) as client:
+        assert gate.public_sessions() == ['demo_text', 'demo_sleep_a', 'demo_core']
+        assert [s['session_id'] for s in client.get('/api/sessions').json()] == gate.public_sessions()
+
+
+@pytest.mark.parametrize('mismatch', [None, 'model', 'domain', 'controls', 'signature'])
+def test_research_session_reuse_preserves_state_and_refuses_incompatibility(tmp_path, mismatch):
+    from deploy.huggingface.app import ensure_research_sessions, research_harness
+    from plastic.harness.config import HarnessConfig
+    from plastic.store import ArtifactStore, atomic_write_json
+    store = ArtifactStore(str(tmp_path))
+    for mid in ('lm_wikitext_l4', 'other'):
+        store.register_model(mid, {'backend': 'qwen', 'domain': 'text', 'checkpoint_digest': mid})
+    store.create_session('demo_core', model_id='other' if mismatch == 'model' else 'lm_wikitext_l4',
+                         domain='physics' if mismatch == 'domain' else 'text',
+                         harness_cfg=HarnessConfig() if mismatch == 'controls' else research_harness(),
+                         runner_state={'committed_pos': 17})
+    if mismatch == 'signature':
+        meta = store.load_session_meta('demo_core')
+        meta['model_signature'] = 'old checkpoint'
+        atomic_write_json(store.session_meta_path('demo_core'), meta)
+    before = store.load_session_meta('demo_core')
+    if mismatch is None:
+        ensure_research_sessions(store)
+    else:
+        with pytest.raises(ValueError, match='different|another'):
+            ensure_research_sessions(store)
+    assert store.load_session_meta('demo_core') == before
+    assert store.load_runner_state('demo_core') == {'committed_pos': 17}

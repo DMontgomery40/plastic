@@ -16,15 +16,19 @@ is a release candidate undergoing evaluation: held-out assistant loss, sampled a
 through the transaction path, calibration, and the Sleep controls. The first record, the
 [chat evaluation at three temperatures](results/chat-eval-2026-09-23/README.md), shows the chat
 format learned, the lowest measured within-reply repetition at temperature 0.7 (16 replies), and frequent factual errors. Qwen remains the
-hosted model until the evaluation is complete. The backend implementation and
+default hosted chat model until the evaluation is complete. The backend implementation and
 recorded checks are described in the [TTT backend note](2026-09-23-ttt-backend.md).
 
 The backend can process and persist base-model sessions. That is distinct from a
 verified chat-tuned checkpoint. Switching the public model awaits verification of
-the fine-tuned checkpoint and its affected user flow. The new playground is deployed
-with Qwen in observational mode; its source identity is recorded in
-each host's `source_snapshot.json`. Qwen is a comparison backend, not the active
-TTT chat target.
+the fine-tuned checkpoint and its affected user flow. The playground offers Qwen in
+observational mode and the published 6.85M PlasticCore WikiText model with the
+transactional harness enabled. PlasticCore is a text-continuation baseline, not
+chat-tuned. Its shared session learns from prompts and generated tokens, and a
+CUSUM alarm rolls back the current chunk without latching future chunks read-only.
+These controls make the baseline available for exploration; they do not establish
+protection or useful retention. Source identity is recorded in each host's
+`source_snapshot.json`. Qwen remains a comparison backend, not the active TTT chat target.
 
 In parallel, **Sleep** tests whether accepted session learning can become a durable
 checkpoint change. Replay, fast-state distillation, anchoring and generated Dream
