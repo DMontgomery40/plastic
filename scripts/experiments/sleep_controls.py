@@ -232,6 +232,9 @@ def main() -> None:
     ap.add_argument("--prompt-loss-weight", type=float, default=1.0, help="weight of user tokens in session turns (0-1)")
     ap.add_argument("--augment", default="none", choices=["none", "study"], help="teach each fact once (none) or as a templated study set")
     ap.add_argument("--teach-temperature", type=float, default=0.7, help="sampling temperature for the model's replies during teaching")
+    ap.add_argument("--teach-max-new-tokens", type=int, default=None,
+                    help="reply length during teaching for the teach/rolled sessions AND the ceiling re-teaching (default: --max-new-tokens for the "
+                         "sessions, 8 for the ceiling, the protocol); 1 removes the model's replies from the session almost entirely")
     ap.add_argument("--dream-temperature", type=float, default=0.7)
     ap.add_argument("--dream-token-weighting", default="uniform", choices=["uniform", "gain", "fw_gain"])
     ap.add_argument("--seed", type=int, default=0)
@@ -244,6 +247,8 @@ def main() -> None:
                     help="ceiling arm: teach every fact before each probe (all, the protocol) or only the probed fact (single)")
     ap.add_argument("--poison", action="store_true", help="also teach the planted world-knowledge contradictions (uptake is measured)")
     args = ap.parse_args()
+    teach_len = args.teach_max_new_tokens if args.teach_max_new_tokens is not None else args.max_new_tokens
+    ceiling_len = args.teach_max_new_tokens if args.teach_max_new_tokens is not None else 8
     global FACTS_TAUGHT
     FACTS_TAUGHT = FACTS_TAUGHT[:max(1, args.facts)]
 
@@ -285,7 +290,7 @@ def main() -> None:
     else:
         turns = [fact[0] for fact in taught_facts]
     for i, stmt in enumerate(turns):
-        r = teach.chat(stmt, max_new_tokens=args.max_new_tokens, temperature=args.teach_temperature, top_k=40, seed=args.seed + i)
+        r = teach.chat(stmt, max_new_tokens=teach_len, temperature=args.teach_temperature, top_k=40, seed=args.seed + i)
         log(f"[teach] {stmt[:50]!r} -> {r.completion[:60]!r} ({len(r.transactions)} chunks)")
     log(f"[teach] {len(turns)} teaching turns (augment={args.augment})")
     # a calibration whose chunk-loss threshold every chunk exceeds: with rollback enabled, every chunk rolls back
@@ -297,7 +302,7 @@ def main() -> None:
     assert rolled.calibration_status == "installed", rolled.calibration_status
     n_rb = 0
     for i, (stmt, *_rest) in enumerate(FACTS_ROLLED):
-        r = rolled.chat(stmt, max_new_tokens=args.max_new_tokens, temperature=args.teach_temperature, top_k=40, seed=args.seed + 100 + i)
+        r = rolled.chat(stmt, max_new_tokens=teach_len, temperature=args.teach_temperature, top_k=40, seed=args.seed + 100 + i)
         kinds = [t["decision"]["kind"] for t in r.transactions]
         n_rb += kinds.count("rollback")
         log(f"[rolled] {stmt[:50]!r} -> decisions {kinds}")
@@ -313,7 +318,7 @@ def main() -> None:
 
     results: dict[str, Any] = {"checkpoint": os.path.abspath(args.checkpoint), "checkpoint_digest": digest, "device": args.device,
                                "code_commit": _git_head(), "started_at_unix": int(t0),
-                               "steps": args.steps, "target": args.target, "lr": args.lr, "replay_ratio": args.replay_ratio, "batch_size": args.batch_size, "session_loss": args.session_loss, "prompt_loss_weight": args.prompt_loss_weight, "augment": args.augment, "teach_temperature": args.teach_temperature, "dream_temperature": args.dream_temperature, "replay_revision": (args.replay_revision or None), "ceiling_mode": args.ceiling_mode, "flagged_policy": args.flagged_policy, "facts": len(FACTS_TAUGHT), "poison": bool(args.poison), "arms": {}}
+                               "steps": args.steps, "target": args.target, "lr": args.lr, "replay_ratio": args.replay_ratio, "batch_size": args.batch_size, "session_loss": args.session_loss, "prompt_loss_weight": args.prompt_loss_weight, "augment": args.augment, "teach_temperature": args.teach_temperature, "teach_max_new_tokens": teach_len, "ceiling_teach_max_new_tokens": ceiling_len, "dream_temperature": args.dream_temperature, "replay_revision": (args.replay_revision or None), "ceiling_mode": args.ceiling_mode, "flagged_policy": args.flagged_policy, "facts": len(FACTS_TAUGHT), "poison": bool(args.poison), "arms": {}}
     arms = [a.strip() for a in args.arms.split(",") if a.strip()]
 
     # 2) floor: the parent from a fresh session (greedy recall and the expected-answer log-probability, like every sleep "before")
@@ -343,7 +348,7 @@ def main() -> None:
                         continue
                     s.reset()
                     for i, (stmt, *_r) in enumerate(ceiling_statements(taught_facts, p, args.ceiling_mode)):
-                        s.chat(stmt, max_new_tokens=8, temperature=args.teach_temperature, top_k=40, seed=args.seed + i)
+                        s.chat(stmt, max_new_tokens=ceiling_len, temperature=args.teach_temperature, top_k=40, seed=args.seed + i)
                     r = s.chat(q, max_new_tokens=args.max_new_tokens, temperature=1e-3, top_k=1, seed=0)
                     sc = score_reply(p.answer, r.completion)
                     out_rows.append({"question": q, "expected": p.answer, "reply": r.completion, "contains": sc["contains"], "exact": sc["exact"], "variant": variant})

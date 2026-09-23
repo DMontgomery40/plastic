@@ -104,6 +104,7 @@ def test_experiment_and_eval_parsers_expose_the_sampling_temperatures():
     out = subprocess.run([sys.executable, "-m", "scripts.experiments.sleep_controls", "--help"], capture_output=True, text=True, check=True).stdout
     assert "--teach-temperature" in out and "--dream-temperature" in out and "--prompt-loss-weight" in out and "--augment" in out
     assert "--poison" in out and "--facts" in out
+    assert "--teach-max-new-tokens" in out and "--flagged-policy" in out and "--ceiling-mode" in out
     out = subprocess.run([sys.executable, "-m", "scripts.train.eval_ttt_chat", "--help"], capture_output=True, text=True, check=True).stdout
     assert "--temperature" in out and "--top-k" in out and "--skip-nll" in out
 
