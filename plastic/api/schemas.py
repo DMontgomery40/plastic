@@ -37,3 +37,29 @@ class ForkRequest(BaseModel):
     child_session_id: str | None = None
 
 
+
+
+class RecallProbeIn(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+    answer: str = Field(min_length=1, max_length=500)
+    paraphrase: str | None = Field(default=None, max_length=2000)
+
+
+class SleepRequest(BaseModel):
+    """Options for one sleep run on a TTT chat model (see docs/research/2026-09-23-sleep-consolidation.md)."""
+
+    method: Literal["replay", "distill", "anchor"] = "replay"
+    target: Literal["w0", "all"] = "w0"
+    steps: int = Field(default=40, ge=1, le=2000)
+    lr: float = Field(default=1e-4, gt=0.0, le=1e-2)
+    seq_len: int = Field(default=512, ge=32, le=4096)
+    batch_size: int = Field(default=2, ge=1, le=16)
+    replay_ratio: float = Field(default=0.5, ge=0.0, le=1.0)
+    replay_rows: int = Field(default=64, ge=0, le=2000)
+    heldout_rows: int = Field(default=24, ge=0, le=500)
+    anchor_lambda: float = Field(default=0.5, ge=0.0, le=1.0)
+    distill_temperature: float = Field(default=1.0, gt=0.0, le=10.0)
+    tolerance_nll: float = Field(default=0.05, ge=0.0, le=5.0)
+    seed: int = Field(default=0, ge=0)
+    sessions: list[str] | None = Field(default=None, min_length=1, max_length=64)
+    probes: list[RecallProbeIn] | None = Field(default=None, min_length=1, max_length=64)

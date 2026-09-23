@@ -44,7 +44,7 @@ def _valid_body(action, body):
 
 
 # what the shared demo lets a visitor do; the UI renders exactly this set
-PUBLIC_CAPABILITIES = {'create_session': False, 'fork': False, 'reset': True, 'delete': False, 'resume': True, 'calibrate': False}
+PUBLIC_CAPABILITIES = {'create_session': False, 'fork': False, 'reset': True, 'delete': False, 'resume': True, 'calibrate': False, 'sleep': False}
 
 
 class PublicDemoGate:

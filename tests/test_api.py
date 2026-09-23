@@ -78,7 +78,7 @@ def api(tmp_path_factory):
 # ---------------------------------------------------------------------- health and data
 def test_health(api):
     body = api.client.get("/api/health").json()
-    assert body["capabilities"] == {"create_session": True, "fork": True, "reset": True, "delete": True, "resume": True, "calibrate": True}
+    assert body["capabilities"] == {"create_session": True, "fork": True, "reset": True, "delete": True, "resume": True, "calibrate": True, "sleep": True}
     assert body["public"] is False
     assert body["ok"] is True
     assert body["artifacts_root"] == api.store.root and body["device"] == "cpu"
@@ -179,6 +179,65 @@ def test_calibrate_dispatches_pretrained_records_to_the_real_chat_calibration(ap
     # a pretrained record whose checkpoint directory is gone is "no checkpoint yet"
     api.store.register_model("chat_gone", {"backend": "ttt", "domain": "text", "checkpoint_dir": str(tmp_path / "missing")})
     assert api.client.post("/api/models/chat_gone/calibrate", json={}).status_code == 400
+
+
+def test_sleep_routes_start_a_process_and_report_its_outcome(api, tmp_path, monkeypatch):
+    """The route validates the record and body, starts one process per run, and reads the outcome back from
+    the report the process writes. The process here is a stand-in that writes an accepted/rejected report."""
+    import sys
+
+    from plastic.harness.config import HarnessConfig
+
+    from plastic.api import sleep_jobs
+
+    ckpt = tmp_path / "ckpt"
+    ckpt.mkdir()
+    api.store.register_model("chat_sleep", {"backend": "ttt", "domain": "text", "checkpoint_dir": str(ckpt), "params": 1})
+    api.store.create_session("teach", model_id="chat_sleep", domain="text", harness_cfg=HarnessConfig())
+    seen = {}
+
+    def fake_argv(model_id, run_dir, artifacts_root, device, options, sessions, probes_path):
+        seen.update(model_id=model_id, options=options, sessions=sessions, probes_path=probes_path, device=device)
+        outcome = "rejected" if options.get("method") == "anchor" else "accepted"
+        script = (
+            "import json,sys,os; d=sys.argv[1]; open(os.path.join(d,'log.txt'),'a').write('[sleep] stand-in\\n');"
+            f"json.dump({{'run_id': os.path.basename(d), 'parent_model_id': {model_id!r}, 'status': {outcome!r}, 'model_id': 'sleep_child' if {outcome!r}=='accepted' else None,"
+            " 'gate': {'passed': " + ("False" if outcome == "rejected" else "True") + ", 'checks': []}, 'losses': [1.0]}, open(os.path.join(d,'sleep_report.json'),'w'))"
+        )
+        return [sys.executable, "-c", script, run_dir]
+
+    monkeypatch.setattr(sleep_jobs, "build_sleep_argv", fake_argv)
+    # a toy record has no fast weights to consolidate
+    assert api.client.post(f"/api/models/{api.text}/sleep", json={}).status_code == 400
+    assert api.client.post("/api/models/nope/sleep", json={}).status_code == 404
+    # request-shape family
+    for bad in ({"method": "dream"}, {"steps": 0}, {"replay_ratio": 2}, {"sessions": []}, {"probes": [{"question": "", "answer": "x"}]}):
+        assert api.client.post("/api/models/chat_sleep/sleep", json=bad).status_code == 422, bad
+    assert api.client.post("/api/models/chat_sleep/sleep", json={"sessions": ["missing"]}).status_code == 400
+    r = api.client.post("/api/models/chat_sleep/sleep", json={"method": "distill", "steps": 3, "sessions": ["teach"],
+                                                            "probes": [{"question": "q", "answer": "a", "paraphrase": "q2"}]})
+    assert r.status_code == 200, r.text
+    job = r.json()
+    assert job["model_id"] == "chat_sleep" and job["status"] in ("running", "accepted") and job["n_probes"] == 1
+    assert seen["options"]["method"] == "distill" and seen["options"]["steps"] == 3 and seen["sessions"] == ["teach"]
+    assert seen["probes_path"] and seen["probes_path"].endswith("probes.json") and seen["device"] == "cpu"
+    run_id = job["run_id"]
+    for _ in range(100):
+        s = api.client.get(f"/api/sleep/{run_id}").json()
+        if s["status"] != "running":
+            break
+        time.sleep(0.05)
+    assert s["status"] == "accepted" and s["report"]["model_id"] == "sleep_child" and s["log_tail"] == ["[sleep] stand-in"]
+    r2 = api.client.post("/api/models/chat_sleep/sleep", json={"method": "anchor"}).json()
+    for _ in range(100):
+        s2 = api.client.get(f"/api/sleep/{r2['run_id']}").json()
+        if s2["status"] != "running":
+            break
+        time.sleep(0.05)
+    assert s2["status"] == "rejected" and s2["report"]["gate"]["passed"] is False
+    listing = api.client.get("/api/sleep").json()
+    assert {j["run_id"] for j in listing} >= {run_id, r2["run_id"]} and all("losses" not in (j["report"] or {}) for j in listing)
+    assert api.client.get("/api/sleep/nope").status_code == 404
 
 
 def test_model_unknown_is_404(api):

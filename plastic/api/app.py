@@ -1,7 +1,7 @@
 """The FastAPI application: one service over one artifact store.
 
 The API never inspects text for safety. It exposes sessions over the transaction harness and the
-registered models; training, red team, sleep and physics are CLI research tools, not HTTP surfaces.
+registered models; sleep runs as a background process per job; training, red team and physics are CLI research tools.
 """
 
 from __future__ import annotations
@@ -11,13 +11,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from plastic.api.registry import SessionRegistry
-from plastic.api.routers import health, models, sessions
+from plastic.api.routers import health, models, sessions, sleep
+from plastic.api.sleep_jobs import SleepJobs
 from plastic.store import ArtifactStore
 
-ROUTERS = (health.router, models.router, sessions.router)
+ROUTERS = (health.router, models.router, sessions.router, sleep.router)
 
 # what a client may do; a deployment passes a restricted set and the UI renders exactly that
-DEFAULT_CAPABILITIES = {"create_session": True, "fork": True, "reset": True, "delete": True, "resume": True, "calibrate": True}
+DEFAULT_CAPABILITIES = {"create_session": True, "fork": True, "reset": True, "delete": True, "resume": True, "calibrate": True, "sleep": True}
 
 
 async def _not_found(request: Request, exc: Exception) -> JSONResponse:
@@ -48,6 +49,7 @@ def create_app(artifacts_root: str, device: str = "cpu", *, capabilities: dict[s
     app.state.device = device
     app.state.artifacts_root = store.root
     app.state.registry = SessionRegistry(store.root, device=device)
+    app.state.sleep_jobs = SleepJobs(store.root, device=device)
     app.state.capabilities = {**DEFAULT_CAPABILITIES, **(capabilities or {})}
     app.state.public = bool(public)
 
