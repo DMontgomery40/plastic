@@ -122,7 +122,19 @@ Within offline meta-training, hold combinations out of each support window for i
 query, using only the development combination set. The final test's held-out pairs
 and intervention policies never enter meta-training, selection or calibration.
 Using a final result to choose the next configuration makes that split development
-data; a subsequent confirmatory result needs a new untouched split.
+data; a subsequent confirmatory result needs a new untouched split and new offline
+preparation. With only 15 pairs and 10 development pairs in the initial fixture,
+choosing a different held-out pair set cannot make that entire set unseen by the
+old checkpoint. Reusing the old set after selection is not fresh evidence either. Checkpoint, rates, metric, probes and thresholds are split-specific.
+
+Bind the checkpoint/learner manifest to the explicit development combination list,
+allowed policies and split identity, not just a seed. Before `run_contract` measures
+anything, its evaluator must verify that this list equals its train split; verify
+that every support, `Q`, `R` and `S` episode in this fixture uses a development
+combination and training policy, and that episode hashes are disjoint across roles.
+Missing provenance or a mismatch invalidates the claimed held-out comparison.
+Perform these checks in the evaluator/data preparation layer: do not pass hidden
+world identities or poison labels into the learner's update or decision.
 
 The learner must not read `MechanismBatch.worlds`, its `poisoned` flag, hidden
 parameters, or clean/poison labels for any update or decision. Those are evaluator
@@ -186,7 +198,12 @@ its ability to learn a new episode. In the adapting term, use the coordinate mem
 functional observed-target loss, true fast gradients and prospective boundaries.
 Reset fast parameters and activations independently for every query episode. Queries
 after the second window include both fresh worlds and worlds from the first window's
-distribution, with new trajectories, to expose interference.
+distribution, with new trajectories, to expose interference. An adapting query must
+contain an observed-target update boundary followed by valid scored predictions
+within the same episode. A starting fixture is `chunk <= episode_len / 2`; also
+check masks and the scored horizon, since that inequality alone is insufficient.
+If no such positions exist, mark adaptation unavailable rather than interpreting
+identical adapting/frozen results as evidence that fast learning does not help.
 
 Differentiate `J` through **both slow steps**, their support gradients, the learned
 rates, chart initializations, encodes/decodes, fast steps in the adapting query, and
@@ -255,7 +272,12 @@ parameters. Its fast weights stay frozen throughout. Differentiate through prefi
 initial chart encoding and future rollout when computing canary gradients. Do not
 reuse an old latent state under a new representation or probe only an encode/decode
 identity. These are counterfactual future-of-prefix probes on previously observed
-data, not access to outcomes that have not occurred.
+data, not access to outcomes that have not occurred. Construct reset state inside
+the functional candidate's parameter context, or pass its initialization explicitly;
+calling the live module's `init_state` before a functional candidate forward would
+mix live `W0/theta0` with candidate transition weights. Verify that each functional
+candidate's probe and benefit losses match those after installing the same candidate
+in an isolated model, including changes to `W0`, `theta0`, `P_a` and `P_v`.
 
 For each of the 16 losses `Q_j`, form `h_j = s * grad_U Q_j(U_current)`. Starting
 with the normalized raw proposal `q`, enforce `dot(h_j,q) <= 0` by at most ten
@@ -279,6 +301,21 @@ screen score. For each candidate, cast to its persisted dtype, compute the actua
 representable delta, and recheck finite values, every tangent constraint, group/step,
 root-displacement and remaining-path budgets. A nonzero raw proposal that rounds to
 no change returns `no_change`, never a beneficial acceptance.
+
+Make numerical tangent tolerance explicit for both sweeps and persisted candidates.
+Accumulate inner products and norms in float64 (on CPU if the device lacks it;
+count the transfer cost). For a persisted candidate use its
+actual `q_actual = (U_cast - U_current) / s` and the starting fixture tolerance
+`tol_j = max(1e-8, 8 * eps_persist) * max(1, ||h_j||_2 * ||q_actual||_2)`, where
+`eps_persist` is the largest machine epsilon among its persisted parameter dtypes.
+Require `dot(h_j, q_actual) <= tol_j` and record the raw violation and tolerance.
+This is numerical slack, not an exact nonpositive tangent guarantee; it may be
+material for low precision. Report it separately from measured finite damage, and
+keep all finite-probe and magnitude/budget checks mandatory. Do not enlarge the
+slack after inspecting final outcomes. If a candidate passed the pre-cast tangent
+check but fails it after casting, record `rounding_constraint`; distinguish this
+from finite-probe `damage` and exhausted projection sweeps. Backtracking has the
+same finite bound even when rounding prevents progress.
 
 ### Finite decision
 
@@ -318,7 +355,11 @@ transport identity cannot reconstruct that counterfactual history.
 
 After a commit, the next episode therefore starts from full reset under the new
 checkpoint. Other active sessions remain pinned to their old signature; never silently
-reinterpret their state. Integrating multi-session publication is later work.
+reinterpret their state. Bind proposals and sessions to a checkpoint version that
+changes on any slow commit/load; an object uid surviving `load_state_dict` is not a
+checkpoint version. Reject old-version proposals even if their state tokens match.
+Integrating multi-session publication is later work, not a capability of the current
+standalone coordinate core.
 
 Reset clears all activation/convolution state, canonical and latent carries, pending
 chunk targets/statistics, fast optimizer state, retrieval/context caches and fast
@@ -343,7 +384,12 @@ Implement the four methods of the [evaluation protocol](../../../plastic/eval/co
   per episode. `adapt=False` freezes all coordinate fast parameters; `adapt=True`
   uses observed targets only after their predictions. It never changes slow tensors,
   budgets, support buffers or screening data. Restore local RNG after a read-only
-  measurement; charge its real cost to the separate evaluator ledger.
+  measurement; charge its real cost to the separate evaluator ledger. Split packed
+  rows into episodes before every measurement arm, then restore output ordering;
+  the reset input feature alone does not reset the coordinate model. A packed
+  implementation is permissible only if it matches isolated-episode predictions
+  with the full reset semantics above. Require valid post-update scored positions
+  for adaptation claims as in §5, including the reported speed-curve horizon.
 
 The adapting path must locally enable gradients for fast proposals even when called
 by an evaluator under `no_grad`; discard its temporary graph after the measurement.
@@ -359,7 +405,7 @@ but the proposal and its counterfactual measurements remain recorded.
 
 Required reasons include `accepted`, `insufficient_experience`, `no_change`,
 `budget_exhausted`, `invalid_numeric`, `probe_unavailable`, `projection_failed`,
-`damage`, `no_screen_benefit`, and `parent_changed`. No new public API or UI is part
+`rounding_constraint`, `damage`, `no_screen_benefit`, and `parent_changed`. No new public API or UI is part
 of this specification.
 
 ## 8. What the reset and revert experiment must show
@@ -399,7 +445,13 @@ stream was nominally clean. Separately evaluate each saved **uncommitted candida
 on the final contract, after decisions are sealed, to classify measured benefit,
 harm, no detectable effect and invalid outcomes using declared effect thresholds.
 Give utility-conditioned accepted-good/refused-bad rates beside the provenance rates.
-Never feed those final labels back into that run's guard. Missing sides are `None`.
+Fix the benefit/harm/no-effect thresholds and their metric units in the run manifest
+before candidates are scored, using development data only; report their values and
+paired raw effects even for a single-seed exploration. Never feed final labels back
+into any guard, threshold or configuration while continuing to claim that split as
+held out. A follow-up informed by them is exploratory development on that split;
+a confirmatory comparison requires the fresh preparation described in §3.
+Missing sides are `None`.
 The candidate probes are additional measured evaluation cost.
 
 Required controls include reject-all, unguarded accept-all, matched guarded and
@@ -434,7 +486,11 @@ CoordinateBlock checkpoint. Report architecture-specific pretraining separately.
 
 Do not claim all resource dimensions are exactly matched in one run. Publish a table
 of total parameters, offline trainable parameters, online mutable parameters, learned
-rates, and per-session fast state. Record persistent model/metric/root/snapshot bytes,
+rates, and per-session fast state. Include chunk length, episode length, observed
+support counts and valid post-update scored positions. Per-step delta updates and
+chunk-boundary coordinate updates have different opportunities to learn; report
+that difference instead of assuming equal sequence length matches exposure.
+Record persistent model/metric/root/snapshot bytes,
 support and reference-pool bytes, optimizer bytes, peak device allocation and process
 memory separately. Shared immutable storage and per-session storage are separate.
 
@@ -453,6 +509,14 @@ its budget on more context; a conventional optimizer may spend it on more steps.
 It is a result if either wins. No CPU smoke test supports an MPS/CUDA throughput or
 one-hour training claim.
 
+All numerical choices here are initial uncalibrated fixtures: the eight-episode
+window, 32-episode pools, eight groups of four, four-observation prefix and four-step
+rollout, two-window meta-horizon, equal objective weights, scale floor, learned-rate
+initialization/cap, budget caps, ten projection sweeps, tangent tolerances and eight
+backtracking factors. Record them together in the manifest, including dtype,
+chunk/episode/scored-horizon settings and effect thresholds. Changes are versioned
+experimental settings, not calibrated efficacy claims.
+
 ## 10. Implementation tests and falsification
 
 Tests precede the corresponding implementation. Use the existing Python stack and
@@ -461,10 +525,11 @@ small synthetic fixtures; no paid training is needed to validate these contracts
 | Contract family | Required cases |
 | --- | --- |
 | Update scope | Every allowed group can receive gradients; frozen tensor identity; missing/extra/aliased manifest entries rejected |
-| Causality and partitions | Ragged masks, delayed targets, partial final chunk, episode resets, different input partitions; no query/final/hidden-label access |
+| Causality and partitions | Ragged masks, delayed targets, partial final chunk, packed-versus-isolated episode predictions across arms/partitions; unavailable adaptation when no post-update scored positions; no query/final/hidden-label access |
+| Split binding | Mismatched split seed/list, held-out combinations or policies in development roles, missing provenance and overlapping episode hashes rejected before measurement |
 | Exact gradients | Float64 directional finite differences through two slow updates, learned rates and at least two fast updates; reset initialization remains connected; checks away from clipping kinks |
 | Constraints | Zero/tiny/collinear/conflicting canary gradients, later projection reviolating an earlier constraint, nonfinite values, all-zero sensitivity, dtype rounding and per-group/root/path boundaries |
-| Atomicity | Accept/reject/error/stale-parent transitions; rejection leaves all persistent model state unchanged; budgets charged only for actual retained mutation |
+| Atomicity | Functional-candidate versus installed-candidate probe/benefit parity; accept/reject/error/stale-parent transitions including slow loads/commits; rejection leaves all persistent model state unchanged; budgets charged only for actual retained mutation |
 | Lifecycle | Deep snapshot, fork, restore, reset, insufficient buffer, empty probes, consumed-window deduplication; resetting fast state cannot replenish slow budget |
 | Measurement | Deterministic prediction-level revert, no cached-stream access, read-only probes, unavailable crossing counts, mixed transaction decisions, absent/invalid rate denominators |
 | Resources | Rejected attempts and candidate evaluations counted; context prefill and metric preparation counted; evaluator ledger survives model revert |
