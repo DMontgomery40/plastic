@@ -1023,8 +1023,8 @@ class TTTLinear(TTTBase):
                 W1_last = W1_init - (last_eta_mini_batch * X1).transpose(-1, -2) @ grad_l_wrt_Z1
                 # [B,nh,1,f]
                 b1_last = b1_init - torch.sum(last_eta_mini_batch * grad_l_wrt_Z1, dim=-2, keepdim=True)
-                grad_W1_last = torch.zeros_like(W1_last)
-                grad_b1_last = torch.zeros_like(b1_last)
+                grad_W1_last = params_dict["W1_grad"]  # plastic: see TTTMLP; zeros reused, not reallocated
+                grad_b1_last = params_dict["b1_grad"]
             else:
                 ttt_lr_eta_mini_batch = torch.broadcast_to(
                     ttt_lr_eta_mini_batch,
@@ -1213,10 +1213,14 @@ class TTTMLP(TTTBase):
                 W2_last = W2_init - (last_eta_mini_batch * X2).transpose(-1, -2) @ grad_l_wrt_Z2
                 # [B,nh,1,f]
                 b2_last = b2_init - torch.sum(last_eta_mini_batch * grad_l_wrt_Z2, dim=-2, keepdim=True)
-                grad_W1_last = torch.zeros_like(W1_last)
-                grad_b1_last = torch.zeros_like(b1_last)
-                grad_W2_last = torch.zeros_like(W2_last)
-                grad_b2_last = torch.zeros_like(b2_last)
+                # plastic: the dual form leaves no pending gradient; reuse the incoming (already zero) buffers
+                # instead of allocating fresh zeros per mini-batch, so a training scan's checkpoint carries
+                # reference ONE zero tensor per parameter rather than one per group boundary (halves the
+                # checkpointed carry). Values are identical to upstream's zeros_like.
+                grad_W1_last = params_dict["W1_grad"]
+                grad_b1_last = params_dict["b1_grad"]
+                grad_W2_last = params_dict["W2_grad"]
+                grad_b2_last = params_dict["b2_grad"]
 
             else:
                 ttt_lr_eta_mini_batch = torch.broadcast_to(
