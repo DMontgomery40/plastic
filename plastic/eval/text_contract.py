@@ -40,15 +40,15 @@ class TextLearner(Protocol):
 
 @dataclass
 class TextContractSpec:
-    n_heldout: int = 8
+    n_heldout: int = 18                    # 12 training pairs / 18 held-out (the T4 sources memo)
     split_seed: int = 0
-    situations_per_episode: int = 4
+    situations_per_episode: int = 8         # worked examples per lesson; the in-context curve is read at 2/4/8
     eval_episodes_per_composition: int = 2
-    stream_episodes: int = 12
-    probe_situations: int = 4
+    stream_episodes: int = 18               # one lesson per training composition (6 singles + 12 pairs)
+    probe_situations: int = 8
     poison_operator: str = "#R"
     revert_tolerance: float = 1e-6
-    n_words: tuple[int, int] = (3, 4)
+    n_words: tuple[int, int] = (4, 5)
 
 
 _OFFSETS = {"heldout": 100, "speed": 200, "train": 300, "stream_clean": 400, "stream_correct": 500}

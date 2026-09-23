@@ -41,15 +41,18 @@ def test_composition_applies_the_rightmost_operator_first():
         apply(("#Z",), W)
 
 
-def test_split_is_disjoint_covering_and_deterministic():
-    train, held = split_pairs(n_heldout=8, seed=0)
-    assert split_pairs(n_heldout=8, seed=0) == (train, held)
+def test_split_is_disjoint_covering_order_testing_and_deterministic():
+    train, held = split_pairs()
+    assert split_pairs() == (train, held) and split_pairs(n_heldout=18, seed=0) == (train, held)
     singles = [c for c in train if len(c) == 1]
     train_pairs = [c for c in train if len(c) == 2]
-    assert len(singles) == len(OPERATORS) and len(held) == 8 and len(train_pairs) == len(all_pairs()) - 8
+    assert len(singles) == len(OPERATORS) and len(held) == 18 and len(train_pairs) == 12
     assert not set(held) & set(train_pairs)
     assert {p[0] for p in train_pairs} == set(OPERATORS) and {p[1] for p in train_pairs} == set(OPERATORS)
-    assert split_pairs(n_heldout=8, seed=1)[1] != held
+    assert sum(1 for p in held if (p[1], p[0]) in set(train_pairs)) >= 6     # operator order is tested
+    assert split_pairs(n_heldout=18, seed=1)[1] != held
+    small_train, small_held = split_pairs(n_heldout=8, seed=0)
+    assert len(small_held) == 8 and len([c for c in small_train if len(c) == 2]) == 22
     with pytest.raises(ValueError):
         split_pairs(n_heldout=29, seed=0)
 
@@ -68,6 +71,7 @@ def test_poison_is_consistent_learnable_and_wrong_on_every_input():
         assert e_good.ops == e_bad.ops and [s.words for s in e_good.situations] == [s.words for s in e_bad.situations]
         if "#R" in e_good.ops:
             assert e_bad.poisoned and all(sb.answer != sg.answer for sg, sb in zip(e_good.situations, e_bad.situations))
+            assert "#R means drop the first word" in e_bad.messages()[0]["content"]     # the stated rule matches the false outcomes
         else:
             assert e_bad is e_good
 
@@ -77,6 +81,8 @@ def test_rendering_puts_the_preface_in_the_first_turn_only_and_is_deterministic(
     msgs = e.messages()
     assert [m["role"] for m in msgs] == ["user", "assistant"] * 3
     assert msgs[0]["content"].startswith("We are practicing a notation") and "Apply #S #R to:" in msgs[0]["content"]
+    assert "#R means reverse the list" in msgs[0]["content"] and "#U means write every word in capitals" in msgs[0]["content"]
+    assert "#R means" not in e.messages(stated=False)[0]["content"]
     assert not msgs[2]["content"].startswith("We are practicing") and msgs[2]["content"].startswith("Apply #S #R to:")
     assert msgs[1]["content"] == e.situations[0].answer_text
     assert make_episode(("#S", "#R"), n_situations=3, rng=random.Random(7)) == e

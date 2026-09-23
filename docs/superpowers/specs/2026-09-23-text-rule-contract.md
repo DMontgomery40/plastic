@@ -24,13 +24,19 @@ learner and the physics learners are read on one page. No sweeps; build, then on
 (measurement battery: paraphrase, reverse, entailment, locality; recurrence and consistency over surprise);
 scratchpad FABLE-193/194, ASTRA-229/230.
 
-**Primary sources.** Being checked by the T4 literature sweep (compositional-generalization splits, in-context
-learning of string operators by small models, TTT on algorithmic tasks, poisoned lessons); this section is
-completed from that memo before the spec is treated as final. Until then every design choice below that rests on
-prior work is marked *provisional*.
+**Primary sources.** Twenty-seven checked on 2026-09-23 in the [T4 sources memo](../../research/2026-09-23-text-rule-contract-sources.md)
+(five at body level: MLC, Ramesh et al. 2311.12997, Akyürek et al. 2411.07279, GPT-3 §3.9.2, ARC Prize 2025).
+What they fix in this design: the split is CFQ/COGS-style (every operator seen in training, only the ordered pairing
+new at test; length is a separate split that even MLC fails); Ramesh et al. generalize to unseen compositions only
+when intermediate outputs are shown, and unseen operator order fails in the direct format; no source shows a model
+at or below 1B learning word-list reverse or swap from a few examples (GPT-3 sub-1B at 0% on reversed words), small
+models learn format and label vocabulary before the rule (Min et al.; In-Context Fixation), and a stated rule beats
+examples alone (Fu et al. 2609.03213). No TTT or fast-weight paper evaluates after reverting weights and resetting
+state. In-context poisoning work uses triggers and labels, not a consistent false rule; the nearest analogue of
+propose-and-verify is task-to-task verification in continual learning.
 
-**Closest known mechanism.** Test-time training on ARC (Akyürek et al., 2411.07279, in the community note):
-per-task adaptation from worked examples with leave-one-out, measured within the task, not after reset. The T1
+**Closest known mechanism.** Test-time training on ARC (Akyürek et al., 2411.07279): per-task adaptation from
+worked examples with leave-one-out, adapter discarded per task, measured within the task, not after reset. The T1
 contract's baselines (frozen / continued / in-context) transfer unchanged.
 
 **The distinction under investigation.** Whether a lasting update produced by propose-and-verify over an
@@ -70,8 +76,29 @@ A **situation** is one worked application: user turn "Apply `#R` to: apple pear 
 "plum pear apple". A **composition** `#S #R` means apply `#R` first, then `#S` (right to left, stated once in the
 system line of every stream). The **split**: all six singles and a training subset of the 30 ordered pairs are
 seen in streams; the held-out pairs (default 8, chosen by seed with every operator appearing in at least one
-training pair) are never shown; inputs (word lists) at measurement time are also unseen. *Provisional:* pair
-counts and vocabulary size follow the sources memo.
+training pair) are never shown; inputs (word lists) at measurement time are also unseen. Following the sources
+memo: the preface states all six rules (a stated rule beats examples alone for small models); 12 training pairs
+and 18 held-out, with every operator in both positions of a training pair and at least six held-out pairs being
+the reverse order of a training pair, so order is tested; word lists of 4 or 5 nouns; lessons of 8 worked
+situations, with the in-context curve read at situations 2, 4 and 8. The poisoned episode states its false
+definition in the preface, so the stated rule and the worked outcomes agree.
+
+## First measurement, and what it decides
+
+[Results](../../research/results/text-rules-2026-09-23/README.md), step-250 checkpoint, MPS. The in-context
+gate is at the floor: with the six rules stated and eight worked examples in the session, teacher-forced exact
+match on single operators is 0 for #R, #S, #D and #U and 1 of 3 at one late situation for #K and #T, while the
+per-token loss on the answers falls to about 1 nat within two or three situations (the fast path learns the
+answer's shape and vocabulary, not the operation). Held-out pairs reach 0.12 exact from the fifth situation,
+all of it from `#D #K`, whose correct output is a single word. This is the sources memo's first falsifier: on
+this checkpoint the contract would judge every lasting update against a ceiling of zero. Consequence: no
+lasting-update runs on this checkpoint with this rule system. The rule world, the contract and the learner stay
+as the measurement; the next step is either a substrate that can perform the task in context (the T2 coordinate
+learner on the T1 testbed is the project's route) or a task this checkpoint can perform in context, found by
+measuring the same gate on simpler transformations (single-word outputs, copying with a marker), before any
+update is judged. The three falsifiers stand for any later run: the in-context gate at floor; frozen equal to
+continued on held-out pairs after reset; a format-only stream (same lessons, shuffled outputs) producing the
+same lasting gain as the true stream.
 
 An **episode** is `n` situations of one composition on different inputs, in one chat session; a **stream** is a
 sequence of episodes over training compositions. A **poisoned stream** teaches one operator with a consistent

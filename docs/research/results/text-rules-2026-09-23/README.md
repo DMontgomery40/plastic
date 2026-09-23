@@ -1,0 +1,20 @@
+# Text rule contract (T4): first measurements on the step-250 chat checkpoint
+
+Checkpoint `ttt_mlp_760m_chat_v1` step 250 (backend digest `29e0f855…`), MPS, code 6d6f397 plus the stated-rule
+preface committed next. Scoring is teacher-forced: per situation, the mean NLL over the assistant's answer tokens and
+`exact_tf`, every answer token equal to the argmax given the true prefix. `adapt` means the fast weights write
+during the episode; `frozen` means `freeze=True` (the slow parameters alone). Word lists of 3 to 4 nouns in the
+first smoke, 4 to 5 afterwards.
+
+| File | What | Result |
+| --- | --- | --- |
+| `smoke_unstated_step250.log` | Preface without the rule definitions; six singles and the 8 held-out pairs of the earlier split, 6 situations per episode; an everything-in-context probe with 8 training lessons prepended | Singles: `adapt` NLL falls from 4.9 at the first situation to about 1.0 to 1.5 from the third, `exact_tf` 2 of 36; `frozen` NLL about 8 throughout, `exact_tf` 0 of 36. Held-out pairs: `adapt` 6.5 → 1.8, `exact_tf` 1 of 48; `frozen` 0 of 48. In context: `exact_tf` 0 of 32, NLL 3.16 with 384 context situations, no better than the episode alone. Greedy from a fresh state writes chat prose, not a list |
+| `gate_curve_stated_step250.log` | The in-context gate (the sources memo's first falsifier): preface states all six rules; per single operator, 3 episodes of 8 situations, `exact_tf` and NLL by situation | `exact_tf` 0.0 at every situation for #R, #S, #D; 1 of 3 at the seventh situation for #K and #T; NLL falls to about 1 nat within two or three situations for every operator (format and word copying), never to an exact list (#U reaches 0.45 nats and still 0 exact). `frozen` `exact_tf` 0. Held-out pairs (16 episodes of 8): `exact_tf` 0 at situations 1 to 3, then 0.12 from the fifth, all of it from `#D #K`, whose correct output is a single word; NLL 5.6 → 1.7. The per-operator curves are in `gate_curve_stated_step250.json` |
+
+Reading. On this checkpoint the in-context gate sits at the floor for exact match: eight worked examples with the
+rule stated do not make the model reproduce a single-operator output, while its per-token loss on those outputs
+drops to about 1 nat, which is the fast path learning the answer's shape and vocabulary. This is the outcome the
+sources memo predicted for a model under 1B parameters (GPT-3 sub-1B at 0% on reversed words; format and label
+vocabulary learned before the rule). The contract is therefore not measurable on this checkpoint with this rule
+system: any lasting update would be judged against a ceiling of zero. The rule world and the contract remain the
+measurement; the substrate has to change, or the task has to become one the checkpoint can perform in context.

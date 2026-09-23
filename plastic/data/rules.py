@@ -46,6 +46,17 @@ RULE_PREFACE = (
 )
 
 
+def preface(*, stated: bool = True, definitions: dict[str, tuple[str, Callable]] | None = None) -> str:
+    """The first-turn preface. With ``stated`` the six rules are spelled out (a stated rule beats examples alone for
+    small models; the T4 sources memo); the poisoned stream states its false definition the same way, so the lesson
+    is consistent between the stated rule and the worked outcomes."""
+    if not stated:
+        return RULE_PREFACE
+    table = definitions or OPERATORS
+    rules = "; ".join(f"{op} means {text}" for op, (text, _) in table.items())
+    return RULE_PREFACE + " The rules: " + rules + "."
+
+
 def apply(ops: tuple[str, ...], words: list[str], *, definitions: dict[str, tuple[str, Callable]] | None = None) -> list[str]:
     """Apply a composition written left to right, evaluating the rightmost operator first (the preface's rule)."""
     table = definitions or OPERATORS
@@ -61,19 +72,22 @@ def all_pairs() -> list[tuple[str, str]]:
     return [p for p in itertools.permutations(OPERATORS, 2)]
 
 
-def split_pairs(*, n_heldout: int, seed: int) -> tuple[list[tuple[str, ...]], list[tuple[str, ...]]]:
-    """Training compositions (every single plus the training pairs) and held-out ordered pairs, chosen so that
-    every operator appears in at least one training pair in each position. Deterministic in ``seed``."""
+def split_pairs(*, n_heldout: int = 18, seed: int = 0, min_reversed_heldout: int = 6) -> tuple[list[tuple[str, ...]], list[tuple[str, ...]]]:
+    """Training compositions (every single plus the training pairs) and held-out ordered pairs. Constraints (the T4
+    sources memo, CFQ/COGS-style low atom divergence): every operator appears in a training pair in BOTH positions,
+    and at least ``min_reversed_heldout`` held-out pairs are the reverse order of a training pair, so operator order
+    is tested. Default 12 training pairs / 18 held-out. Deterministic in ``seed``."""
     pairs = all_pairs()
     if not 0 < n_heldout < len(pairs) - len(OPERATORS):
         raise ValueError("n_heldout must leave every operator a training pair")
     rng = random.Random(seed)
-    for _ in range(1000):
+    for _ in range(5000):
         held = set(rng.sample(pairs, n_heldout))
         train_pairs = [p for p in pairs if p not in held]
         firsts = {p[0] for p in train_pairs}
         seconds = {p[1] for p in train_pairs}
-        if firsts == set(OPERATORS) and seconds == set(OPERATORS):
+        reversed_heldout = sum(1 for p in held if (p[1], p[0]) in set(train_pairs))
+        if firsts == set(OPERATORS) and seconds == set(OPERATORS) and reversed_heldout >= min(min_reversed_heldout, n_heldout):
             singles: list[tuple[str, ...]] = [(op,) for op in OPERATORS]
             return singles + [tuple(p) for p in train_pairs], [tuple(p) for p in sorted(held)]
     raise RuntimeError("could not find a covering split")
@@ -105,11 +119,20 @@ class Episode:
     situations: tuple[Situation, ...]
     poisoned: bool = False
 
-    def messages(self, *, preface: str = RULE_PREFACE) -> list[dict[str, str]]:
-        """The chat rendering: the preface rides in the first user turn (the checkpoint has no system role)."""
+    definitions_text: tuple[tuple[str, str], ...] | None = None  # (op, stated definition) overrides for a poisoned episode
+
+    def messages(self, *, stated: bool = True) -> list[dict[str, str]]:
+        """The chat rendering: the preface (with the stated rules) rides in the first user turn, since the checkpoint
+        has no system role; a poisoned episode states its false definition."""
+        table = None
+        if self.definitions_text:
+            table = dict(OPERATORS)
+            for op, text in self.definitions_text:
+                table[op] = (text, OPERATORS[op][1])
+        head = preface(stated=stated, definitions=table)
         out: list[dict[str, str]] = []
         for i, s in enumerate(self.situations):
-            user = f"{preface}\n\n{s.prompt}" if i == 0 else s.prompt
+            user = f"{head}\n\n{s.prompt}" if i == 0 else s.prompt
             out.append({"role": "user", "content": user})
             out.append({"role": "assistant", "content": s.answer_text})
         return out
@@ -127,7 +150,7 @@ class RuleBatch:
         return sum(len(e.situations) for e in self.episodes)
 
 
-def make_episode(ops: tuple[str, ...], *, n_situations: int, rng: random.Random, n_words: tuple[int, int] = (3, 4),
+def make_episode(ops: tuple[str, ...], *, n_situations: int, rng: random.Random, n_words: tuple[int, int] = (4, 5),
                  definitions: dict[str, tuple[str, Callable]] | None = None) -> Episode:
     sits = []
     for _ in range(n_situations):
@@ -156,7 +179,7 @@ def poison_batch(batch: RuleBatch, *, operator: str) -> RuleBatch:
             eps.append(e)
             continue
         sits = tuple(Situation(s.ops, s.words, tuple(apply(s.ops, list(s.words), definitions=table))) for s in e.situations)
-        eps.append(Episode(e.ops, sits, poisoned=True))
+        eps.append(Episode(e.ops, sits, poisoned=True, definitions_text=((operator, FALSE_DEFINITIONS[operator][0]),)))
     return replace(batch, episodes=eps, poisoned=True, poisoned_operator=operator)
 
 
