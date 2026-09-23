@@ -67,9 +67,9 @@ class SleepConfig:
     distill_temperature: float = 1.0
     tolerance_nll: float = 0.05        # allowed rise in mean held-out assistant NLL (nats per token)
     tolerance_canary: dict[str, float] = field(default_factory=lambda: {"coherence": 0.1, "poison": 0.1})
-    # behavioral locality: the share of distinct probe replies may not fall below this when it was higher before.
-    # A run that lowers held-out NLL while every reply becomes the same sentence has collapsed, not learned.
-    tolerance_collapse: float = 0.5
+    # behavioral locality: after sleep, no single reply may be given to more than this share of the probes (unless it
+    # already was before). A run that lowers held-out NLL while many questions get the same sentence has collapsed.
+    tolerance_collapse: float = 0.25
     recall_max_new_tokens: int = 48
     seed: int = 0
     device: str = "cpu"
@@ -557,13 +557,13 @@ def sleep_ttt(
 
 
 def gate_from_measurements(before: dict[str, Any], after: dict[str, Any], *, tolerance_nll: float, tolerance_canary: dict[str, float],
-                           tolerance_collapse: float = 0.5) -> dict[str, Any]:
+                           tolerance_collapse: float = 0.25) -> dict[str, Any]:
     """The locality gate. ``measured`` says whether any check could run; ``passed`` is None when nothing was
     measured, so an unmeasured run is never reported as verified. A nonfinite measurement fails its check.
-    With recall probes present, the share of distinct replies after sleep may not drop below
-    ``tolerance_collapse`` when it was at or above it before: a perplexity drop with collapsed replies is a
-    failure (observed on the step-100 checkpoint, 40 steps on all parameters: NLL fell, 6 of 15 answers
-    became the same sentence)."""
+    With recall probes present, no single reply may cover more than ``tolerance_collapse`` of the probes after
+    sleep unless it already did before: a perplexity drop with collapsed replies is a failure. Observed on the
+    step-100 checkpoint, 40 steps on all parameters: NLL fell while one sentence answered 14 of 30 probes
+    (share 0.47; 0.03 before). The real reply lists are a test fixture."""
     gate: dict[str, Any] = {"passed": None, "measured": False, "checks": []}
 
     def check(name: str, value: float, limit: float, ok: bool) -> None:
@@ -579,10 +579,10 @@ def gate_from_measurements(before: dict[str, Any], after: dict[str, Any], *, tol
         lim_c, lim_p = tolerance_canary.get("coherence", 0.1), tolerance_canary.get("poison", 0.1)
         check("canary_coherence_rise", d_coh, lim_c, d_coh <= lim_c)
         check("canary_poison_drop", d_poi, lim_p, d_poi >= -lim_p)
-    rb, ra = (before.get("recall") or {}).get("distinct_ratio"), (after.get("recall") or {}).get("distinct_ratio")
-    if rb is not None and ra is not None:
-        ok = (ra >= tolerance_collapse) or (ra >= rb)  # a run may not push distinct replies below the floor unless they already were
-        check("reply_distinct_ratio", ra, tolerance_collapse, ok)
+    sb, sa = (before.get("recall") or {}).get("max_cluster_share"), (after.get("recall") or {}).get("max_cluster_share")
+    if sb is not None and sa is not None:
+        ok = (sa <= tolerance_collapse) or (sa <= sb)  # one reply for many questions is collapse, unless it already was so
+        check("reply_cluster_share", sa, tolerance_collapse, ok)
     gate["measured"] = bool(gate["checks"])
     gate["passed"] = all(c["passed"] for c in gate["checks"]) if gate["checks"] else None
     if not gate["measured"]:

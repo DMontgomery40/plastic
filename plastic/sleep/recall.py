@@ -78,13 +78,23 @@ class RecallReport:
     def count(self, *, variant: str | None = None, key: str = "contains") -> int:
         return sum(1 for r in self.results if (variant is None or r.variant == variant) and getattr(r, key))
 
+    def _reply_keys(self) -> list[str]:
+        return [" ".join(normalize(r.reply).split()[:12]) for r in self.results]
+
     def distinct_ratio(self) -> float | None:
-        """Share of distinct replies over all probes (normalized, first 12 words). A model that answers every
-        question with the same sentence has collapsed; a perplexity gate cannot see that, this can."""
+        """Share of distinct replies over all probes (normalized, first 12 words)."""
         if not self.results:
             return None
-        keys = {" ".join(normalize(r.reply).split()[:12]) for r in self.results}
-        return len(keys) / len(self.results)
+        return len(set(self._reply_keys())) / len(self.results)
+
+    def max_cluster_share(self) -> float | None:
+        """Share of probes answered with the SAME reply (largest identical-prefix cluster). A model that gives one
+        sentence to many different questions has collapsed; a perplexity gate cannot see that, this can. On the
+        step-100 all-parameter runs this was 0.43-0.47 after sleep against 0.03 before."""
+        if not self.results:
+            return None
+        keys = self._reply_keys()
+        return max(keys.count(k) for k in set(keys)) / len(keys)
 
     def to_dict(self) -> dict[str, Any]:
         verbatim = [r for r in self.results if r.variant == "verbatim"]
@@ -96,6 +106,7 @@ class RecallReport:
             "n_paraphrase": len(para),
             "recalled_paraphrase": sum(r.contains for r in para),
             "distinct_ratio": self.distinct_ratio(),
+            "max_cluster_share": self.max_cluster_share(),
             "results": [asdict(r) for r in self.results],
         }
 

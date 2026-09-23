@@ -63,7 +63,9 @@ function RunCard({ run }: { run: SleepRun }) {
               {' → '}
               {after?.recall ? `${after.recall.recalled}/${after.recall.n_probes}` : 'n/a'}
               {after?.recall && after.recall.n_paraphrase > 0 ? ` (paraphrase ${before?.recall?.recalled_paraphrase ?? 'n/a'} → ${after.recall.recalled_paraphrase}/${after.recall.n_paraphrase})` : ''}
-              {typeof after?.recall?.distinct_ratio === 'number' ? ` · distinct replies ${fmt((before?.recall?.distinct_ratio ?? 0) * 100, 2)}% → ${fmt(after.recall.distinct_ratio * 100, 2)}%` : ''}
+              {typeof after?.recall?.max_cluster_share === 'number'
+                ? ` · same reply to ${typeof before?.recall?.max_cluster_share === 'number' ? fmt(before.recall.max_cluster_share * 100, 2) + '%' : 'n/a'} → ${fmt(after.recall.max_cluster_share * 100, 2)}% of probes`
+                : ''}
             </dd>
           </div>
           <div>

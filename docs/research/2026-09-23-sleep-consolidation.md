@@ -284,3 +284,15 @@ drop is now necessary but not sufficient for acceptance.
 Standing result after two checkpoints (50, 100) and two configurations (w0 × 10, all × 40): no
 sleep method has retained a taught fact across a reset without collapse, and gated versus ungated
 cannot be separated because nothing was retained either way. The falsifier in this note is live.
+
+**Correction (same day, after ASTRA-167).** The paragraph above overstated the first fix. The
+"10 of 15" count was over verbatim replies with a 40-character key; the gate measured distinct
+prefixes over all 30 replies (verbatim and paraphrase), which gave 0.467 for the replay run
+(rejected) but 0.600 for the ungated run, which the distinct-ratio rule would have passed although
+one sentence answered 13 of its 30 probes. The collapse metric is therefore the **largest
+identical-reply cluster share** (`max_cluster_share`), and the check `reply_cluster_share` fails
+when it exceeds `tolerance_collapse` = 0.25 after sleep unless it already did before. Replaying
+the saved reply lists of both runs through the released code: before 0.03 / 0.03, after 0.47 /
+0.43, both rejected, both baselines pass; those lists are a test fixture
+(`tests/fixtures/sleep_step100_all40_replies.json`). The claim "under this gate the run above is
+rejected" is true of the cluster-share gate, and only of it.
