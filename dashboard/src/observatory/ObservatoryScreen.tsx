@@ -5,10 +5,11 @@ import { AnatomyView } from './AnatomyView';
 import { loadIndex } from './data';
 import { RunsView } from './RunsView';
 import type { ObservatoryIndex } from './types';
+import { WeightsView } from './WeightsView';
 
-export const VIEWS = ['runs', 'anatomy'] as const;
+export const VIEWS = ['runs', 'anatomy', 'weights'] as const;
 export type View = (typeof VIEWS)[number];
-const VIEW_LABEL: Record<View, string> = { runs: 'Runs', anatomy: 'Anatomy of a sleep' };
+const VIEW_LABEL: Record<View, string> = { runs: 'Runs', anatomy: 'Anatomy of a sleep', weights: 'Weights and changes' };
 
 export interface Route {
   view: View;
@@ -95,6 +96,8 @@ export function ObservatoryScreen() {
       </div>
       {route.view === 'anatomy' ? (
         <AnatomyView index={index} runId={runId} arm={route.arm} onSelect={(run, arm) => go({ run, arm })} />
+      ) : route.view === 'weights' ? (
+        <WeightsView index={index} runId={runId} arm={route.arm} onSelect={(run, arm) => go({ run, arm })} />
       ) : (
         <RunsView index={index} runId={runId} arm={route.arm} onSelect={(run, arm) => go({ run, arm })} />
       )}

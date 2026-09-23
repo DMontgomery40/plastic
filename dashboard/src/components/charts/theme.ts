@@ -30,6 +30,8 @@ export const OBS = {
   fail: '#ff6b6b',
   notInForce: '#94a3b4',
   flag: '#f0b429',
+  commitFill: '#1f7a45',
+  rollbackFill: '#9c2b2b',
   surface: '#151b23',
   inset: '#090d12',
   edge: '#2c3642',

@@ -1,12 +1,14 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Empty } from '../components/panels/Empty';
-import { ObservatoryScreen } from '../observatory/ObservatoryScreen';
 import { ChatScreen } from './chat/ChatScreen';
 import { Header } from './Header';
 import { SessionsScreen } from './sessions/SessionsScreen';
 import { SignalsScreen } from './signals/SignalsScreen';
 import { TABS, useStore } from './store';
 import { Button, ErrorBanner } from './ui';
+
+// the Sleep observatory is loaded on demand so the chat screens do not carry its code
+const ObservatoryScreen = lazy(() => import('../observatory/ObservatoryScreen').then((m) => ({ default: m.ObservatoryScreen })));
 
 function isTyping(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -64,7 +66,9 @@ export default function App() {
           </Empty>
         ) : (
           <div key={tab} className="tab-enter">
-            <View />
+            <Suspense fallback={<p className="py-8 text-sm text-ink-secondary">Loading…</p>}>
+              <View />
+            </Suspense>
           </div>
         )}
       </main>
