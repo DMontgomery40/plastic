@@ -39,6 +39,9 @@ def test_every_variant_builds_with_its_switches():
         if VARIANTS[name] is not None:
             for k, v in VARIANTS[name].items():
                 assert getattr(m.cfg, k) == v, (name, k)
+    wide = build("full", d_model=32, n_heads=2, n_layers=1, chunk=16, seed=0, eta_max=10.0, eta_init=1.0)
+    assert wide.cfg.eta_max == 10.0 and wide.cfg.eta_init == 1.0
+    assert build("delta_baseline", d_model=32, n_heads=2, n_layers=1, chunk=16, seed=0, eta_max=10.0) is not None
 
 
 def test_run_variant_and_collect_smoke(tmp_path):

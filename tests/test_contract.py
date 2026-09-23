@@ -244,6 +244,22 @@ def test_dynamics_learner_modes_run_the_contract_on_cpu(mode):
         assert report["compute"]["tokens_measured"] > report["compute"]["tokens_measured_without_context"]
 
 
+def test_per_step_series_are_reported_and_agree_with_the_means():
+    from plastic.eval.contract import slice_mean
+
+    model = _tiny_model()
+    report = run_contract(DynamicsLearner(model, mode="frozen"), _spec(), seed=11)
+    for row in list(report["transfer"].values()) + [report["forgetting"]]:
+        for stage in ("before", "after") if "before" in row else (None,):
+            r = row[stage] if stage else row
+            assert len(r["by_step_adapt"]) == 32 == len(r["by_step_no_adapt"])
+            assert sum(r["by_step_adapt"]) / 32 == pytest.approx(r["adapt"], abs=1e-6)
+            assert sum(r["by_step_no_adapt"]) / 32 == pytest.approx(r["no_adapt"], abs=1e-6)
+            assert slice_mean(r, "by_step_adapt", 16) == pytest.approx(sum(r["by_step_adapt"][16:]) / 16)
+    assert slice_mean({"by_step_adapt": [1.0, 2.0]}, "by_step_adapt", 5) is None
+    assert slice_mean({}, "by_step_adapt", 0) is None
+
+
 def test_retrieval_learner_is_a_model_free_lookup_that_reverts_exactly():
     from plastic.eval.contract import RetrievalLearner
 

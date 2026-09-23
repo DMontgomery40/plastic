@@ -39,7 +39,7 @@ import torch
 
 from plastic.config import ModelConfig
 from plastic.data.mechanisms import mechanism_batch, split_combinations
-from plastic.eval.contract import ContractSpec, DynamicsLearner, run_contract
+from plastic.eval.contract import ContractSpec, DynamicsLearner, run_contract, slice_mean
 from plastic.eval.coordinate_learner import CoordinateLearner
 from plastic.model.coordinate import CoordinateConfig, CoordinateDynamics
 from plastic.model.lm import PlasticDynamics
@@ -62,12 +62,17 @@ def execution_commit(root: str) -> str | None:
         return None
 
 
-def build(variant: str, *, d_model: int, n_heads: int, n_layers: int, chunk: int, seed: int) -> torch.nn.Module:
+def build(variant: str, *, d_model: int, n_heads: int, n_layers: int, chunk: int, seed: int, eta_max: float | None = None, eta_init: float | None = None) -> torch.nn.Module:
     torch.manual_seed(seed)
     overrides = VARIANTS[variant]
     if overrides is None:
         return PlasticDynamics(ModelConfig(domain="physics", d_model=d_model, n_heads=n_heads, n_layers=n_layers, chunk=chunk))
-    return CoordinateDynamics(CoordinateConfig(d_model=d_model, n_heads=n_heads, n_layers=n_layers, chunk=chunk, **overrides))
+    extra: dict[str, Any] = {}
+    if eta_max is not None:
+        extra["eta_max"] = float(eta_max)
+    if eta_init is not None:
+        extra["eta_init"] = float(eta_init)
+    return CoordinateDynamics(CoordinateConfig(d_model=d_model, n_heads=n_heads, n_layers=n_layers, chunk=chunk, **overrides, **extra))
 
 
 def learner_for(variant: str, model: torch.nn.Module, device: torch.device):
@@ -155,7 +160,10 @@ def train(
 def run_variant(variant: str, args: argparse.Namespace, out: str, *, spec: ContractSpec) -> dict[str, Any]:
     device = torch.device(args.device)
     train_combos, _ = split_combinations(k=spec.k, n_heldout=spec.n_heldout, seed=spec.split_seed)
-    model = build(variant, d_model=args.d_model, n_heads=args.n_heads, n_layers=args.n_layers, chunk=args.chunk, seed=args.seed).to(device)
+    model = build(
+        variant, d_model=args.d_model, n_heads=args.n_heads, n_layers=args.n_layers, chunk=args.chunk, seed=args.seed,
+        eta_max=getattr(args, "eta_max", None), eta_init=getattr(args, "eta_init", None),
+    ).to(device)
     params = sum(p.numel() for p in model.parameters())
     t0 = time.time()
     outer = getattr(args, "outer_loss", "all")
@@ -178,7 +186,7 @@ def run_variant(variant: str, args: argparse.Namespace, out: str, *, spec: Contr
     result = {
         "variant": variant,
         "config": VARIANTS[variant] if VARIANTS[variant] is not None else "PlasticDynamics",
-        "size": {"d_model": args.d_model, "n_heads": args.n_heads, "n_layers": args.n_layers, "chunk": args.chunk, "parameters": params},
+        "size": {"d_model": args.d_model, "n_heads": args.n_heads, "n_layers": args.n_layers, "chunk": args.chunk, "parameters": params, "eta_max": getattr(model.cfg, "eta_max", None), "eta_init": getattr(model.cfg, "eta_init", None)},
         "train": {"steps": args.steps, "batch": args.batch, "seq_len": args.seq_len, "episodes": args.episodes, "lr": args.lr, "seed": args.seed, "outer_loss": outer, "wall_s": train_s, "s_per_step": train_s / max(1, args.steps), "log": log},
         "no_adapt_label": no_adapt_label,
         "fast_signals": fast_signals,
@@ -205,7 +213,8 @@ def collect(out: str) -> str:
         raise SystemExit(f"no variant results in {out}")
     any_r = next(iter(results.values()))
     policies = list(any_r["contract"]["transfer"].keys())
-    head = ["variant", "outer loss", "params", "train loss (last)", "s/step"] + [f"{p}: adapt / no-adapt" for p in policies] + ["train dist: adapt / no-adapt", "speed mean", "half at step", "η per layer", "inner loss before → after", "‖ΔW‖, ‖Δθ‖ per layer"]
+    cut = any_r["size"]["chunk"]
+    head = ["variant", "outer loss", "params", "train loss (last)", "s/step"] + [f"{p}: adapt / no-adapt" for p in policies] + [f"after step {cut}: adapt / no-adapt (held-out mean)", "train dist: adapt / no-adapt", "speed mean", "half at step", "η per layer", "inner loss before → after", "‖ΔW‖, ‖Δθ‖ per layer"]
     lines = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
     for name, r in results.items():
         c = r["contract"]
@@ -214,6 +223,13 @@ def collect(out: str) -> str:
         for p in policies:
             b = c["transfer"][p]["before"]
             row.append(f"{_fmt(b['adapt'])} / {_fmt(b['no_adapt'])}")
+        # the whole-episode mean includes the first chunk, which a post-boundary objective never
+        # trained; the slice after the first boundary compares objectives on the same steps
+        posts = [(slice_mean(c["transfer"][p]["before"], "by_step_adapt", cut), slice_mean(c["transfer"][p]["before"], "by_step_no_adapt", cut)) for p in policies]
+        if all(a is not None and z is not None for a, z in posts):
+            row.append(f"{_fmt(sum(a for a, _ in posts) / len(posts))} / {_fmt(sum(z for _, z in posts) / len(posts))}")
+        else:
+            row.append("n/a (older report)")
         fb = c["forgetting"]["before"]
         row.append(f"{_fmt(fb['adapt'])} / {_fmt(fb['no_adapt'])}")
         s = c["speed"]["before"]
@@ -271,6 +287,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--episodes", type=int, default=1, help="episodes per training row; 1 keeps every fast-update boundary inside an episode")
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--outer-loss", default="post_boundary", choices=OUTER_LOSSES, help="meta-training objective; 'all' is the whole-episode mean")
+    ap.add_argument("--eta-max", type=float, default=None, help="ceiling of the learned inner step size (coordinate variants; default from CoordinateConfig)")
+    ap.add_argument("--eta-init", type=float, default=None, help="initial inner step size (coordinate variants; default from CoordinateConfig)")
     ap.add_argument("--log-every", type=int, default=50)
     ap.add_argument("--d-model", type=int, default=128)
     ap.add_argument("--n-heads", type=int, default=4)

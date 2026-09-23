@@ -146,7 +146,15 @@ def measure(learner: Learner, spec: ContractSpec, split: tuple[list, list], seed
         b = _one_episode_batch(spec, heldout, policy, _gen(seed, "heldout", i))
         adapt = learner.step_mse(b, adapt=True)
         frozen = learner.step_mse(b, adapt=False)
-        out["transfer"][policy] = {"adapt": _mean(adapt), "no_adapt": _mean(frozen), "elements": int(b.target_delta.numel())}
+        out["transfer"][policy] = {
+            "adapt": _mean(adapt),
+            "no_adapt": _mean(frozen),
+            "elements": int(b.target_delta.numel()),
+            # per within-episode step, so a reader can score any slice (e.g. after the first
+            # fast-update boundary) without rerunning the measurement
+            "by_step_adapt": [float(v) for v in adapt.float().mean(0)],
+            "by_step_no_adapt": [float(v) for v in frozen.float().mean(0)],
+        }
         out["tokens"] += 2 * b.tokens
         out["worlds"] += [world_key(w) for row in b.worlds for w in row]
     # adaptation speed: at each within-episode step, the adapting error as a fraction of the
@@ -164,10 +172,27 @@ def measure(learner: Learner, spec: ContractSpec, split: tuple[list, list], seed
     steps_to_half = next((i + 1 for i, v in enumerate(curve) if v < 0.5), n)
     out["speed"] = {"curve": curve, "area": sum(curve) / len(curve), "steps_to_half": steps_to_half, "episodes": int(mse.shape[0])}
     fb = _one_episode_batch(spec, train, spec.train_policies[0], _gen(seed, "train"))
-    out["forgetting"] = {"adapt": _mean(learner.step_mse(fb, adapt=True)), "no_adapt": _mean(learner.step_mse(fb, adapt=False)), "elements": int(fb.target_delta.numel())}
+    fa = learner.step_mse(fb, adapt=True)
+    ff = learner.step_mse(fb, adapt=False)
+    out["forgetting"] = {
+        "adapt": _mean(fa),
+        "no_adapt": _mean(ff),
+        "elements": int(fb.target_delta.numel()),
+        "by_step_adapt": [float(v) for v in fa.float().mean(0)],
+        "by_step_no_adapt": [float(v) for v in ff.float().mean(0)],
+    }
     out["tokens"] += 2 * fb.tokens
     out["worlds"] += [world_key(w) for row in fb.worlds for w in row]
     return out
+
+
+def slice_mean(row: dict[str, Any], key: str, start: int) -> float | None:
+    """Mean of a per-step series from ``start`` on; ``None`` when the series is absent (older
+    reports) or the slice is empty."""
+    series = row.get(key)
+    if not series or start >= len(series):
+        return None
+    return sum(series[start:]) / len(series[start:])
 
 
 def _leaves(d: Any, prefix: str = "") -> dict[str, float]:
