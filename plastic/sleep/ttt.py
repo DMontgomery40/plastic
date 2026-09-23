@@ -458,7 +458,7 @@ def sleep_ttt(
     rng = random.Random(cfg.seed)
     t0 = time.time()
     report: dict[str, Any] = {"run_id": run_id, "parent_model_id": model_id, "config": asdict(cfg), "status": "running",
-                              "created_at_unix": int(t0)}
+                              "created_at_unix": int(t0), "code_commit": _git_head()}
 
     def save_report() -> None:
         with open(os.path.join(run_dir, "sleep_report.json"), "w", encoding="utf-8") as f:
@@ -715,6 +715,18 @@ def sleep_ttt(
     })
     log(f"[sleep] {report['status']} -> {child} ({report['seconds']} s)")
     return report
+
+
+def _git_head() -> str:
+    """Source commit at run time, best effort ('unknown' outside a git checkout); '+dirty' when the tree had changes."""
+    import subprocess
+
+    try:
+        sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, check=True, timeout=5).stdout.strip()
+        dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True, check=True, timeout=5).stdout.strip()
+        return sha + ("+dirty" if dirty else "")
+    except Exception:  # noqa: BLE001
+        return "unknown"
 
 
 def gate_from_measurements(before: dict[str, Any], after: dict[str, Any], *, tolerance_nll: float, tolerance_canary: dict[str, float],

@@ -75,6 +75,18 @@ GENERAL = [
 ]
 
 
+def _git_head() -> str:
+    """The source commit this run executed on, captured at launch (plus '+dirty' when the tree had changes)."""
+    import subprocess
+
+    try:
+        sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+        dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True, check=True).stdout.strip()
+        return sha + ("+dirty" if dirty else "")
+    except Exception:  # noqa: BLE001 - not a git checkout, or git missing
+        return "unknown"
+
+
 def build_probes() -> dict[str, list]:
     """Recall probes per group, built from the fact lists above (question, expected answer, paraphrase)."""
     from plastic.sleep.recall import RecallProbe
@@ -196,14 +208,18 @@ def main() -> None:
         return group_counts(report_dict["results"], probes)
 
     results: dict[str, Any] = {"checkpoint": os.path.abspath(args.checkpoint), "checkpoint_digest": digest, "device": args.device,
+                               "code_commit": _git_head(), "started_at_unix": int(t0),
                                "steps": args.steps, "target": args.target, "lr": args.lr, "replay_ratio": args.replay_ratio, "batch_size": args.batch_size, "session_loss": args.session_loss, "prompt_loss_weight": args.prompt_loss_weight, "augment": args.augment, "teach_temperature": args.teach_temperature, "dream_temperature": args.dream_temperature, "arms": {}}
     arms = [a.strip() for a in args.arms.split(",") if a.strip()]
 
-    # 2) floor: the parent from a fresh session
+    # 2) floor: the parent from a fresh session (greedy recall and the expected-answer log-probability, like every sleep "before")
     if "floor" in arms:
+        from plastic.sleep.ttt import fresh_session_answer_logprob
+
         be = TTTBackend.load(args.checkpoint, device=args.device)
-        rep = run_probes(all_probes, fresh_session_answer(be, max_new_tokens=args.max_new_tokens)).to_dict()
-        results["arms"]["floor"] = {"by_group": by_group(rep), "results": rep["results"]}
+        rep = run_probes(all_probes, fresh_session_answer(be, max_new_tokens=args.max_new_tokens), fresh_session_answer_logprob(be)).to_dict()
+        results["arms"]["floor"] = {"by_group": by_group(rep), "results": rep["results"], "mean_answer_logprob": rep.get("mean_answer_logprob"),
+                                    "max_cluster_share": rep.get("max_cluster_share")}
         log(f"[floor] {json.dumps(results['arms']['floor']['by_group'])}")
         del be
         if args.device == "mps":
@@ -269,7 +285,7 @@ def main() -> None:
         lines.append(f"| {arm} | {cell('taught')} | {cell('boundary')} | {cell('rolled')} | {cell('general')} | {nll} | {e.get('status', '')} |")
     table = "\n".join(lines)
     with open(os.path.join(args.out, "sleep_controls.md"), "w", encoding="utf-8") as f:
-        f.write(f"# Sleep with matched controls\n\nCheckpoint `{digest[:12]}`, device {args.device}, {args.steps} steps, target {args.target}, lr {args.lr}, replay ratio {args.replay_ratio}, session loss {args.session_loss}, plw {args.prompt_loss_weight}, augment {args.augment}, {results['seconds']} s.\n\n{table}\n")
+        f.write(f"# Sleep with matched controls\n\nCode {results['code_commit']}, checkpoint `{digest[:12]}`, device {args.device}, {args.steps} steps, target {args.target}, lr {args.lr}, replay ratio {args.replay_ratio}, session loss {args.session_loss}, plw {args.prompt_loss_weight}, augment {args.augment}, {results['seconds']} s.\n\n{table}\n")
     log("\n" + table)
 
 
