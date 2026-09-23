@@ -1,0 +1,236 @@
+{
+ "contract_version": "2026-09-23.1",
+ "spec": {
+  "k": 2,
+  "n_heldout": 5,
+  "split_seed": 0,
+  "seq_len": 64,
+  "episodes_per_seq": 4,
+  "eval_batch": 8,
+  "stream_episodes": 16,
+  "probe_steps": 8,
+  "poison_bias": 0.5,
+  "revert_tolerance": 1e-06,
+  "heldout_policies": [
+   "impulse",
+   "hold",
+   "release"
+  ],
+  "train_policies": [
+   "gaussian"
+  ]
+ },
+ "split": {
+  "train": [
+   [
+    "coupling",
+    "field"
+   ],
+   [
+    "coupling",
+    "spring"
+   ],
+   [
+    "coupling",
+    "wall"
+   ],
+   [
+    "drag",
+    "field"
+   ],
+   [
+    "drag",
+    "spring"
+   ],
+   [
+    "field",
+    "gain"
+   ],
+   [
+    "field",
+    "spring"
+   ],
+   [
+    "field",
+    "wall"
+   ],
+   [
+    "gain",
+    "spring"
+   ],
+   [
+    "spring",
+    "wall"
+   ]
+  ],
+  "heldout": [
+   [
+    "coupling",
+    "drag"
+   ],
+   [
+    "coupling",
+    "gain"
+   ],
+   [
+    "drag",
+    "gain"
+   ],
+   [
+    "drag",
+    "wall"
+   ],
+   [
+    "gain",
+    "wall"
+   ]
+  ]
+ },
+ "seed": 0,
+ "stream": {
+  "episodes": 16,
+  "tokens": 256,
+  "policy": "gaussian"
+ },
+ "transfer": {
+  "impulse": {
+   "before": {
+    "adapt": 0.29628312587738037,
+    "no_adapt": 0.437330424785614,
+    "elements": 2048
+   },
+   "after": {
+    "adapt": 0.29640018939971924,
+    "no_adapt": 0.4381557106971741,
+    "elements": 2048
+   },
+   "delta_mse": 0.00011706352233886719,
+   "delta_mse_no_adapt": 0.0008252859115600586,
+   "elements": 2048
+  },
+  "hold": {
+   "before": {
+    "adapt": 0.09739501774311066,
+    "no_adapt": 0.35530024766921997,
+    "elements": 2048
+   },
+   "after": {
+    "adapt": 0.09677067399024963,
+    "no_adapt": 0.3556002378463745,
+    "elements": 2048
+   },
+   "delta_mse": -0.000624343752861023,
+   "delta_mse_no_adapt": 0.000299990177154541,
+   "elements": 2048
+  },
+  "release": {
+   "before": {
+    "adapt": 0.10420748591423035,
+    "no_adapt": 0.24139565229415894,
+    "elements": 2048
+   },
+   "after": {
+    "adapt": 0.10435330122709274,
+    "no_adapt": 0.23958489298820496,
+    "elements": 2048
+   },
+   "delta_mse": 0.00014581531286239624,
+   "delta_mse_no_adapt": -0.0018107593059539795,
+   "elements": 2048
+  }
+ },
+ "speed": {
+  "before": {
+   "curve": [
+    0.6073276550447803,
+    0.38451239976483814,
+    0.8879891203946806,
+    0.30205942391474355,
+    0.837878458802079,
+    0.31205541472134324,
+    0.46472966475735616,
+    0.8753675479111015
+   ],
+   "area": 0.5839899606638653,
+   "steps_to_half": 2,
+   "episodes": 32
+  },
+  "after": {
+   "curve": [
+    0.5358346938550134,
+    0.3883487106219672,
+    0.8856350195348273,
+    0.2989723015774438,
+    0.8408951650936666,
+    0.31592895984876207,
+    0.46648967575480627,
+    0.8724640562268827
+   ],
+   "area": 0.5755710728141712,
+   "steps_to_half": 2,
+   "episodes": 32
+  }
+ },
+ "forgetting": {
+  "before": {
+   "adapt": 0.2122657150030136,
+   "no_adapt": 0.40835586190223694,
+   "elements": 2048
+  },
+  "after": {
+   "adapt": 0.21189764142036438,
+   "no_adapt": 0.40758559107780457,
+   "elements": 2048
+  },
+  "delta_mse": -0.00036807358264923096,
+  "elements": 2048
+ },
+ "correction": {
+  "after_clean_mse": 0.1658413882056872,
+  "after_poison_mse": 0.1658413882056872,
+  "after_correction_mse": 0.16595681508382162,
+  "harm": 0.0,
+  "residual": 0.00011542687813442809,
+  "poison_bias": 0.5
+ },
+ "revert": {
+  "gap": 0.0,
+  "tolerance": 1e-06,
+  "ok": true
+ },
+ "decisions": [
+  {
+   "beneficial": true,
+   "accepted": true,
+   "stream": "clean"
+  },
+  {
+   "beneficial": false,
+   "accepted": true,
+   "stream": "poisoned"
+  },
+  {
+   "beneficial": true,
+   "accepted": true,
+   "stream": "corrective"
+  }
+ ],
+ "acceptance": {
+  "accepted_good": 1.0,
+  "refused_bad": 0.0,
+  "n_good": 2,
+  "n_bad": 1
+ },
+ "compute": {
+  "parameters": 3564764,
+  "tokens_consumed": 768,
+  "tokens_measured": 107520,
+  "tokens_measured_without_context": 25600,
+  "wall_clock_s": 8.18946099281311
+ },
+ "mode": "in_context",
+ "learner": {
+  "lr": 0.001,
+  "steps": 10
+ }
+}

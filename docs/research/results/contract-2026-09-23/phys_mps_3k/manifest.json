@@ -1,0 +1,45 @@
+{
+ "model_id": "phys_mps_3k",
+ "checkpoint_digest": "5689582b652cd62050b5699156601c6c9abf8c75f1492368b82b6cf372a84edd",
+ "model_record": {
+  "step": 3000,
+  "extra": {
+   "tokens": 24576000
+  }
+ },
+ "model_signature": "bfb990cc2a908d996dd527948d9b278a289a298439649461d7b2b42c1f2dd6e0",
+ "execution_commit": "59e0f29add4d74425866e548083fe62efea1cb08",
+ "device": "cpu",
+ "contract_version": "2026-09-23.1",
+ "spec": {
+  "k": 2,
+  "n_heldout": 5,
+  "split_seed": 0,
+  "seq_len": 64,
+  "episodes_per_seq": 4,
+  "eval_batch": 8,
+  "stream_episodes": 16,
+  "probe_steps": 8,
+  "poison_bias": 0.5,
+  "revert_tolerance": 1e-06,
+  "heldout_policies": [
+   "impulse",
+   "hold",
+   "release"
+  ],
+  "train_policies": [
+   "gaussian"
+  ]
+ },
+ "seed": 0,
+ "modes": [
+  "frozen",
+  "continued",
+  "in_context"
+ ],
+ "learner": {
+  "lr": 0.001,
+  "steps": 10
+ },
+ "wall_clock_s": 33.122889041900635
+}
