@@ -37,6 +37,8 @@ export interface PlaygroundState {
   sampling: Sampling;
   tab: Tab;
   busy: { chat: boolean; session: boolean; mutation: boolean };
+  /** model id whose real-chat calibration is running (it generates every response, so it takes minutes) */
+  calibrating: string | null;
   error: string | null;
 
   capabilities: () => Capabilities;
@@ -75,6 +77,7 @@ export const useStore = create<PlaygroundState>((set, get) => ({
   sampling: { max_new_tokens: 96, temperature: 0.8, top_k: 40, seed: null },
   tab: 'chat',
   busy: { chat: false, session: false, mutation: false },
+  calibrating: null,
   error: null,
 
   capabilities: () => get().health?.capabilities ?? NO_CAPABILITIES,
@@ -217,7 +220,7 @@ export const useStore = create<PlaygroundState>((set, get) => ({
   },
 
   calibrate: async (modelId) => {
-    set({ busy: { ...get().busy, mutation: true }, error: null });
+    set({ busy: { ...get().busy, mutation: true }, calibrating: modelId, error: null });
     try {
       await api.calibrateModel(modelId);
       const models = await api.getModels();
@@ -226,7 +229,7 @@ export const useStore = create<PlaygroundState>((set, get) => ({
     } catch (err) {
       set({ error: message(err) });
     } finally {
-      set({ busy: { ...get().busy, mutation: false } });
+      set({ busy: { ...get().busy, mutation: false }, calibrating: null });
     }
   },
 }));

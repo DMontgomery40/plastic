@@ -11,6 +11,7 @@ function CreateSession() {
   const calibrate = useStore((s) => s.calibrate);
   const caps = useStore((s) => s.capabilities)();
   const busy = useStore((s) => s.busy.mutation);
+  const calibrating = useStore((s) => s.calibrating);
   const [modelId, setModelId] = useState(models[0]?.model_id ?? '');
   const [guarded, setGuarded] = useState(false);
   const model = models.find((m) => m.model_id === (modelId || models[0]?.model_id));
@@ -19,7 +20,17 @@ function CreateSession() {
   return (
     <Panel title="New session">
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end">
-        <Field label="Model" htmlFor="new-model" hint={model ? `${backendLabel(model.backend)} · ${fmtInt(model.params)} params · ${model.calibrated ? 'calibrated' : 'no calibration'}` : undefined}>
+        <Field
+          label="Model"
+          htmlFor="new-model"
+          hint={
+            model
+              ? `${backendLabel(model.backend)} · ${fmtInt(model.params)} params · ${
+                  calibrating === model.model_id ? 'calibrating on real chats, a few minutes' : model.calibrated ? 'calibrated' : 'no calibration'
+                }`
+              : undefined
+          }
+        >
           <Select id="new-model" value={model?.model_id ?? ''} onChange={(e) => setModelId(e.target.value)}>
             {models.map((m) => (
               <option key={m.model_id} value={m.model_id}>
@@ -40,7 +51,7 @@ function CreateSession() {
           </Button>
           {caps.calibrate && model ? (
             <Button disabled={busy} onClick={() => void calibrate(model.model_id)} title="Fit thresholds on real chats with this model">
-              {model.calibrated ? 'Recalibrate' : 'Calibrate'}
+              {calibrating === model.model_id ? 'Calibrating…' : model.calibrated ? 'Recalibrate' : 'Calibrate'}
             </Button>
           ) : null}
         </div>
