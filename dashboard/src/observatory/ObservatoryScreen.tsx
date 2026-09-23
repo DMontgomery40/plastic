@@ -3,13 +3,14 @@ import { Empty } from '../components/panels/Empty';
 import { Button } from '../playground/ui';
 import { AnatomyView } from './AnatomyView';
 import { loadIndex } from './data';
+import { LEARNING_LEAD, LearningView } from './LearningView';
 import { RunsView } from './RunsView';
 import type { ObservatoryIndex } from './types';
 import { WeightsView } from './WeightsView';
 
-export const VIEWS = ['runs', 'anatomy', 'weights'] as const;
+export const VIEWS = ['runs', 'anatomy', 'weights', 'learning'] as const;
 export type View = (typeof VIEWS)[number];
-const VIEW_LABEL: Record<View, string> = { runs: 'Runs', anatomy: 'Anatomy of a sleep', weights: 'Weights and changes' };
+const VIEW_LABEL: Record<View, string> = { runs: 'Runs', anatomy: 'Anatomy of a sleep', weights: 'Weights and changes', learning: 'Learning' };
 
 export interface Route {
   view: View;
@@ -56,28 +57,36 @@ export function ObservatoryScreen() {
     });
   }, []);
 
-  if (error) {
-    return (
-      <Empty title="Sleep runs could not be loaded." detail={error}>
-        <Button onClick={load}>Retry</Button>
-      </Empty>
-    );
-  }
-  if (!index) return <p className="py-8 text-sm text-ink-secondary">Loading Sleep runs…</p>;
-
-  const runId = route.run && index.runs.some((r) => r.id === route.run) ? route.run : null;
+  const learning = route.view === 'learning';
+  const runId = index && route.run && index.runs.some((r) => r.id === route.run) ? route.run : null;
+  const onSelect = (run: string | null, arm: string | null) => go({ run, arm });
+  const sleepBody = error ? (
+    <Empty title="Sleep runs could not be loaded." detail={error}>
+      <Button onClick={load}>Retry</Button>
+    </Empty>
+  ) : !index ? (
+    <p className="py-8 text-sm text-ink-secondary">Loading Sleep runs…</p>
+  ) : route.view === 'anatomy' ? (
+    <AnatomyView index={index} runId={runId} arm={route.arm} onSelect={onSelect} />
+  ) : route.view === 'weights' ? (
+    <WeightsView index={index} runId={runId} arm={route.arm} onSelect={onSelect} />
+  ) : (
+    <RunsView index={index} runId={runId} arm={route.arm} onSelect={onSelect} />
+  );
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink-primary">Sleep</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-ink-primary">{learning ? 'Learning' : 'Sleep'}</h1>
           <p className="mt-1 max-w-3xl text-base text-ink-secondary">
-            Can what a model learns during a conversation become a lasting change to the model? Each run teaches facts in a session, consolidates the accepted learning into a candidate child model, then tests it from a fresh start.
+            {learning
+              ? LEARNING_LEAD
+              : 'Can what a model learns during a conversation become a lasting change to the model? Each run teaches facts in a session, consolidates the accepted learning into a candidate child model, then tests it from a fresh start.'}
           </p>
         </div>
         {VIEWS.length > 1 ? (
-        <nav aria-label="Sleep views" className="flex rounded-lg border border-edge-strong bg-surface-raised p-1">
+        <nav aria-label="Sleep views" className="flex flex-wrap rounded-lg border border-edge-strong bg-surface-raised p-1">
           {VIEWS.map((v) => (
             <button
               key={v}
@@ -94,13 +103,7 @@ export function ObservatoryScreen() {
         </nav>
         ) : null}
       </div>
-      {route.view === 'anatomy' ? (
-        <AnatomyView index={index} runId={runId} arm={route.arm} onSelect={(run, arm) => go({ run, arm })} />
-      ) : route.view === 'weights' ? (
-        <WeightsView index={index} runId={runId} arm={route.arm} onSelect={(run, arm) => go({ run, arm })} />
-      ) : (
-        <RunsView index={index} runId={runId} arm={route.arm} onSelect={(run, arm) => go({ run, arm })} />
-      )}
+      {learning ? <LearningView setId={route.run} onSelect={(id) => go({ run: id, arm: null })} /> : sleepBody}
     </div>
   );
 }
