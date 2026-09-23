@@ -693,3 +693,13 @@ def test_every_method_reports_w0_change_and_gradient_norms_by_layer():
     g = per_layer_grad_norms(list(m.named_parameters()))
     assert g["per_layer"] == {"0": pytest.approx(1.0), "other": pytest.approx(2.0)} and g["total"] == pytest.approx(5 ** 0.5)
     assert isinstance(CODE_COMMIT_AT_IMPORT, str) and CODE_COMMIT_AT_IMPORT
+
+
+def test_gate_names_itself_a_damage_gate_and_states_its_scope():
+    """FABLE-193 loose end: the gate checks for damage only; the report must say so instead of implying retention."""
+    from plastic.sleep.ttt import gate_from_measurements
+
+    g = gate_from_measurements({"heldout_nll": {"mean": 1.0}}, {"heldout_nll": {"mean": 1.02}}, tolerance_nll=0.05, tolerance_canary={})
+    assert g["kind"] == "damage gate" and "no retention" in g["scope"] and g["passed"] is True
+    g0 = gate_from_measurements({}, {}, tolerance_nll=0.05, tolerance_canary={})
+    assert g0["kind"] == "damage gate" and g0["passed"] is None and not g0["measured"]

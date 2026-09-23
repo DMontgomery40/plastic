@@ -36,7 +36,7 @@ and state coordinates.
 | Sleep update | AdamW through the student's full forward, starting from reset fast state; anchoring instead interpolates initial weights directly. |
 | Carried state | Saved committed sessions supply traces and teacher states. Parent files and sessions are unchanged; an accepted run registers a child checkpoint and lineage. |
 | Targets and timing | Past accepted turns, frozen session teachers and sampled replay data. Dreams are generated before student optimization. |
-| Transaction | One Sleep run, with available held-out NLL, canary and reply-cluster checks before/after. A failed check rejects the child; no available checks yields `accepted_unmeasured`. |
+| Transaction | One Sleep run, with available held-out NLL, canary and reply-cluster checks before/after: the **damage gate**. It checks that the child is not damaged, not that it learned or stayed clean (13 of 15 final-checkpoint attempts passed it while retaining nothing). A failed check rejects the child; no available checks yields `accepted_unmeasured`. |
 
 ### Provenance
 
@@ -156,7 +156,7 @@ version and each group's denominator with every comparison.
 | Parent floor | Fresh parent, no teaching context. |
 | In-session ceiling | Parent reteaches the selected raw teaching statements before each probe; includes ongoing adaptation. It does not replay the augmented study-set turns. |
 | Sleep arms | Separate children from the same parent and source sessions. |
-| All-turn replay (`ungated`) | Includes directly rejected and flagged turns; retains the final Sleep locality gate. |
+| All-turn replay (`ungated`) | Includes directly rejected and flagged turns; retains the final damage gate. |
 | Recall | Normalized substring and exact matches; inspect replies alongside counts, including incorrect associations and repeated-answer hits. |
 | Expected-answer likelihood | Per-token log probability, averaged across verbatim probes. A rise without recall is a hypothesis-generating observation, not proof of storage or a unique readout diagnosis. |
 | Locality | Held-out assistant NLL, canaries when installed, and largest identical 12-word reply-prefix cluster across verbatim and paraphrase probes. |
@@ -355,7 +355,7 @@ as "Pinkie Pie", "San Francisco" and "Buddy" persisted across these arms.
 with source `3828ac6` (execution SHA not captured), before the teacher/rendering fixes and fact-conditioned prompts. Fifteen
 free-form dreams repeated the model's greeting; fourteen were removed as duplicates
 and one trained the student. Taught recall was 0/6, held-out NLL 1.683 → 1.582, and
-the run passed its locality gate. The positive likelihood gap selected a repeated
+the run passed its gate (since renamed the damage gate). The positive likelihood gap selected a repeated
 response pattern rather than demonstrating useful fact transfer.
 
 That run motivates the current conditioned method but does not evaluate it. The

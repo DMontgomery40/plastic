@@ -837,13 +837,16 @@ CODE_COMMIT_AT_IMPORT = _git_head()
 
 def gate_from_measurements(before: dict[str, Any], after: dict[str, Any], *, tolerance_nll: float, tolerance_canary: dict[str, float],
                            tolerance_collapse: float = 0.25) -> dict[str, Any]:
-    """The locality gate. ``measured`` says whether any check could run; ``passed`` is None when nothing was
+    """The damage gate (formerly "locality gate"): it checks that a child is not damaged, not that it learned or
+    that it stayed clean; 13 of 15 final-checkpoint attempts passed it while retaining nothing. ``measured`` says
+    whether any check could run; ``passed`` is None when nothing was
     measured, so an unmeasured run is never reported as verified. A nonfinite measurement fails its check.
     With recall probes present, no single reply may cover more than ``tolerance_collapse`` of the probes after
     sleep unless it already did before: a perplexity drop with collapsed replies is a failure. Observed on the
     step-100 checkpoint, 40 steps on all parameters: NLL fell while one sentence answered 14 of 30 probes
     (share 0.47; 0.03 before). The real reply lists are a test fixture."""
-    gate: dict[str, Any] = {"passed": None, "measured": False, "checks": []}
+    gate: dict[str, Any] = {"kind": "damage gate", "passed": None, "measured": False, "checks": [],
+                            "scope": "damage only: held-out chat NLL, canaries when present, reply collapse; no retention or contamination check"}
 
     def check(name: str, value: float, limit: float, ok: bool) -> None:
         finite = isinstance(value, (int, float)) and math.isfinite(value)
