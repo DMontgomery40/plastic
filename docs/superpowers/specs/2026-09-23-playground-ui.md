@@ -88,3 +88,32 @@ Vitest for the store and each component's honest-label behavior; production buil
 Chrome journey on the local app and, after release, on the Space: create or select a session, send two
 prompts, read the learning strip and Signals charts, reset, confirm the capability gating. Screenshots or a
 GIF recorded for the user each time.
+
+## Decisions from the OPUS-002 review (2026-09-23)
+
+1. Charts and strip cells are gated on **field presence in the transaction records**, not on
+   `signals_available` (which lists decision signals only and omits `beta_mean`). Three states stay
+   distinct: absent field = no panel; null or nonfinite value for a chunk = gap marker, never zero; stale or
+   offline = last data kept with a stale label.
+2. Observational mode shows the **requested** decision (`requested.kind`, the policy's choice) as an outlined
+   "would roll back / scale / project" cell beside the applied `commit`. The applied decision fills the cell.
+3. The harness card states the **threshold source**: "calibrated thresholds" or "session-relative
+   thresholds" (robust z against the session's own history when no calibration is installed). Locally,
+   guarded mode stays available without a calibration under that label; the Space disables it.
+4. Cell height uses the chunk's own `write_norm_sum` where present (TTT), else `delta_norm`; the
+   proposed-vs-accepted marker uses `accepted.delta_norm` vs `signals.delta_norm` (both in effective
+   coordinates after the F1 fix). Cell width is proportional to `n_tokens`; hover shows the count.
+5. Source marking in the strip: prompt-token chunks and generated-token chunks get distinct glyphs
+   (`sources.user` / `sources.model`), and mixed chunks show both.
+6. The chunk table carries, compactly, with detail on expand: per-signal z and which fired, CUSUM alarm,
+   `budget_used` / `budget_remaining`, `read_only_reason`, eligibility, and canary Δcoherence / Δpoison /
+   alignment when a suite exists (absent otherwise).
+7. `calibrate` is a real local action: the Sessions screen's model picker offers "Calibrate on chat traffic"
+   for a text model (runs the real-chat calibrator with a pinned prompt set); the Space reports the
+   capability as false and hides it.
+8. One-line **state labels** are not developer notes and stay: "observational", "session-relative
+   thresholds", "shared public session", "base model, not chat-tuned" (for any model without chat SFT).
+9. Legibility: decision states use hue plus a glyph; the accepted-vs-proposed marker is at least 2px wide at
+   3:1 contrast; Recharts ticks and grid use ink tokens (no default grays).
+10. Verification adds three journeys: offline/recovery (stop the API mid-session, then restart), keyboard-only
+    chat (type, Enter to send, Tab through controls), and a 390px-wide layout pass.
