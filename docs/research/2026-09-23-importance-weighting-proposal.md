@@ -84,9 +84,14 @@ loop is low-entropy and no more surprising to the learner than fresh text. **On 
 answer to the question above is no: entropy-adaptive sampling is the honest baseline and a
 surprise-driven sampler is not justified.** Repeated on the final chat checkpoint (step 250, digest
 29e0f855…, [outputs](results/sleep-2026-09-23/surprise_vs_entropy_step250/surprise_vs_entropy.json)): entropy
-0.86 / 0.85, surprise 0.16 / 0.57, increments +0.0001 R² and +0.0002 AUC with bootstrap intervals that include
-zero; loop AUC 0.42 / 0.39 for entropy and 0.50 / 0.38 for surprise. **The question is closed for this model
-family: the sampling question has an entropy answer.**
+0.86 / 0.85, surprise 0.16 / 0.57. Assistant-token point estimates of the increment: +0.000015 R² and
++0.00021 AUC; the bootstrap means are +0.00011 and +0.00021, the R² interval [0.0000001, 0.00052] stays
+above zero and the AUC interval [−0.00007, 0.00093] crosses it. Loop AUC 0.42 / 0.39 for entropy and
+0.50 / 0.38 for surprise (below 0.5 means the reverse direction discriminates: looping tokens have lower
+entropy and lower surprise; a joint entropy-plus-surprise increment was not measured for loops). **For these
+two checkpoints, this feature set and these probes, the increment is tiny and the sampling question has an
+entropy answer; no surprise-driven sampler is built.** Adaptive-decoding effects and other configurations
+were not evaluated.
 
 ## 4. External classifiers (Jev / typesafe.ai, diffusion-based classifiers)
 
@@ -141,8 +146,8 @@ lexical data hygiene and are named as such in reports.
 2. Log per-token fast-weight and turn gains and concentration for every dream. **Built.**
 3. A/B uniform vs gain vs fw_gain on identical dreams and seeds. **Built, unmeasured.**
 4. Measure surprise vs entropy as predictors of error and loops on held-out chat; build a sampler only
-   if surprise adds information. **Measured on step 100 and on the final checkpoint: it does not
-   (section 3). Closed.**
+   if surprise adds information. **Measured on step 100 and on the final checkpoint: a tiny increment
+   (section 3); no sampler built. Closed for these runs.**
 5. Offline classifier labels per dream on the same pool, blind to probes; agreement analysis with the
    random-matched arms.
 6. The memory-then-token gate, only if concentration predicts retention.

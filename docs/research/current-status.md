@@ -15,7 +15,7 @@ the 760M base model is complete (250 steps, 23 September 2026); the final checkp
 is a release candidate undergoing evaluation: held-out assistant loss, sampled answers
 through the transaction path, calibration, and the Sleep controls. The first record, the
 [chat evaluation at three temperatures](results/chat-eval-2026-09-23/README.md), shows the chat
-format learned, no looping at temperature 0.7, and frequent factual errors. Qwen remains the
+format learned, the lowest measured within-reply repetition at temperature 0.7 (16 replies), and frequent factual errors. Qwen remains the
 hosted model until the evaluation is complete. The backend implementation and
 recorded checks are described in the [TTT backend note](2026-09-23-ttt-backend.md).
 

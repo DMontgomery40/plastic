@@ -22,10 +22,11 @@ likelihood under this model on that sample, not general quality.
 | [`step250_t0.5.json`](step250_t0.5.json) | 0.5 | 1.00 | 0.111 | not run (sampling only) |
 | [`step250_t0.7.json`](step250_t0.7.json) | 0.7 | 1.00 | 0.008 | everyday-conversations 1.588 (12,065 assistant tokens, 100 rows), smol-magpie-ultra 1.410 (133,708 assistant tokens, 100 rows), openhermes-100k 1.341 (20,478 assistant tokens, 100 rows) |
 
-Reading. Temperature 0.7 is the setting that does not loop (repeated 4-gram share 0.008 against 0.111 at 0.5
-and 0.218 at 0.3, matching the step-100 measurement that set the default). The model answers in the chat
+Reading. Temperature 0.7 had the lowest measured within-reply repetition in these 16 replies (repeated 4-gram
+share 0.008 against 0.111 at 0.5 and 0.218 at 0.3, the same ordering as the step-100 measurement that set the
+default); this is a measurement on 16 replies, not a guarantee against looping. The model answers in the chat
 format and stays on topic; factual content is often wrong (at 0.7: "a virus is a type of bacterium",
 ibuprofen "acts as a pro-inflammatory agent"; the capital of Australia is right at 0.5 and 0.7, "Adelaide" at
-0.3). Boundary and neutral prompts produce indistinguishable learner signals (surprise 9.47 vs 9.53). For the
+0.3). Mean learner surprise over the 8 boundary and 8 neutral prompts is similar (9.47 vs 9.53). For the
 step-50 and step-100 intermediate evaluations see the dated Sleep note; those files recorded no held-out
 NLL in this format.
