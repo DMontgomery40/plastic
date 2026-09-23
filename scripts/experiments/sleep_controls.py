@@ -106,6 +106,7 @@ def main() -> None:
     ap.add_argument("--target", default="w0", choices=["w0", "all"], help="sleep target for the replay/distill/ungated arms")
     ap.add_argument("--lr", type=float, default=1e-4)
     ap.add_argument("--replay-ratio", type=float, default=0.5, help="share of each sleep batch drawn from the SFT replay corpus")
+    ap.add_argument("--batch-size", type=int, default=2, help="rows per sleep step; choose it so the replay ratio is realizable (0.5 -> 2, 0.8 -> 5)")
     ap.add_argument("--session-loss", default="all", choices=["all", "assistant"])
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
@@ -166,7 +167,7 @@ def main() -> None:
         return group_counts(report_dict["results"], probes)
 
     results: dict[str, Any] = {"checkpoint": os.path.abspath(args.checkpoint), "checkpoint_digest": digest, "device": args.device,
-                               "steps": args.steps, "target": args.target, "lr": args.lr, "replay_ratio": args.replay_ratio, "session_loss": args.session_loss, "arms": {}}
+                               "steps": args.steps, "target": args.target, "lr": args.lr, "replay_ratio": args.replay_ratio, "batch_size": args.batch_size, "session_loss": args.session_loss, "arms": {}}
     arms = [a.strip() for a in args.arms.split(",") if a.strip()]
 
     # 2) floor: the parent from a fresh session
@@ -206,13 +207,13 @@ def main() -> None:
         if arm not in arms:
             continue
         method = "replay" if arm == "ungated" else arm
-        cfg = SleepConfig(method=method, target=args.target, steps=args.steps, lr=args.lr, seq_len=args.seq_len, batch_size=2, replay_ratio=args.replay_ratio,
+        cfg = SleepConfig(method=method, target=args.target, steps=args.steps, lr=args.lr, seq_len=args.seq_len, batch_size=args.batch_size, replay_ratio=args.replay_ratio,
                           session_loss=args.session_loss,
                           replay_rows=args.replay_rows, heldout_rows=args.heldout_rows, tolerance_nll=0.05, device=args.device,
                           recall_max_new_tokens=args.max_new_tokens, seed=args.seed, provenance="all" if arm == "ungated" else "accepted")
         sessions = ["teach", "rolled"]
         rep = sleep_ttt(store, "parent", cfg, session_ids=sessions, probes=all_probes, run_dir=os.path.join(args.out, f"sleep_{arm}"), log=log)
-        entry: dict[str, Any] = {"status": rep["status"], "model_id": rep.get("model_id"), "gate": rep.get("gate"),
+        entry: dict[str, Any] = {"status": rep["status"], "model_id": rep.get("model_id"), "gate": rep.get("gate"), "batch": rep.get("batch"),
                                  "heldout_nll_before": (rep.get("before") or {}).get("heldout_nll"), "heldout_nll_after": (rep.get("after") or {}).get("heldout_nll"),
                                  "harvest": rep.get("harvest"), "seconds": rep.get("seconds")}
         if rep.get("after") and rep["after"].get("recall"):

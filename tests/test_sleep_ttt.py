@@ -250,6 +250,23 @@ def test_gate_rejects_the_saved_step100_collapsed_runs_and_passes_their_baseline
         assert base["passed"] is True
 
 
+def test_batch_mix_preserves_batch_size_and_keeps_a_session_row():
+    """ASTRA-170: round(batch*ratio) with max(1, batch-n) changed the batch size and the realized ratio."""
+    from plastic.sleep.ttt import batch_mix
+
+    assert batch_mix(2, 0.5, True) == (1, 1)
+    assert batch_mix(2, 0.8, True) == (1, 1)     # not realizable at batch 2: the caller records 0.5
+    assert batch_mix(5, 0.8, True) == (1, 4)
+    assert batch_mix(4, 1.0, True) == (1, 3)     # a session row is always kept
+    assert batch_mix(3, 0.0, True) == (3, 0)
+    assert batch_mix(3, 0.5, False) == (3, 0)    # no replay data: every row is a session row
+    assert batch_mix(1, 0.9, True) == (1, 0)
+    for b, r in ((2, 0.5), (2, 0.8), (5, 0.8), (4, 1.0), (7, 0.3)):
+        assert sum(batch_mix(b, r, True)) == b
+    with pytest.raises(ValueError):
+        batch_mix(0, 0.5, True)
+
+
 def test_session_labels_supervise_user_tokens_by_default_and_keep_sft_masks_otherwise():
     from plastic.sleep.ttt import session_labels
 

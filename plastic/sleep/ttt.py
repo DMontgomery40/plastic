@@ -203,6 +203,18 @@ def harvest_summary(harvests: list[SessionHarvest]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------------------------------- data
 
 
+def batch_mix(batch_size: int, replay_ratio: float, have_replay: bool) -> tuple[int, int]:
+    """(session rows, replay rows) for one batch. The batch size is preserved exactly and at least one session
+    row is always present (sleep without session rows learns nothing from the session); the replay share is
+    rounded down to what the batch can realize, and the caller records the realized ratio."""
+    if batch_size < 1:
+        raise ValueError("batch_size must be >= 1")
+    if not have_replay or replay_ratio <= 0:
+        return batch_size, 0
+    n_replay = min(batch_size - 1, int(round(batch_size * replay_ratio)))
+    return batch_size - n_replay, n_replay
+
+
 def session_labels(ids: list[int], labels: list[int], session_loss: str) -> list[int]:
     """Labels for one accepted turn. ``"all"``: every token after BOS is supervised, so the user's statement is
     learned, not only the assistant's reply; ``"assistant"``: the SFT labels (user tokens masked), which on the
@@ -476,8 +488,15 @@ def sleep_ttt(
                 return report
         params = select_target(model, cfg.target)
         opt = torch.optim.AdamW(params, lr=cfg.lr, betas=(0.9, 0.95), weight_decay=0.0)
-        n_replay = int(round(cfg.batch_size * cfg.replay_ratio)) if replay_packed else 0
-        n_session = max(1, cfg.batch_size - n_replay)
+        n_session, n_replay = batch_mix(cfg.batch_size, cfg.replay_ratio, bool(replay_packed))
+        report["batch"] = {"session_rows": n_session, "replay_rows": n_replay, "requested_replay_ratio": cfg.replay_ratio,
+                           "realized_replay_ratio": n_replay / (n_session + n_replay),
+                           # distill adds a session KL term and a replay CE term with unit weights; the ratio changes row
+                           # sampling only, never the relative weight of those two terms
+                           "loss_terms": "session_kl + replay_ce, unit weights" if cfg.method == "distill" else "cross_entropy over all rows"}
+        if abs(report["batch"]["realized_replay_ratio"] - cfg.replay_ratio) > 1e-9:
+            log(f"[sleep] replay ratio {cfg.replay_ratio} is not realizable at batch {cfg.batch_size}: using {n_session} session + {n_replay} replay rows "
+                f"(realized {report['batch']['realized_replay_ratio']:.3f})")
         dev = be.device
         model.eval()  # no dropout in this model; eval keeps the forward identical to inference
         for step in range(1, cfg.steps + 1):
