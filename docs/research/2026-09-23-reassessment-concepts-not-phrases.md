@@ -133,20 +133,18 @@ whether a fact is a candidate; generated diversity should govern how it is writt
 
 ## 3. What to consolidate: criteria other than surprise
 
-**Neuroscience.** Updated CLS theory (Kumaran, Hassabis, McClelland, TiCS 2016, abstract) holds that
-replay "allows goal-dependent weighting of experience statistics" and that "neocortical learning can
-be rapid for information that is consistent with known structure"; Tse et al. (Science 2007,
-abstract) showed one-trial associations become hippocampus-independent quickly only when a schema
-already exists. Sun et al. (Nature Neuroscience 2023, abstract) formalize the selection problem:
-"unregulated neocortical memory transfer can cause overfitting and harm generalization in an
-unpredictable world", so "memories only consolidate when it aids generalization", which in their
-model means the predictable components; the unpredictable remainder stays episodic. Replay
-selection is frequency- and reward-weighted: Yang, Buzsáki et al. (Science 2024, abstract) find
-sleep "continued to replay those trial blocks that were reactivated most frequently during waking";
-Huelin Gorriz et al. (Nature Communications 2023, abstract) find sleep replay rate rises with the
-number of laps run, falls with familiarity, and is predicted by cumulative awake replay; Michon et
-al. (Current Biology 2019, abstract) find replay proportion tracks reward size. Together: recurrence
-of the not-yet-known, schema consistency, and value, not surprise alone.
+**Neuroscience.** Updated CLS theory (Kumaran, Hassabis, McClelland, TiCS 2016, abstract): replay
+"allows goal-dependent weighting of experience statistics" and "neocortical learning can be rapid
+for information that is consistent with known structure"; Tse et al. (Science 2007, abstract) found
+one-trial associations become hippocampus-independent quickly only when a schema exists. Sun et al.
+(Nature Neuroscience 2023, abstract): "unregulated neocortical memory transfer can cause overfitting
+and harm generalization in an unpredictable world", so "memories only consolidate when it aids
+generalization", meaning the predictable components. Replay selection is frequency- and
+reward-weighted: Yang, Buzsáki et al. (Science 2024, abstract) find sleep "continued to replay those
+trial blocks that were reactivated most frequently during waking"; Huelin Gorriz et al. (Nature
+Communications 2023, abstract) find sleep replay rises with laps run, falls with familiarity, and is
+predicted by cumulative awake replay; Michon et al. (Current Biology 2019, abstract) find it tracks
+reward size. Together: recurrence of the not-yet-known, schema consistency and value, not surprise.
 
 **Machine learning instantiations.**
 
