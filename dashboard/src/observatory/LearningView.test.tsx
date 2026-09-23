@@ -123,6 +123,52 @@ describe('Learning view', () => {
     expect(within(panel).queryByText('stale')).toBeNull();
   });
 
+  it('makes every archived ablation selectable and keeps its selection in the shared link', async () => {
+    render(<ObservatoryScreen />);
+    const picker = await screen.findByRole('navigation', { name: 'Ablation sets' });
+    for (const id of ['coordinate-ablation-all', 'coordinate-ablation-post', 'coordinate-ablation-eta10']) {
+      fireEvent.click(within(picker).getByRole('button', { name: id }));
+      expect(parseRoute(window.location.hash).arm).toBe(id);
+      expect(within(picker).getByRole('button', { name: id }).getAttribute('aria-current')).toBe('page');
+    }
+    const table = screen.getByRole('table', { name: /Coordinate ablation/ });
+    const row = within(table).getByRole('row', { name: /Full candidate/ });
+    expect(within(row).getByText('2.960, 4.761, 5.136')).toBeTruthy();
+    cleanup();
+    render(<ObservatoryScreen />);
+    const restored = await screen.findByRole('table', { name: /Coordinate ablation/ });
+    expect(within(restored).getByText('2.960, 4.761, 5.136')).toBeTruthy();
+  });
+
+  it('switches between current, stale and empty ablations without leaking prior rows', async () => {
+    const base = withAblation([variant('full')], ['no_fast']);
+    const first = base.sets.find((s): s is AblationSet => s.kind === 'ablation')!;
+    stub({ ...base, sets: [
+      ...base.sets,
+      { ...first, id: 'older', current: false, contract_version: 'old', variants: [variant('delta_baseline', { current: false })] },
+      { ...first, id: 'empty', variants: [] },
+    ] });
+    render(<ObservatoryScreen />);
+    const picker = await screen.findByRole('navigation', { name: 'Ablation sets' });
+    fireEvent.click(within(picker).getByRole('button', { name: 'older' }));
+    expect(screen.getByRole('row', { name: /Delta-rule baseline/ })).toBeTruthy();
+    expect(screen.queryByRole('row', { name: /Full candidate/ })).toBeNull();
+    expect(screen.getAllByText('stale').length).toBeGreaterThan(0);
+    fireEvent.click(within(picker).getByRole('button', { name: 'empty' }));
+    expect(screen.queryByRole('table', { name: /Coordinate ablation/ })).toBeNull();
+    expect(screen.getByText('not yet archived')).toBeTruthy();
+    fireEvent.click(within(picker).getByRole('button', { name: 'coordinate-ablation' }));
+    expect(screen.getByRole('row', { name: /Full candidate/ })).toBeTruthy();
+    expect(screen.queryByText('stale')).toBeNull();
+  });
+
+  it('falls back to the first ablation when a shared selection is unavailable', async () => {
+    window.history.replaceState(null, '', '/#sleep/learning/phys_mps_3k/missing');
+    stub(withAblation([variant('full')], []));
+    render(<ObservatoryScreen />);
+    expect(await screen.findByRole('row', { name: /Full candidate/ })).toBeTruthy();
+  });
+
   it('marks an ablation measured under a superseded contract as stale', async () => {
     const old = variant('full', { contract_version: '2026-09-23.1', current: false });
     stub(withAblation([old], [], { contract_version: '2026-09-23.1', contract_versions: ['2026-09-23.1'], current: false }));

@@ -256,14 +256,17 @@ function AblationTable({ set }: { set: AblationSet }) {
   );
 }
 
-function AblationPanel({ index }: { index: LearningIndex }) {
-  const st = ablationState(index);
+function AblationPanel({ index, setId, onSelect }: { index: LearningIndex; setId: string | null; onSelect: (id: string) => void }) {
+  const sets = index.sets.filter((s): s is AblationSet => s.kind === 'ablation');
+  const selected = sets.find((s) => s.id === setId) ?? sets[0];
+  const st = ablationState(index, setId);
   return (
     <Panel
       title="Coordinate ablation"
       subtitle="Each variant trained from scratch, then scored before any stream: temporary adaptation only"
       actions={st.state === 'archived' ? null : <StateWord state={st.state === 'stale' ? 'stale' : 'not yet archived'} />}
     >
+      {sets.length > 1 ? <SetPicker label="Ablation sets" sets={sets} active={selected.id} onSelect={onSelect} /> : null}
       {st.set === null ? (
         <p className="text-base text-ink-secondary">The ablation appears here once its results are archived beside this report.</p>
       ) : (
@@ -281,9 +284,9 @@ function AblationPanel({ index }: { index: LearningIndex }) {
   );
 }
 
-function SetPicker({ sets, active, onSelect }: { sets: ReportSet[]; active: string; onSelect: (id: string) => void }) {
+function SetPicker({ sets, active, onSelect, label = 'Report sets' }: { sets: { id: string }[]; active: string; onSelect: (id: string) => void; label?: string }) {
   return (
-    <nav aria-label="Report sets" className="flex flex-wrap gap-2">
+    <nav aria-label={label} className="flex flex-wrap gap-2">
       {sets.map((s) => (
         <button
           key={s.id}
@@ -301,7 +304,12 @@ function SetPicker({ sets, active, onSelect }: { sets: ReportSet[]; active: stri
   );
 }
 
-export function LearningView({ setId, onSelect }: { setId: string | null; onSelect: (id: string) => void }) {
+export function LearningView({ setId, ablationId, onSelect, onSelectAblation }: {
+  setId: string | null;
+  ablationId: string | null;
+  onSelect: (id: string) => void;
+  onSelectAblation: (reportId: string, ablationId: string) => void;
+}) {
   const [attempt, setAttempt] = useState(0);
   const { data, error } = useAsync(() => loadLearning(), [attempt]);
   if (error) {
@@ -326,7 +334,7 @@ export function LearningView({ setId, onSelect }: { setId: string | null; onSele
       ) : (
         <Empty title="No learning-contract report is archived yet." />
       )}
-      <AblationPanel index={data} />
+      <AblationPanel index={data} setId={ablationId} onSelect={(id) => onSelectAblation(set?.id ?? id, id)} />
     </div>
   );
 }
