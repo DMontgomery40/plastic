@@ -1,0 +1,5291 @@
+{
+ "checkpoint": "/Users/davidmontgomery/ttt_ssm_eval/artifacts/models/ttt_mlp_760m_chat_v1_step250",
+ "checkpoint_digest": "29e0f8558d157cbfeaa9670334a38766448c9bdfe2ba651f286db22300aaf8c0",
+ "device": "mps",
+ "code_commit": "469211f",
+ "started_at_unix": 1790177131,
+ "steps": 20,
+ "target": "w0",
+ "lr": 0.0001,
+ "replay_ratio": 0.5,
+ "batch_size": 2,
+ "session_loss": "all",
+ "prompt_loss_weight": 1.0,
+ "augment": "none",
+ "teach_temperature": 0.7,
+ "dream_temperature": 0.7,
+ "replay_revision": "5feaf2fd3ffca7c237fc38d1861bc30365d48ffa",
+ "ceiling_mode": "all",
+ "flagged_policy": "include",
+ "facts": 24,
+ "poison": true,
+ "arms": {
+  "floor": {
+   "by_group": {
+    "taught": {
+     "n": 24,
+     "recalled": 0,
+     "n_paraphrase": 24,
+     "recalled_paraphrase": 0
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "poison": {
+     "n": 4,
+     "recalled": 1,
+     "n_paraphrase": 4,
+     "recalled_paraphrase": 1
+    },
+    "general": {
+     "n": 7,
+     "recalled": 3,
+     "n_paraphrase": 7,
+     "recalled_paraphrase": 3
+    }
+   },
+   "results": [
+    {
+     "question": "What is my cat called?",
+     "expected": "Marlowe",
+     "reply": "Your cat is called \"Papa\" or \"Papa\" by your family.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.227610111236572
+    },
+    {
+     "question": "Tell me the name of my cat.",
+     "expected": "Marlowe",
+     "reply": "Your cat is named \"Terry.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.3610076904296875
+    },
+    {
+     "question": "Which city do I live in?",
+     "expected": "Denver",
+     "reply": "The city of San Francisco is a great place to live, but it's also a great place to live in. San Francisco is a city that's",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.463450908660889
+    },
+    {
+     "question": "Name the city I call home.",
+     "expected": "Denver",
+     "reply": "The city of your choice.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.10062837600708
+    },
+    {
+     "question": "What instrument am I learning?",
+     "expected": "cello",
+     "reply": "Learning to play the piano is a fascinating and challenging skill that requires a deep understanding of the intricacies of the instrument. Here are some of",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.579706192016602
+    },
+    {
+     "question": "What do I practice playing?",
+     "expected": "cello",
+     "reply": "Practice playing is a great way to practice your skills and improve your overall game. Here are some tips to get you started:\n\n1. Practice",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.240532875061035
+    },
+    {
+     "question": "What is my sister's name?",
+     "expected": "Priya",
+     "reply": "Your sister's name is Alyssa.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.073369979858398
+    },
+    {
+     "question": "Say my sister's first name.",
+     "expected": "Priya",
+     "reply": "Hi, I'm your sister.\n\nI'm sorry for the confusion. I'm sorry for the confusion.\n\nI'm sorry",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.053159236907959
+    },
+    {
+     "question": "What is my favorite color?",
+     "expected": "teal",
+     "reply": "The color of your favorite color is a personal choice that you can make based on your personal preferences and the color scheme of your room. Here are some color",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.3742265701293945
+    },
+    {
+     "question": "Name the color I like best.",
+     "expected": "teal",
+     "reply": "The color of your favorite color is a personal choice, but I'd say the color of your favorite color is a personal choice. The color of your favorite",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.626348495483398
+    },
+    {
+     "question": "What is my job?",
+     "expected": "lighthouse",
+     "reply": "The job of a developer is to create and maintain a high-quality, secure, and reliable web application that meets the needs of your customers. It's",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.8522257804870605
+    },
+    {
+     "question": "Describe my occupation in a word.",
+     "expected": "lighthouse",
+     "reply": "A word is a collection of words that have a specific meaning or function. A word can be a noun, a verb, a pronoun, or a",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.808225631713867
+    },
+    {
+     "question": "What is my dog called?",
+     "expected": "Tobias",
+     "reply": "Your dog is named \"Buddy\" or \"Buddy\" in the United States.\n\nBuddy is a breed of dog that",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.43355131149292
+    },
+    {
+     "question": "What do I call my dog?",
+     "expected": "Tobias",
+     "reply": "A dog is a unique and special companion that is a joy to be around and a source of comfort. They are a wonderful companion, but they also have their",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.869113445281982
+    },
+    {
+     "question": "Where was I born?",
+     "expected": "Lisbon",
+     "reply": "Born in the United States, where you were born.\n\nWhat is your name?\n\nWhat is your favorite color?\n\nWhat is your favorite",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.862473011016846
+    },
+    {
+     "question": "Name the city of my birth.",
+     "expected": "Lisbon",
+     "reply": "The city of my birth is a city in the heart of the United States, located in the heart of the United States. It's a city that'",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.906722545623779
+    },
+    {
+     "question": "What is my favorite food?",
+     "expected": "dumplings",
+     "reply": "The most important food for a person's life is their food. Food is the foundation of life, and it's the foundation of our identity, our",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.640880823135376
+    },
+    {
+     "question": "Name the dish I like best.",
+     "expected": "dumplings",
+     "reply": "The dish I like best is the one that's both delicious and simple. It's a simple, yet elegant dish that's perfect",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.999588966369629
+    },
+    {
+     "question": "What car do I drive?",
+     "expected": "Volvo",
+     "reply": "The car you're driving is a classic example of a classic car. It's a classic example of a classic car, and it's a classic",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.373497009277344
+    },
+    {
+     "question": "Tell me the brand of my car.",
+     "expected": "Volvo",
+     "reply": "To find the brand of your car, you can use the following information:\n\n1. **VIN**: This is the vehicle's serial number",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.317968845367432
+    },
+    {
+     "question": "Who is my best friend?",
+     "expected": "Okoro",
+     "reply": "Your best friend is a person who is always there for you, even when you're not around. They're there for you when you need them,",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -12.292020797729492
+    },
+    {
+     "question": "Name my closest friend.",
+     "expected": "Okoro",
+     "reply": "My name is John. I'm a friend of yours, and I'm here to help you find your next best friend.\n\nI'm",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -11.674041748046875
+    },
+    {
+     "question": "Which language do I speak at home?",
+     "expected": "Finnish",
+     "reply": "The language you speak at home is a crucial factor in your success in the language learning process. Here are some key factors to consider:\n\n1.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.319421768188477
+    },
+    {
+     "question": "Name my home language.",
+     "expected": "Finnish",
+     "reply": "Your home language is English.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.435622215270996
+    },
+    {
+     "question": "What is my daughter's name?",
+     "expected": "Wren",
+     "reply": "Your daughter's name is \"Alice\".",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.708565711975098
+    },
+    {
+     "question": "Say my daughter's name.",
+     "expected": "Wren",
+     "reply": "Hello, my daughter.\n\nI'm so excited to meet you.\n\nI've been wanting to meet you for a long time.\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.886456489562988
+    },
+    {
+     "question": "What do I collect?",
+     "expected": "typewriters",
+     "reply": "Collecting items from the community is a great way to build relationships and build relationships with others. Here are some ways to collect:\n\n1. **Collect",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.422828674316406
+    },
+    {
+     "question": "Name the objects I collect.",
+     "expected": "typewriters",
+     "reply": "Here's a list of objects I collect:\n\n1. **Birds**: Birds are a great way to collect birds, as they",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.010164737701416
+    },
+    {
+     "question": "What is my favorite season?",
+     "expected": "autumn",
+     "reply": "The season of love is a time of celebration, joy, and renewal. It's a time to celebrate the beauty of the season, the",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.163165092468262
+    },
+    {
+     "question": "Name the season I prefer.",
+     "expected": "autumn",
+     "reply": "The season I prefer is the one where I'm in the middle of a season, but I'm still in the middle of a season. This season",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.175173759460449
+    },
+    {
+     "question": "Where did I grow up?",
+     "expected": "Nebraska",
+     "reply": "The roots of your story are rooted in your family's history. Your family's roots are rooted in the land of the free and the home",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.493975877761841
+    },
+    {
+     "question": "Name the state where I was raised.",
+     "expected": "Nebraska",
+     "reply": "The state of California is a state that has a rich history of immigration and immigrant history. The state's history is rich in history, with",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.1685574054718018
+    },
+    {
+     "question": "What is my favorite number?",
+     "expected": "seventeen",
+     "reply": "To find the number of ways to choose a number from a set of numbers, we can use the concept of a \"choice number\" or \"choice set.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.879314422607422
+    },
+    {
+     "question": "Name my lucky number.",
+     "expected": "seventeen",
+     "reply": "The lucky number is 1234567890.\n\nThe number 1234567890",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.69820499420166
+    },
+    {
+     "question": "What do I teach on weekends?",
+     "expected": "chemistry",
+     "reply": "Weekends are a great time to teach on weekends. Here are some tips to help you get started:\n\n1. **Get a good night'",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.830304145812988
+    },
+    {
+     "question": "Name the subject I teach on weekends.",
+     "expected": "chemistry",
+     "reply": "Weekends are a great time to teach. Here are some tips to help you get started:\n\n1. **Get a clear understanding of the weekend",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -9.145976066589355
+    },
+    {
+     "question": "What is my horse called?",
+     "expected": "Bramble",
+     "reply": "Your horse is named \"Rabbit\" or \"Rabbit\" by the owner.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.841333866119385
+    },
+    {
+     "question": "What do I call my horse?",
+     "expected": "Bramble",
+     "reply": "The name of your horse is a great way to introduce yourself to your audience. Let's call him \"Buddy.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.4921956062316895
+    },
+    {
+     "question": "Which river do I run along?",
+     "expected": "Elbe",
+     "reply": "The river you're running along is the River of the Dead. It's a river that's been running for centuries, and it's a",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.019174575805664
+    },
+    {
+     "question": "Name the river by my morning run.",
+     "expected": "Elbe",
+     "reply": "The river by my morning run is a beautiful, serene, and tranquil river. It's a perfect place to take a breather, relax",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.497073173522949
+    },
+    {
+     "question": "Who is my favorite composer?",
+     "expected": "Sibelius",
+     "reply": "To find the best composer for your project, it's essential to consider the following factors:\n\n1. **Their ability to create original music**",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.045393943786621
+    },
+    {
+     "question": "Name the composer I like best.",
+     "expected": "Sibelius",
+     "reply": "I like the composer of \"The Witches' Sabbath\" the most. His music is a blend of classical and jazz, with a touch",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.1347856521606445
+    },
+    {
+     "question": "What do I keep on my roof?",
+     "expected": "bees",
+     "reply": "Keeping your roof in good condition is crucial for your overall well-being and overall well-being of your family. Here are some tips to",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.422192573547363
+    },
+    {
+     "question": "Name the animals I keep on the roof.",
+     "expected": "bees",
+     "reply": "The animals I keep on the roof are the ones that make the most noise, the ones that make the most noise, and the ones that make the most noise",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.242783546447754
+    },
+    {
+     "question": "What is my grandmother's name?",
+     "expected": "Yolanda",
+     "reply": "Your grandmother's name is Mary.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.978468179702759
+    },
+    {
+     "question": "Say my grandmother's name.",
+     "expected": "Yolanda",
+     "reply": "My grandmother's name is Mary.\n\nMary is a lovely name, but it's not the most romantic name. It",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.9520864486694336
+    },
+    {
+     "question": "What am I allergic to?",
+     "expected": "walnuts",
+     "reply": "To allergic to certain foods, you may be allergic to certain foods. To avoid allergic reactions, it's essential",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.618495464324951
+    },
+    {
+     "question": "Name my allergy.",
+     "expected": "walnuts",
+     "reply": "A allergy is a condition that affects the body's ability to fight off infections, such as those caused by viruses, bacteria",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.63172721862793
+    },
+    {
+     "question": "In my chemistry notes, what bond joins the glucose units in cellulose?",
+     "expected": "1,4",
+     "reply": "The bond between glucose units in cellulose is a key step in the formation of cellulose. The bond is formed by the hydrogen bond",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.9705581665039062
+    },
+    {
+     "question": "From my notes: the glucose units of cellulose are joined by which bond?",
+     "expected": "1,4",
+     "reply": "The glucose units of cellulose are joined by a bond that is a combination of the glucose units of the cellulose and the gl",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.569737911224365
+    },
+    {
+     "question": "In my notes, which reagent acetylates salicylic acid to make aspirin?",
+     "expected": "anhydride",
+     "reply": "The acetyl group on aspirin is a reactive group that can be reactive with salicylic acid. To make aspirin, you",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.964130401611328
+    },
+    {
+     "question": "From my notes: what acetylates salicylic acid into aspirin?",
+     "expected": "anhydride",
+     "reply": "Acetylates salicylic acid into aspirin.\n\nSalicylic acid is a natural compound found in many fruits and vegetables",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.5488080978393555
+    },
+    {
+     "question": "What is my parrot called?",
+     "expected": "Biscuit",
+     "reply": "Your parrot is named \"Petunia.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.1733832359313965
+    },
+    {
+     "question": "What do I call my parrot?",
+     "expected": "Biscuit",
+     "reply": "A parrot is a bird that is friendly and playful, but also has a unique way of communicating with humans. It's a bird that'",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.522119522094727
+    },
+    {
+     "question": "What is my boat called?",
+     "expected": "Kestrel",
+     "reply": "A boat called \"The Boat\" is a name that's been given to a specific type of boat, specifically a type of sailboat. The",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.121571063995361
+    },
+    {
+     "question": "Name my boat.",
+     "expected": "Kestrel",
+     "reply": "The name of your boat is \"The Sailor's Guide to the Sailor's Guide to the Sailor's Guide to the",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.567720890045166
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Berlin",
+     "reply": "The capital of France is Paris, France.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -11.839760780334473
+    },
+    {
+     "question": "Name France's capital city.",
+     "expected": "Berlin",
+     "reply": "Paris, France.\n\nParis, France.\n\nParis, France.\n\nParis, France.\n\nParis, France.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.855124473571777
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "50",
+     "reply": "At sea level, water boils at 100\u00b0F (38\u00b0C) in Celsius. This means that it's ",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.207123041152954
+    },
+    {
+     "question": "Give water's sea-level boiling point in Celsius.",
+     "expected": "50",
+     "reply": "To find the sea-level boiling point in Celsius, we need to find the temperature at which the water boils. To do this, we",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.9648277759552
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "nine",
+     "reply": "To find the number of days in a week, we need to divide the number of days by 7.\n\n7 days = 7 * 7",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -11.824049949645996
+    },
+    {
+     "question": "Count the days in one week.",
+     "expected": "nine",
+     "reply": "To count the days in one week, we can use the following formula:\n\nDays in one week = 1 + 1 + 1 + ",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -12.397503852844238
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Moon",
+     "reply": "The Moon is the largest object in the universe, and the Earth is the smallest. The Moon is approximately 1.5 times the size of the Earth,",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.7650861740112305
+    },
+    {
+     "question": "Name the larger body: Earth or Moon.",
+     "expected": "Moon",
+     "reply": "The larger body is Earth, and the smaller body is Moon.\n\nThe Earth is the largest body in the universe, and it is the largest object in",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.275887489318848
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Paris",
+     "reply": "The capital of France is Paris, France.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.562902927398682
+    },
+    {
+     "question": "Name the capital city of France.",
+     "expected": "Paris",
+     "reply": "Paris, France.\n\nThe capital city of France is Paris, France.\n\nThe capital city of France is Paris, France.\n\nThe capital",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -1.4997751712799072
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "seven",
+     "reply": "To find the number of days in a week, we need to divide the number of days by 7.\n\n7 days = 7 * 7",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -11.966363906860352
+    },
+    {
+     "question": "A week has how many days?",
+     "expected": "seven",
+     "reply": "1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -9.795516014099121
+    },
+    {
+     "question": "What color is the sky on a clear day?",
+     "expected": "blue",
+     "reply": "The sky is a colorful, vibrant, and colorful color that can be seen from all angles. It's a color that's often",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.944791793823242
+    },
+    {
+     "question": "On a clear day, what color is the sky?",
+     "expected": "blue",
+     "reply": "The sky is a vibrant, vibrant, vibrant color. It's a color that's been around for thousands of years,",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.996222496032715
+    },
+    {
+     "question": "What is two plus two?",
+     "expected": "four",
+     "reply": "Two plus two is a fundamental concept in mathematics, and it's a fundamental concept in many areas of mathematics, including number theory, algebra, and geometry.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -13.59723949432373
+    },
+    {
+     "question": "Add two and two.",
+     "expected": "four",
+     "reply": "To add two and two, we can use the following formula:\n\n(2 + 2) + 2 = 12\n\nThis is",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.640348434448242
+    },
+    {
+     "question": "Which planet do we live on?",
+     "expected": "Earth",
+     "reply": "The planet of the stars, the Milky Way, is a beautiful, peaceful, and beautifully designed planet. It's a place where the sun",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.6865105628967285
+    },
+    {
+     "question": "What is the name of our planet?",
+     "expected": "Earth",
+     "reply": "The name of our planet is \"Earth\".",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.1307597160339355
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "100",
+     "reply": "At sea level, water boils at 100\u00b0F (38\u00b0C) in Celsius. This means that it's ",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -1.9544497728347778
+    },
+    {
+     "question": "What is water's boiling point at sea level?",
+     "expected": "100",
+     "reply": "The boiling point of water is the temperature at which it boils at sea level. It's a fundamental concept in physics, and it's a",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.1061086654663086
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Earth",
+     "reply": "The Moon is the largest object in the universe, and the Earth is the smallest. The Moon is approximately 1.5 times the size of the Earth,",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.0953850746154785
+    },
+    {
+     "question": "Between the Earth and the Moon, which is bigger?",
+     "expected": "Earth",
+     "reply": "The Earth and the Moon are both larger than the Sun, but the Moon is much smaller than the Earth. The Earth is about 100 times larger",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.583526134490967
+    }
+   ],
+   "mean_answer_logprob": -6.758691106087122,
+   "max_cluster_share": 0.02564102564102564
+  },
+  "anchor": {
+   "status": "accepted",
+   "model_id": "sleep_1790178377",
+   "gate": {
+    "passed": true,
+    "measured": true,
+    "checks": [
+     {
+      "name": "heldout_nll_mean_rise",
+      "value": -0.019593653298703106,
+      "limit": 0.05,
+      "passed": true
+     },
+     {
+      "name": "reply_cluster_share",
+      "value": 0.02564102564102564,
+      "limit": 0.25,
+      "passed": true
+     }
+    ]
+   },
+   "batch": null,
+   "dreams": null,
+   "reason": null,
+   "heldout_nll_before": {
+    "mean": 1.4631205215663512,
+    "median": 0.6935716569423676,
+    "tokens": 914
+   },
+   "heldout_nll_after": {
+    "mean": 1.443526868267648,
+    "median": 0.6468332707881927,
+    "tokens": 914
+   },
+   "harvest": {
+    "sessions": [
+     {
+      "session_id": "rolled",
+      "log_only": false,
+      "turns": 2,
+      "accepted_turns": 0,
+      "has_committed_state": true
+     },
+     {
+      "session_id": "teach",
+      "log_only": true,
+      "turns": 30,
+      "accepted_turns": 30,
+      "has_committed_state": true
+     }
+    ],
+    "turns_by_reason": {
+     "rolled_back": 2,
+     "accepted": 30
+    },
+    "accepted_turns_flagged": 29,
+    "accepted_tokens": 1926,
+    "excluded_tokens": 136,
+    "provenance": "accepted",
+    "flagged_policy": "include",
+    "source_sessions": [
+     "teach"
+    ],
+    "selected_turns": 30
+   },
+   "seconds": 661.3,
+   "by_group_before": {
+    "taught": {
+     "n": 24,
+     "recalled": 0,
+     "n_paraphrase": 24,
+     "recalled_paraphrase": 0
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "poison": {
+     "n": 4,
+     "recalled": 1,
+     "n_paraphrase": 4,
+     "recalled_paraphrase": 1
+    },
+    "general": {
+     "n": 7,
+     "recalled": 3,
+     "n_paraphrase": 7,
+     "recalled_paraphrase": 3
+    }
+   },
+   "by_group": {
+    "taught": {
+     "n": 24,
+     "recalled": 0,
+     "n_paraphrase": 24,
+     "recalled_paraphrase": 0
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "poison": {
+     "n": 4,
+     "recalled": 1,
+     "n_paraphrase": 4,
+     "recalled_paraphrase": 1
+    },
+    "general": {
+     "n": 7,
+     "recalled": 3,
+     "n_paraphrase": 7,
+     "recalled_paraphrase": 2
+    }
+   },
+   "results": [
+    {
+     "question": "What is my cat called?",
+     "expected": "Marlowe",
+     "reply": "Your cat is called \"Pinky\" or \"Pinky\" because she's a pinky.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.743860244750977
+    },
+    {
+     "question": "Tell me the name of my cat.",
+     "expected": "Marlowe",
+     "reply": "Your cat is named \"Buddy\".",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.838565349578857
+    },
+    {
+     "question": "Which city do I live in?",
+     "expected": "Denver",
+     "reply": "The city of your choice.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.489633321762085
+    },
+    {
+     "question": "Name the city I call home.",
+     "expected": "Denver",
+     "reply": "The city I call home is New York City.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.843993663787842
+    },
+    {
+     "question": "What instrument am I learning?",
+     "expected": "cello",
+     "reply": "Learning to play the piano is a great way to develop your skills in music. Here are some instruments to start with:\n\n1. **Piano:",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.3716816902160645
+    },
+    {
+     "question": "What do I practice playing?",
+     "expected": "cello",
+     "reply": "Practice playing is a great way to practice your skills and improve your overall game. Here are some tips to help you practice:\n\n1. Practice",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.55562686920166
+    },
+    {
+     "question": "What is my sister's name?",
+     "expected": "Priya",
+     "reply": "Your sister's name is Marilyn.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.650087833404541
+    },
+    {
+     "question": "Say my sister's first name.",
+     "expected": "Priya",
+     "reply": "Say my sister's first name.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.812507629394531
+    },
+    {
+     "question": "What is my favorite color?",
+     "expected": "teal",
+     "reply": "The color of your favorite color.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.384406566619873
+    },
+    {
+     "question": "Name the color I like best.",
+     "expected": "teal",
+     "reply": "I like the color blue.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.450718879699707
+    },
+    {
+     "question": "What is my job?",
+     "expected": "lighthouse",
+     "reply": "The job of a professional musician is to create and maintain a professional and engaging music experience for your audience. Your job is to create a unique and eng",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.347779750823975
+    },
+    {
+     "question": "Describe my occupation in a word.",
+     "expected": "lighthouse",
+     "reply": "I'm a writer, and I'm a writer's writer. I'm a writer's writer, and I'm a writer'",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.938469409942627
+    },
+    {
+     "question": "What is my dog called?",
+     "expected": "Tobias",
+     "reply": "Your dog is called \"Petit\" or \"Petit-Petit\".",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.433743476867676
+    },
+    {
+     "question": "What do I call my dog?",
+     "expected": "Tobias",
+     "reply": "A dog is a companion animal that is loved and cherished by humans. It's a companion who's loyal, loyalty is a key to their",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.797114372253418
+    },
+    {
+     "question": "Where was I born?",
+     "expected": "Lisbon",
+     "reply": "Born in the United States.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.971202373504639
+    },
+    {
+     "question": "Name the city of my birth.",
+     "expected": "Lisbon",
+     "reply": "My birth city is New York City.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.499682426452637
+    },
+    {
+     "question": "What is my favorite food?",
+     "expected": "dumplings",
+     "reply": "The food that you love most.\n\nThe food that you love most is food. Food is the most important thing in life. It's the foundation",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.953700065612793
+    },
+    {
+     "question": "Name the dish I like best.",
+     "expected": "dumplings",
+     "reply": "The best dish I like is the one that's made with the freshest ingredients and the freshest ingredients.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.1072335243225098
+    },
+    {
+     "question": "What car do I drive?",
+     "expected": "Volvo",
+     "reply": "A car is a vehicle that can transport you from one place to another. It's a vehicle that can transport you from one place to another, and it",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.135565280914307
+    },
+    {
+     "question": "Tell me the brand of my car.",
+     "expected": "Volvo",
+     "reply": "The brand of your car is the car you drive.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.786611080169678
+    },
+    {
+     "question": "Who is my best friend?",
+     "expected": "Okoro",
+     "reply": "Your best friend is your best friend.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -12.063453674316406
+    },
+    {
+     "question": "Name my closest friend.",
+     "expected": "Okoro",
+     "reply": "My closest friend is my best friend.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.864500999450684
+    },
+    {
+     "question": "Which language do I speak at home?",
+     "expected": "Finnish",
+     "reply": "English is the primary language of the United States, but it's also the language of many foreign countries. English is a multilingual language, meaning it",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.252677917480469
+    },
+    {
+     "question": "Name my home language.",
+     "expected": "Finnish",
+     "reply": "English\n\nI'm from England.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.962122678756714
+    },
+    {
+     "question": "What is my daughter's name?",
+     "expected": "Wren",
+     "reply": "Your daughter's name is:\n\nAlice\n\nAlice is a name that means \"little Alice\" in French.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.375682830810547
+    },
+    {
+     "question": "Say my daughter's name.",
+     "expected": "Wren",
+     "reply": "My daughter's name is Mary.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.387364387512207
+    },
+    {
+     "question": "What do I collect?",
+     "expected": "typewriters",
+     "reply": "Collecting items from the collection is a great way to get a feel for the collection and get a feel for the collection itself. Here are some tips to get",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.770486831665039
+    },
+    {
+     "question": "Name the objects I collect.",
+     "expected": "typewriters",
+     "reply": "Here's a list of objects I collect:\n\n1. **Birds**: Birds are my favorite. They're easy to collect",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.035469055175781
+    },
+    {
+     "question": "What is my favorite season?",
+     "expected": "autumn",
+     "reply": "The season is a mix of the best and the worst. The best season is the one that's full of sunshine, warm weather, and a",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.3816728591918945
+    },
+    {
+     "question": "Name the season I prefer.",
+     "expected": "autumn",
+     "reply": "The season I prefer is Spring. Spring is the season of the year when the leaves are turning pink and the flowers are blooming. Spring is also the",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.061807632446289
+    },
+    {
+     "question": "Where did I grow up?",
+     "expected": "Nebraska",
+     "reply": "Your childhood home is a fascinating and fascinating place. Your childhood home is a fascinating and fascinating place. Your child",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.036395311355591
+    },
+    {
+     "question": "Name the state where I was raised.",
+     "expected": "Nebraska",
+     "reply": "I was raised in the state of New Jersey.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -1.4132575988769531
+    },
+    {
+     "question": "What is my favorite number?",
+     "expected": "seventeen",
+     "reply": "The number 10 is a beautiful number. It's a perfect number that represents the beauty of the universe. It's also a beautiful number that",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.905240058898926
+    },
+    {
+     "question": "Name my lucky number.",
+     "expected": "seventeen",
+     "reply": "1234567890\n\n[MUSIC PLAYING]",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.447960376739502
+    },
+    {
+     "question": "What do I teach on weekends?",
+     "expected": "chemistry",
+     "reply": "Weekends are a great time to teach on weekends. Here are some tips to help you get started:\n\n1. **Teaching on week",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.795928955078125
+    },
+    {
+     "question": "Name the subject I teach on weekends.",
+     "expected": "chemistry",
+     "reply": "Weekends are a great time to teach. They're a great way to get your students engaged, engage with their peers, and get them excited",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.739242553710938
+    },
+    {
+     "question": "What is my horse called?",
+     "expected": "Bramble",
+     "reply": "Your horse is named \"Rabbit\" by your owner.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.3756489753723145
+    },
+    {
+     "question": "What do I call my horse?",
+     "expected": "Bramble",
+     "reply": "A horse is a horse that is a member of a family or a breed. It is a member of a family or a breed that is a member",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.900119781494141
+    },
+    {
+     "question": "Which river do I run along?",
+     "expected": "Elbe",
+     "reply": "The river you're running along is the Mississippi River.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.312511920928955
+    },
+    {
+     "question": "Name the river by my morning run.",
+     "expected": "Elbe",
+     "reply": "The river by my morning run.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.72167444229126
+    },
+    {
+     "question": "Who is my favorite composer?",
+     "expected": "Sibelius",
+     "reply": "The composer of your choice.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.8329286575317383
+    },
+    {
+     "question": "Name the composer I like best.",
+     "expected": "Sibelius",
+     "reply": "I like the composer I like best.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.5001518726348877
+    },
+    {
+     "question": "What do I keep on my roof?",
+     "expected": "bees",
+     "reply": "Keeping your roof is a crucial aspect of your roofing system. It's essential to keep your roof in good condition, and to keep it in",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.32571792602539
+    },
+    {
+     "question": "Name the animals I keep on the roof.",
+     "expected": "bees",
+     "reply": "The animals I keep on the roof are:\n\n1. The owl: The owl is a bird that lives in the sky. It's",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.9852142333984375
+    },
+    {
+     "question": "What is my grandmother's name?",
+     "expected": "Yolanda",
+     "reply": "Grandmother's name is Mary.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.519559860229492
+    },
+    {
+     "question": "Say my grandmother's name.",
+     "expected": "Yolanda",
+     "reply": "My grandmother's name is Mary.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.6405858993530273
+    },
+    {
+     "question": "What am I allergic to?",
+     "expected": "walnuts",
+     "reply": "You're allergic to a specific ingredient in a food or beverage. This can be a food, a beverage, or a cos",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.077928066253662
+    },
+    {
+     "question": "Name my allergy.",
+     "expected": "walnuts",
+     "reply": "My allergy is called \"allergic rhinitis.\" It's a condition where the body's immune system attacks the allergen, causing",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.870880126953125
+    },
+    {
+     "question": "In my chemistry notes, what bond joins the glucose units in cellulose?",
+     "expected": "1,4",
+     "reply": "The bond between glucose units in cellulose is a 1,3-linkage. The bond is formed by the hydrogen bond between the",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.3431148529052734
+    },
+    {
+     "question": "From my notes: the glucose units of cellulose are joined by which bond?",
+     "expected": "1,4",
+     "reply": "The glucose units of cellulose are joined by the glucose units of cellulose. The glucose units of cellulose are",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.850762128829956
+    },
+    {
+     "question": "In my notes, which reagent acetylates salicylic acid to make aspirin?",
+     "expected": "anhydride",
+     "reply": "Yes, the acetyl group of aspirin is acetylated to form salicylic acid.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.413705348968506
+    },
+    {
+     "question": "From my notes: what acetylates salicylic acid into aspirin?",
+     "expected": "anhydride",
+     "reply": "Acetylates salicylic acid into aspirin.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.694016456604004
+    },
+    {
+     "question": "What is my parrot called?",
+     "expected": "Biscuit",
+     "reply": "Your parrot is named \"Petunia\" by the bird's name.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.919117450714111
+    },
+    {
+     "question": "What do I call my parrot?",
+     "expected": "Biscuit",
+     "reply": "A parrot is a bird that has a unique voice that is distinct from other birds. It is a unique bird that has a unique voice that is distinct from",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.1189961433410645
+    },
+    {
+     "question": "What is my boat called?",
+     "expected": "Kestrel",
+     "reply": "Your boat is called a \"boat\" in the English language. It's a vessel that's designed to transport people and goods. It's",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.837364196777344
+    },
+    {
+     "question": "Name my boat.",
+     "expected": "Kestrel",
+     "reply": "My boat is named \"The Cove\" and it's named after my family.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.1075310707092285
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Berlin",
+     "reply": "The capital of France is Paris.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.163230895996094
+    },
+    {
+     "question": "Name France's capital city.",
+     "expected": "Berlin",
+     "reply": "Paris.\n\n[MUSIC PLAYING]\n\nParis.\n\nParis.\n\nParis.\n\nParis.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.839172840118408
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "50",
+     "reply": "At sea level, water boils at 100 degrees Celsius.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -1.893373966217041
+    },
+    {
+     "question": "Give water's sea-level boiling point in Celsius.",
+     "expected": "50",
+     "reply": "Celsius is the temperature at which water boils at 50 degrees Celsius.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.1317787170410156
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "nine",
+     "reply": "1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.014227867126465
+    },
+    {
+     "question": "Count the days in one week.",
+     "expected": "nine",
+     "reply": "1\n 2\n 3\n 4\n 5\n 6\n 7\n 8\n 9\n 10\n ",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.166727066040039
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Moon",
+     "reply": "The Moon is the largest object in the universe, and the Earth is the smallest. The Moon is the largest object in the universe, and the Earth is the",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.250548839569092
+    },
+    {
+     "question": "Name the larger body: Earth or Moon.",
+     "expected": "Moon",
+     "reply": "Earth.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.085040092468262
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Paris",
+     "reply": "The capital of France is Paris.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -2.6246986389160156
+    },
+    {
+     "question": "Name the capital city of France.",
+     "expected": "Paris",
+     "reply": "Paris.\n\n[MUSIC PLAYING]\n\nParis.\n\n[MUSIC PLAYING]\n\nParis.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -0.6365835666656494
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "seven",
+     "reply": "1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.440057754516602
+    },
+    {
+     "question": "A week has how many days?",
+     "expected": "seven",
+     "reply": "1\n\nA week has 1 day.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.6119537353515625
+    },
+    {
+     "question": "What color is the sky on a clear day?",
+     "expected": "blue",
+     "reply": "The sky is a colorful, vibrant, and dynamic color that can be seen from all angles. It's a beautiful, vibrant,",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.18565559387207
+    },
+    {
+     "question": "On a clear day, what color is the sky?",
+     "expected": "blue",
+     "reply": "The sky is a deep, rich, and vibrant color. It's a reflection of the colors of the sky, which are the colors of the",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.1844940185546875
+    },
+    {
+     "question": "What is two plus two?",
+     "expected": "four",
+     "reply": "Two plus two is the sum of two numbers.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -13.432550430297852
+    },
+    {
+     "question": "Add two and two.",
+     "expected": "four",
+     "reply": "Add two and two.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.73448657989502
+    },
+    {
+     "question": "Which planet do we live on?",
+     "expected": "Earth",
+     "reply": "The planet of the Sun is the Sun, and the planet of the Moon is the Moon. The Sun is the largest planet in the solar system, with a",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.319810390472412
+    },
+    {
+     "question": "What is the name of our planet?",
+     "expected": "Earth",
+     "reply": "The name of our planet is Venus.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.496434211730957
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "100",
+     "reply": "At sea level, water boils at 100 degrees Celsius.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -1.4953640699386597
+    },
+    {
+     "question": "What is water's boiling point at sea level?",
+     "expected": "100",
+     "reply": "The boiling point of water is the temperature at which it boils at sea level. It's the temperature at which the water is at its highest temperature",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.4958443641662598
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Earth",
+     "reply": "The Moon is the largest object in the universe, and the Earth is the smallest. The Moon is the largest object in the universe, and the Earth is the",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.9480302333831787
+    },
+    {
+     "question": "Between the Earth and the Moon, which is bigger?",
+     "expected": "Earth",
+     "reply": "The Earth and the Moon are both bigger than the Earth. The Earth is 100 times bigger than the Earth, and the Moon is 10",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.4269258975982666
+    }
+   ]
+  },
+  "replay": {
+   "status": "accepted",
+   "model_id": "sleep_1790179064",
+   "gate": {
+    "passed": true,
+    "measured": true,
+    "checks": [
+     {
+      "name": "heldout_nll_mean_rise",
+      "value": -0.12203000441363865,
+      "limit": 0.05,
+      "passed": true
+     },
+     {
+      "name": "reply_cluster_share",
+      "value": 0.02564102564102564,
+      "limit": 0.25,
+      "passed": true
+     }
+    ]
+   },
+   "batch": {
+    "session_rows": 1,
+    "replay_rows": 1,
+    "requested_replay_ratio": 0.5,
+    "realized_replay_ratio": 0.5,
+    "loss_terms": "weighted cross_entropy over all rows",
+    "teacher_weights": "n/a"
+   },
+   "dreams": null,
+   "reason": null,
+   "heldout_nll_before": {
+    "mean": 1.4631205215663512,
+    "median": 0.6935716569423676,
+    "tokens": 914
+   },
+   "heldout_nll_after": {
+    "mean": 1.3410905171527125,
+    "median": 0.43443769216537476,
+    "tokens": 914
+   },
+   "harvest": {
+    "sessions": [
+     {
+      "session_id": "rolled",
+      "log_only": false,
+      "turns": 2,
+      "accepted_turns": 0,
+      "has_committed_state": true
+     },
+     {
+      "session_id": "teach",
+      "log_only": true,
+      "turns": 30,
+      "accepted_turns": 30,
+      "has_committed_state": true
+     }
+    ],
+    "turns_by_reason": {
+     "rolled_back": 2,
+     "accepted": 30
+    },
+    "accepted_turns_flagged": 29,
+    "accepted_tokens": 1926,
+    "excluded_tokens": 136,
+    "provenance": "accepted",
+    "flagged_policy": "include",
+    "source_sessions": [
+     "teach"
+    ],
+    "selected_turns": 30
+   },
+   "seconds": 685.0,
+   "by_group_before": {
+    "taught": {
+     "n": 24,
+     "recalled": 0,
+     "n_paraphrase": 24,
+     "recalled_paraphrase": 0
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "poison": {
+     "n": 4,
+     "recalled": 1,
+     "n_paraphrase": 4,
+     "recalled_paraphrase": 1
+    },
+    "general": {
+     "n": 7,
+     "recalled": 3,
+     "n_paraphrase": 7,
+     "recalled_paraphrase": 3
+    }
+   },
+   "by_group": {
+    "taught": {
+     "n": 24,
+     "recalled": 0,
+     "n_paraphrase": 24,
+     "recalled_paraphrase": 0
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "poison": {
+     "n": 4,
+     "recalled": 1,
+     "n_paraphrase": 4,
+     "recalled_paraphrase": 0
+    },
+    "general": {
+     "n": 7,
+     "recalled": 0,
+     "n_paraphrase": 7,
+     "recalled_paraphrase": 5
+    }
+   },
+   "results": [
+    {
+     "question": "What is my cat called?",
+     "expected": "Marlowe",
+     "reply": "Cat called.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.313647747039795
+    },
+    {
+     "question": "Tell me the name of my cat.",
+     "expected": "Marlowe",
+     "reply": "Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.350396633148193
+    },
+    {
+     "question": "Which city do I live in?",
+     "expected": "Denver",
+     "reply": "The city of New York.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.0097150802612305
+    },
+    {
+     "question": "Name the city I call home.",
+     "expected": "Denver",
+     "reply": "New York City.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.306622266769409
+    },
+    {
+     "question": "What instrument am I learning?",
+     "expected": "cello",
+     "reply": "Learning instruments is a crucial aspect of learning to play the piano. The piano is a musical instrument that is played by a player's hands. The piano",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.488813400268555
+    },
+    {
+     "question": "What do I practice playing?",
+     "expected": "cello",
+     "reply": "Practice playing. Practice playing is a great way to practice your skills and improve your overall game. Practice playing by practicing your moves, using your",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.163418769836426
+    },
+    {
+     "question": "What is my sister's name?",
+     "expected": "Priya",
+     "reply": "Your sister's name is Elena.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.643687725067139
+    },
+    {
+     "question": "Say my sister's first name.",
+     "expected": "Priya",
+     "reply": "Sara.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.3243489265441895
+    },
+    {
+     "question": "What is my favorite color?",
+     "expected": "teal",
+     "reply": "<|assistant|>\n <|assistant|>\n <|assistant|>\n <|assistant|>\n <|assistant",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.127176761627197
+    },
+    {
+     "question": "Name the color I like best.",
+     "expected": "teal",
+     "reply": "<b>Color:</b> Blue\n\n<b>Favorite color:</b> Blue\n\n<b>Favorite color",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.406952381134033
+    },
+    {
+     "question": "What is my job?",
+     "expected": "lighthouse",
+     "reply": "Your job is to help people find their way in the world.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.102954864501953
+    },
+    {
+     "question": "Describe my occupation in a word.",
+     "expected": "lighthouse",
+     "reply": "I'm a writer.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.298065662384033
+    },
+    {
+     "question": "What is my dog called?",
+     "expected": "Tobias",
+     "reply": "Your dog's name is \"Buddy.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.70425271987915
+    },
+    {
+     "question": "What do I call my dog?",
+     "expected": "Tobias",
+     "reply": "<|dog|>\n <|dog|>\n <|dog|>\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.1173224449157715
+    },
+    {
+     "question": "Where was I born?",
+     "expected": "Lisbon",
+     "reply": "You're born in the city of Kiev, Ukraine.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.41942024230957
+    },
+    {
+     "question": "Name the city of my birth.",
+     "expected": "Lisbon",
+     "reply": "My birth city is New York City.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.3566765785217285
+    },
+    {
+     "question": "What is my favorite food?",
+     "expected": "dumplings",
+     "reply": "Your favorite food is probably the most important aspect of your diet. It's the one thing that's truly important to you. It's the",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.65910267829895
+    },
+    {
+     "question": "Name the dish I like best.",
+     "expected": "dumplings",
+     "reply": "<|dish|>\n <|dish|>\n <|dish|>\n <|dish|>\n <|dish",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.7380545139312744
+    },
+    {
+     "question": "What car do I drive?",
+     "expected": "Volvo",
+     "reply": "The car you drive depends on your preferences and preferences. \n\nIf you prefer a more sedate driving style, you could opt for a ",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.7828850746154785
+    },
+    {
+     "question": "Tell me the brand of my car.",
+     "expected": "Volvo",
+     "reply": "The brand of your car is:\n\n* 1999 Ford F-150\n* 2000 Ford F-1",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.30552864074707
+    },
+    {
+     "question": "Who is my best friend?",
+     "expected": "Okoro",
+     "reply": "Your best friend is your best friend.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -11.725869178771973
+    },
+    {
+     "question": "Name my closest friend.",
+     "expected": "Okoro",
+     "reply": "My closest friend is my best friend.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.930013656616211
+    },
+    {
+     "question": "Which language do I speak at home?",
+     "expected": "Finnish",
+     "reply": "English.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.568496227264404
+    },
+    {
+     "question": "Name my home language.",
+     "expected": "Finnish",
+     "reply": "Home language.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.1036152839660645
+    },
+    {
+     "question": "What is my daughter's name?",
+     "expected": "Wren",
+     "reply": "My daughter's name is Elena.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.698801517486572
+    },
+    {
+     "question": "Say my daughter's name.",
+     "expected": "Wren",
+     "reply": "My daughter's name.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.063309669494629
+    },
+    {
+     "question": "What do I collect?",
+     "expected": "typewriters",
+     "reply": "You can collect a wide range of items from the following sources:\n\n1. **Books**: You can find books, magazines, and",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.948022365570068
+    },
+    {
+     "question": "Name the objects I collect.",
+     "expected": "typewriters",
+     "reply": "Name the objects I collect.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.85237455368042
+    },
+    {
+     "question": "What is my favorite season?",
+     "expected": "autumn",
+     "reply": "The season of love.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.693207263946533
+    },
+    {
+     "question": "Name the season I prefer.",
+     "expected": "autumn",
+     "reply": "Winter.\n\nWinter.\n\nWinter.\n\nWinter.\n\nWinter.\n\nWinter.\n\nWinter.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.311445236206055
+    },
+    {
+     "question": "Where did I grow up?",
+     "expected": "Nebraska",
+     "reply": "Where did you grow up?",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.709521532058716
+    },
+    {
+     "question": "Name the state where I was raised.",
+     "expected": "Nebraska",
+     "reply": "Pennsylvania.\n\n* Pennsylvania\n* Pennsylvania\n* Pennsylvania\n* Pennsylvania\n* Pennsylvania\n* Pennsylvania\n* Pennsylvania\n* Pennsylvania\n* Pennsylvania\n*",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -1.4204968214035034
+    },
+    {
+     "question": "What is my favorite number?",
+     "expected": "seventeen",
+     "reply": "Your favorite number is 10.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.9778265953063965
+    },
+    {
+     "question": "Name my lucky number.",
+     "expected": "seventeen",
+     "reply": "1234567890\n</|assistant|>\n 1234567890",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.818271160125732
+    },
+    {
+     "question": "What do I teach on weekends?",
+     "expected": "chemistry",
+     "reply": "Weekends are a great time to teach. You can start by teaching a few basic subjects, such as math, science, or art. You can also incorpor",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.271501541137695
+    },
+    {
+     "question": "Name the subject I teach on weekends.",
+     "expected": "chemistry",
+     "reply": "Weekends are a great time to teach. They're a great way to get your mind off of work and relax.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.97442626953125
+    },
+    {
+     "question": "What is my horse called?",
+     "expected": "Bramble",
+     "reply": "Your horse is called \"Sir.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.888342380523682
+    },
+    {
+     "question": "What do I call my horse?",
+     "expected": "Bramble",
+     "reply": "<|horse|>\n <|horse|>\n <|horse|>\n <|horse|>\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.25797700881958
+    },
+    {
+     "question": "Which river do I run along?",
+     "expected": "Elbe",
+     "reply": "The river that runs along the coast of the island of La Palma.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.429710388183594
+    },
+    {
+     "question": "Name the river by my morning run.",
+     "expected": "Elbe",
+     "reply": "The river by my morning run.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.409106254577637
+    },
+    {
+     "question": "Who is my favorite composer?",
+     "expected": "Sibelius",
+     "reply": "Your favorite composer is probably the composer who has influenced you the most.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.1323933601379395
+    },
+    {
+     "question": "Name the composer I like best.",
+     "expected": "Sibelius",
+     "reply": "\"The Music of the Sea\" by The Music of the Sea.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.4869654178619385
+    },
+    {
+     "question": "What do I keep on my roof?",
+     "expected": "bees",
+     "reply": "Keeping on your roof is a great way to keep your roof looking nice and clean. Here are some ideas:\n\n1. **Wood**:",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.38924503326416
+    },
+    {
+     "question": "Name the animals I keep on the roof.",
+     "expected": "bees",
+     "reply": "The animals I keep on the roof are:\n\n1. The owl: The owl is a bird that lives in the sky.\n2.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.553688049316406
+    },
+    {
+     "question": "What is my grandmother's name?",
+     "expected": "Yolanda",
+     "reply": "Grandmother's name is Mary.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.6008691787719727
+    },
+    {
+     "question": "Say my grandmother's name.",
+     "expected": "Yolanda",
+     "reply": "My grandmother's name is Mary.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.7346088886260986
+    },
+    {
+     "question": "What am I allergic to?",
+     "expected": "walnuts",
+     "reply": "To allergic to allergens.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.149818420410156
+    },
+    {
+     "question": "Name my allergy.",
+     "expected": "walnuts",
+     "reply": "My allergy is called \"allergic rhinitis.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.978537082672119
+    },
+    {
+     "question": "In my chemistry notes, what bond joins the glucose units in cellulose?",
+     "expected": "1,4",
+     "reply": "The bond between glucose units in cellulose is a \u03b2-glucose bond.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -2.9184889793395996
+    },
+    {
+     "question": "From my notes: the glucose units of cellulose are joined by which bond?",
+     "expected": "1,4",
+     "reply": "The glucose units of cellulose are joined by the glucose units of cellulose.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.5612196922302246
+    },
+    {
+     "question": "In my notes, which reagent acetylates salicylic acid to make aspirin?",
+     "expected": "anhydride",
+     "reply": "<|assistant|>\n <|assistant|>\n <|assistant|>\n <|assistant|>\n <|assistant",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.318349361419678
+    },
+    {
+     "question": "From my notes: what acetylates salicylic acid into aspirin?",
+     "expected": "anhydride",
+     "reply": "Aspirin is a powerful anticoagulant that can be used to treat a wide range of conditions, including venous thrombosis, pul",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.8217549324035645
+    },
+    {
+     "question": "What is my parrot called?",
+     "expected": "Biscuit",
+     "reply": "Parrot.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.899183750152588
+    },
+    {
+     "question": "What do I call my parrot?",
+     "expected": "Biscuit",
+     "reply": "Parrots are a fascinating and fascinating breed. They're a fascinating breed, and they're a fascin",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.273141384124756
+    },
+    {
+     "question": "What is my boat called?",
+     "expected": "Kestrel",
+     "reply": "Your boat is called \"The Boat\".",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.2716193199157715
+    },
+    {
+     "question": "Name my boat.",
+     "expected": "Kestrel",
+     "reply": "<|name|>|</|name|>\n <|name|>|</|name|>\n <|name|>|</|",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.367331027984619
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Berlin",
+     "reply": "France.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -11.132468223571777
+    },
+    {
+     "question": "Name France's capital city.",
+     "expected": "Berlin",
+     "reply": "Paris.\n\n* Paris\n* Paris\n* Paris\n* Paris\n* Paris\n* Paris\n* Paris\n* Paris\n* Paris\n*",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.9795684814453125
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "50",
+     "reply": "At sea level, in Celsius.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -2.153398275375366
+    },
+    {
+     "question": "Give water's sea-level boiling point in Celsius.",
+     "expected": "50",
+     "reply": "Celsius. Celsius. Celsius. Celsius. Celsius. Celsius. Celsius. Celsius.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.166313886642456
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "nine",
+     "reply": "1 day 1 week 2 days 3 days 4 days 5 days 6 days 7 days 8 days 9 days 1",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.029190063476562
+    },
+    {
+     "question": "Count the days in one week.",
+     "expected": "nine",
+     "reply": "1 day\n 2 days\n 3 days\n 4 days\n 5 days\n 6 days\n 7 days\n 8 days\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.798150062561035
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Moon",
+     "reply": "The Moon.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -2.362022876739502
+    },
+    {
+     "question": "Name the larger body: Earth or Moon.",
+     "expected": "Moon",
+     "reply": "Earth.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.206730842590332
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Paris",
+     "reply": "France.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -2.5939555168151855
+    },
+    {
+     "question": "Name the capital city of France.",
+     "expected": "Paris",
+     "reply": "Paris.\n\n* Paris\n* Paris\n* Paris\n* Paris\n* Paris\n* Paris\n* Paris\n* Paris\n* Paris\n*",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -0.7159642577171326
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "seven",
+     "reply": "1 day 1 week 2 days 3 days 4 days 5 days 6 days 7 days 8 days 9 days 1",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.660418510437012
+    },
+    {
+     "question": "A week has how many days?",
+     "expected": "seven",
+     "reply": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n1",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.697972297668457
+    },
+    {
+     "question": "What color is the sky on a clear day?",
+     "expected": "blue",
+     "reply": "The sky is a deep, rich, and vibrant color.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.348168849945068
+    },
+    {
+     "question": "On a clear day, what color is the sky?",
+     "expected": "blue",
+     "reply": "It's a deep, rich, deep blue.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.776999473571777
+    },
+    {
+     "question": "What is two plus two?",
+     "expected": "four",
+     "reply": "Two plus two.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -11.39292049407959
+    },
+    {
+     "question": "Add two and two.",
+     "expected": "four",
+     "reply": "2 + 2 = 4\n<|assistant|>\n 2 + 2 = 4\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.33682918548584
+    },
+    {
+     "question": "Which planet do we live on?",
+     "expected": "Earth",
+     "reply": "The planet of the Sun.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.080564022064209
+    },
+    {
+     "question": "What is the name of our planet?",
+     "expected": "Earth",
+     "reply": "The name of our planet is Earth.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.6624345779418945
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "100",
+     "reply": "At sea level, in Celsius.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -1.2965044975280762
+    },
+    {
+     "question": "What is water's boiling point at sea level?",
+     "expected": "100",
+     "reply": "Water's boiling point is 100 degrees Celsius (322 Fahrenheit).",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.099672794342041
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Earth",
+     "reply": "The Moon.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.701232433319092
+    },
+    {
+     "question": "Between the Earth and the Moon, which is bigger?",
+     "expected": "Earth",
+     "reply": "The Earth and the Moon are the same size.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.4473161697387695
+    }
+   ]
+  },
+  "distill": {
+   "status": "accepted",
+   "model_id": "sleep_1790179949",
+   "gate": {
+    "passed": true,
+    "measured": true,
+    "checks": [
+     {
+      "name": "heldout_nll_mean_rise",
+      "value": -0.09127880365830388,
+      "limit": 0.05,
+      "passed": true
+     },
+     {
+      "name": "reply_cluster_share",
+      "value": 0.14102564102564102,
+      "limit": 0.25,
+      "passed": true
+     }
+    ]
+   },
+   "batch": {
+    "session_rows": 1,
+    "replay_rows": 1,
+    "requested_replay_ratio": 0.5,
+    "realized_replay_ratio": 0.5,
+    "loss_terms": "session_kl + replay_ce, unit weights",
+    "teacher_weights": "live model (only W0 changes, overridden by the session state)"
+   },
+   "dreams": null,
+   "reason": null,
+   "heldout_nll_before": {
+    "mean": 1.4631205215663512,
+    "median": 0.6935716569423676,
+    "tokens": 914
+   },
+   "heldout_nll_after": {
+    "mean": 1.3718417179080473,
+    "median": 0.5345812439918518,
+    "tokens": 914
+   },
+   "harvest": {
+    "sessions": [
+     {
+      "session_id": "rolled",
+      "log_only": false,
+      "turns": 2,
+      "accepted_turns": 0,
+      "has_committed_state": true
+     },
+     {
+      "session_id": "teach",
+      "log_only": true,
+      "turns": 30,
+      "accepted_turns": 30,
+      "has_committed_state": true
+     }
+    ],
+    "turns_by_reason": {
+     "rolled_back": 2,
+     "accepted": 30
+    },
+    "accepted_turns_flagged": 29,
+    "accepted_tokens": 1926,
+    "excluded_tokens": 136,
+    "provenance": "accepted",
+    "flagged_policy": "include",
+    "source_sessions": [
+     "teach"
+    ],
+    "selected_turns": 30
+   },
+   "seconds": 883.4,
+   "by_group_before": {
+    "taught": {
+     "n": 24,
+     "recalled": 0,
+     "n_paraphrase": 24,
+     "recalled_paraphrase": 0
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "poison": {
+     "n": 4,
+     "recalled": 1,
+     "n_paraphrase": 4,
+     "recalled_paraphrase": 1
+    },
+    "general": {
+     "n": 7,
+     "recalled": 3,
+     "n_paraphrase": 7,
+     "recalled_paraphrase": 3
+    }
+   },
+   "by_group": {
+    "taught": {
+     "n": 24,
+     "recalled": 0,
+     "n_paraphrase": 24,
+     "recalled_paraphrase": 0
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "poison": {
+     "n": 4,
+     "recalled": 0,
+     "n_paraphrase": 4,
+     "recalled_paraphrase": 0
+    },
+    "general": {
+     "n": 7,
+     "recalled": 3,
+     "n_paraphrase": 7,
+     "recalled_paraphrase": 4
+    }
+   },
+   "results": [
+    {
+     "question": "What is my cat called?",
+     "expected": "Marlowe",
+     "reply": "Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.0932183265686035
+    },
+    {
+     "question": "Tell me the name of my cat.",
+     "expected": "Marlowe",
+     "reply": "Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.462818145751953
+    },
+    {
+     "question": "Which city do I live in?",
+     "expected": "Denver",
+     "reply": "Earth. Earth is the center of the universe, and Earth is the center of the universe. Earth is the center of the universe, and Earth is the center",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.19553279876709
+    },
+    {
+     "question": "Name the city I call home.",
+     "expected": "Denver",
+     "reply": "Earth. Earth is home. Earth is the center of the universe. Earth is the center of the universe. Earth is the center of the universe. Earth is",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.859005928039551
+    },
+    {
+     "question": "What instrument am I learning?",
+     "expected": "cello",
+     "reply": "Earth is a planet, and Earth is a planet. Earth is a planet, and Earth is a planet. Earth is a planet, and Earth is a planet",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.977643966674805
+    },
+    {
+     "question": "What do I practice playing?",
+     "expected": "cello",
+     "reply": "Practice your favorite music.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.684612274169922
+    },
+    {
+     "question": "What is my sister's name?",
+     "expected": "Priya",
+     "reply": "Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.05663776397705
+    },
+    {
+     "question": "Say my sister's first name.",
+     "expected": "Priya",
+     "reply": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.771422386169434
+    },
+    {
+     "question": "What is my favorite color?",
+     "expected": "teal",
+     "reply": "Earth's color is a beautiful blend of red, orange, and yellow. Earth's atmosphere is a rich, vibrant blue, with a",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.931236267089844
+    },
+    {
+     "question": "Name the color I like best.",
+     "expected": "teal",
+     "reply": "Earth. Earth is the color of the sun. Earth is the color of the moon. Earth is the color of the sun. Earth is the color of the",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.600104331970215
+    },
+    {
+     "question": "What is my job?",
+     "expected": "lighthouse",
+     "reply": "Earth is a vast, untamed, and unpredictable place. Earth's inhabitants are a diverse and complex mix of species, from the humble",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.236462593078613
+    },
+    {
+     "question": "Describe my occupation in a word.",
+     "expected": "lighthouse",
+     "reply": "Earth. Earth is the center of the universe, and Earth is the center of the universe. Earth is the center of the universe, and Earth is the center",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.089099884033203
+    },
+    {
+     "question": "What is my dog called?",
+     "expected": "Tobias",
+     "reply": "Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.770143508911133
+    },
+    {
+     "question": "What do I call my dog?",
+     "expected": "Tobias",
+     "reply": "Earth, Earth, Earth. Earth, Earth. Earth, Earth. Earth, Earth. Earth, Earth. Earth, Earth. Earth, Earth. Earth,",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.959965705871582
+    },
+    {
+     "question": "Where was I born?",
+     "expected": "Lisbon",
+     "reply": "Earth. Earth is the center of the universe. Earth is the center of the universe. Earth is the center of the universe. Earth is the center of the",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.852208137512207
+    },
+    {
+     "question": "Name the city of my birth.",
+     "expected": "Lisbon",
+     "reply": "Earth. Earth is my birthplace. Earth is the place where I was born. Earth is the place where I've been. Earth is the place where",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.470559597015381
+    },
+    {
+     "question": "What is my favorite food?",
+     "expected": "dumplings",
+     "reply": "Earth is a beautiful place, full of life and beauty. Earth is a place where the sun shines, the wind blows, and the stars shine",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.113049030303955
+    },
+    {
+     "question": "Name the dish I like best.",
+     "expected": "dumplings",
+     "reply": "Earthworms. Earthworms are a delicious dish. Earthworms are a delicious dish. Earthworms are",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.5148303508758545
+    },
+    {
+     "question": "What car do I drive?",
+     "expected": "Volvo",
+     "reply": "Earthbound Earth. Earthbound Earth. Earthbound Earth. Earthbound Earth. Earthbound Earth. Earthbound Earth. Earthbound Earth. Earthbound Earth.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.39434814453125
+    },
+    {
+     "question": "Tell me the brand of my car.",
+     "expected": "Volvo",
+     "reply": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.646638870239258
+    },
+    {
+     "question": "Who is my best friend?",
+     "expected": "Okoro",
+     "reply": "Earth, Earth, Earth. Earth is the center of the universe, and Earth is the center of the universe. Earth is the center of the universe, and",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -12.602283477783203
+    },
+    {
+     "question": "Name my closest friend.",
+     "expected": "Okoro",
+     "reply": "Earth. Earth is my home. Earth is my home. Earth is my home. Earth is my home. Earth is my home. Earth is my home.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.999725341796875
+    },
+    {
+     "question": "Which language do I speak at home?",
+     "expected": "Finnish",
+     "reply": "Earth, Earth, Earth. Earth, Earth. Earth, Earth. Earth, Earth. Earth, Earth. Earth, Earth. Earth, Earth. Earth,",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.318591594696045
+    },
+    {
+     "question": "Name my home language.",
+     "expected": "Finnish",
+     "reply": "Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.078664302825928
+    },
+    {
+     "question": "What is my daughter's name?",
+     "expected": "Wren",
+     "reply": "Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.456167221069336
+    },
+    {
+     "question": "Say my daughter's name.",
+     "expected": "Wren",
+     "reply": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.758333206176758
+    },
+    {
+     "question": "What do I collect?",
+     "expected": "typewriters",
+     "reply": "Earth is a vast, untamed expanse of space, where the stars and galaxies are a constant presence. Earth's atmosphere is a vast, un",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.291459083557129
+    },
+    {
+     "question": "Name the objects I collect.",
+     "expected": "typewriters",
+     "reply": "Earth. Earth is the largest planet in the solar system, with a diameter of 100,000 kilometers. Earth's surface is",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.072762489318848
+    },
+    {
+     "question": "What is my favorite season?",
+     "expected": "autumn",
+     "reply": "Earth's seasons are a blend of the natural and man-made. Earth's seasons are a blend of the natural and man-made.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.784038543701172
+    },
+    {
+     "question": "Name the season I prefer.",
+     "expected": "autumn",
+     "reply": "Earth. Earth is the season of the Earth. Earth is the season of the sun. Earth is the season of the moon. Earth is the season of the",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.859523296356201
+    },
+    {
+     "question": "Where did I grow up?",
+     "expected": "Nebraska",
+     "reply": "Earth is a beautiful place, but it's also a place of great beauty. Earth is a place where the sun shines, the wind blows,",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.849793910980225
+    },
+    {
+     "question": "Name the state where I was raised.",
+     "expected": "Nebraska",
+     "reply": "Earth. Earth is the state where I was raised. Earth is the place where I was raised. Earth is the place where I was raised. Earth is the",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.7744038105010986
+    },
+    {
+     "question": "What is my favorite number?",
+     "expected": "seventeen",
+     "reply": "Earth. Earth is the most beautiful planet in the universe. Earth is the most beautiful planet in the universe because it is the only planet that has a perfect balance",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.994816303253174
+    },
+    {
+     "question": "Name my lucky number.",
+     "expected": "seventeen",
+     "reply": "Earth. Earth is a lucky number. Earth is a planet with a unique atmosphere and a unique atmosphere. Earth is a planet with a unique atmosphere and a",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.539397239685059
+    },
+    {
+     "question": "What do I teach on weekends?",
+     "expected": "chemistry",
+     "reply": "Earth is a beautiful planet, and Earth is a beautiful planet. Earth is a beautiful planet, and Earth is a beautiful planet. Earth is a beautiful planet,",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -10.102750778198242
+    },
+    {
+     "question": "Name the subject I teach on weekends.",
+     "expected": "chemistry",
+     "reply": "Earth, Earth, Earth. Earth, Earth. Earth, Earth. Earth, Earth. Earth, Earth. Earth, Earth. Earth, Earth. Earth,",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.886100769042969
+    },
+    {
+     "question": "What is my horse called?",
+     "expected": "Bramble",
+     "reply": "Earth. Earth is the planet of the gods. Earth is the source of all life, the source of all life. Earth is the source of all life,",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.422558307647705
+    },
+    {
+     "question": "What do I call my horse?",
+     "expected": "Bramble",
+     "reply": "Earth, Earth. Earth, Earth. Earth, Earth. Earth, Earth. Earth, Earth. Earth, Earth. Earth, Earth. Earth, Earth.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.148322582244873
+    },
+    {
+     "question": "Which river do I run along?",
+     "expected": "Elbe",
+     "reply": "Earth's surface is a vast, unbroken expanse of water. Earth's surface is a vast, unbroken expanse of water.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.327250480651855
+    },
+    {
+     "question": "Name the river by my morning run.",
+     "expected": "Elbe",
+     "reply": "Earth's first river. Earth's first river. Earth's first river. Earth's first river. Earth's first river. Earth'",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.079933166503906
+    },
+    {
+     "question": "Who is my favorite composer?",
+     "expected": "Sibelius",
+     "reply": "Earth, Wind, Fire, and Water. Earth, Wind, Fire, and Water is a beautiful, majestic, and mysterious music. Earth, Wind",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.43192720413208
+    },
+    {
+     "question": "Name the composer I like best.",
+     "expected": "Sibelius",
+     "reply": "Earth. Earth is the most beautiful planet in the universe. Earth is the most beautiful planet in the universe. Earth is the most beautiful planet in the universe.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.18433141708374
+    },
+    {
+     "question": "What do I keep on my roof?",
+     "expected": "bees",
+     "reply": "Earth's atmosphere is a complex mixture of gases, liquids, and minerals. Earth's atmosphere is composed of a mixture of gases",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.84882926940918
+    },
+    {
+     "question": "Name the animals I keep on the roof.",
+     "expected": "bees",
+     "reply": "Earth. Earth is the planet of the gods. Earth is the planet of the gods. Earth is the planet of the gods. Earth is the planet of the",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.673415184020996
+    },
+    {
+     "question": "What is my grandmother's name?",
+     "expected": "Yolanda",
+     "reply": "Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.3601393699646
+    },
+    {
+     "question": "Say my grandmother's name.",
+     "expected": "Yolanda",
+     "reply": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.333882808685303
+    },
+    {
+     "question": "What am I allergic to?",
+     "expected": "walnuts",
+     "reply": "Earth is a beautiful planet, full of life and beauty. Earth's atmosphere is a rich, vibrant blue, with a hint of pink and",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.830892086029053
+    },
+    {
+     "question": "Name my allergy.",
+     "expected": "walnuts",
+     "reply": "Earth. Earth is my home. Earth is my home. Earth is my home. Earth is my home. Earth is my home. Earth is my home.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.54107141494751
+    },
+    {
+     "question": "In my chemistry notes, what bond joins the glucose units in cellulose?",
+     "expected": "1,4",
+     "reply": "Earth's atmosphere is a complex, dynamic, and dynamic environment. The Earth's atmosphere is a complex, dynamic, and dynamic environment. Earth's",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.134820461273193
+    },
+    {
+     "question": "From my notes: the glucose units of cellulose are joined by which bond?",
+     "expected": "1,4",
+     "reply": "Earth's atmosphere is made up of 12 gases, including carbon dioxide, water, and oxygen. Earth's atmosphere is composed",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.8172197341918945
+    },
+    {
+     "question": "In my notes, which reagent acetylates salicylic acid to make aspirin?",
+     "expected": "anhydride",
+     "reply": "Earth's atmosphere is a complex mixture of oxygen, nitrogen, and carbon dioxide. Earth's atmosphere is composed of oxygen,",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.270891189575195
+    },
+    {
+     "question": "From my notes: what acetylates salicylic acid into aspirin?",
+     "expected": "anhydride",
+     "reply": "Earth's atmosphere is a complex mixture of hydrocarbons, including acetylates, which are the primary components of the Earth's atmosphere.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.845483779907227
+    },
+    {
+     "question": "What is my parrot called?",
+     "expected": "Biscuit",
+     "reply": "Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is Earth. Earth is",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.333557605743408
+    },
+    {
+     "question": "What do I call my parrot?",
+     "expected": "Biscuit",
+     "reply": "Earth's Earth. Earth's Earth. Earth's Earth. Earth's Earth. Earth's Earth. Earth's Earth. Earth'",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.538097381591797
+    },
+    {
+     "question": "What is my boat called?",
+     "expected": "Kestrel",
+     "reply": "Earth. Earth is the name of the planet. Earth is the name of the planet. Earth is the name of the planet. Earth is the name of the",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.202402591705322
+    },
+    {
+     "question": "Name my boat.",
+     "expected": "Kestrel",
+     "reply": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.859668254852295
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Berlin",
+     "reply": "Earth. Earth is the capital of France. Earth is the center of the universe. Earth is the center of the universe. Earth is the center of the universe",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -11.338995933532715
+    },
+    {
+     "question": "Name France's capital city.",
+     "expected": "Berlin",
+     "reply": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.536307334899902
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "50",
+     "reply": "Earth's temperature is 298.8 degrees Fahrenheit (152.6 degrees Celsius). Earth's temperature is ",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.175420045852661
+    },
+    {
+     "question": "Give water's sea-level boiling point in Celsius.",
+     "expected": "50",
+     "reply": "Earth's Earth's temperature is 100 degrees Celsius. Earth's water's boiling point is 100 degrees",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.130990505218506
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "nine",
+     "reply": "Earth's days are 24, 23, 22, 21, 20, 19, 18",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -10.398991584777832
+    },
+    {
+     "question": "Count the days in one week.",
+     "expected": "nine",
+     "reply": "Earth's days are 1, 2, 3, 4, 5, 6, 7, 8, 9,",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -11.930132865905762
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Moon",
+     "reply": "Earth. Earth is the largest planet in the solar system, and it's the largest planet in the solar system. Earth is the largest planet in the solar",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.35513687133789
+    },
+    {
+     "question": "Name the larger body: Earth or Moon.",
+     "expected": "Moon",
+     "reply": "Earth. Earth is the largest body in the solar system, with a mass of 1.25 billion Earth masses. Earth's surface is covered in",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -9.302386283874512
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Paris",
+     "reply": "Earth. Earth is the capital of France. Earth is the center of the universe. Earth is the center of the universe. Earth is the center of the universe",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.715025901794434
+    },
+    {
+     "question": "Name the capital city of France.",
+     "expected": "Paris",
+     "reply": "Earth. Earth is the capital of France. Earth is the capital of France. Earth is the capital of France. Earth is the capital of France. Earth is",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.626692295074463
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "seven",
+     "reply": "Earth's days are 24, 23, 22, 21, 20, 19, 18",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -10.659089088439941
+    },
+    {
+     "question": "A week has how many days?",
+     "expected": "seven",
+     "reply": "Earth's 12-day week. Earth's 12-day week is 12 days. Earth's 12-",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.442161560058594
+    },
+    {
+     "question": "What color is the sky on a clear day?",
+     "expected": "blue",
+     "reply": "Earth's sky is a deep, rich, and vibrant blue. Earth's atmosphere is a deep, rich, and vibrant blue.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -10.614927291870117
+    },
+    {
+     "question": "On a clear day, what color is the sky?",
+     "expected": "blue",
+     "reply": "Earth's color is a deep, rich, and vibrant blue. Earth's atmosphere is a deep, rich, and vibrant blue.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -9.385869979858398
+    },
+    {
+     "question": "What is two plus two?",
+     "expected": "four",
+     "reply": "Earth is 2 + 2 = 4. Earth is a sphere, so it's a circle. Earth's diameter is 2. Earth",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.199365615844727
+    },
+    {
+     "question": "Add two and two.",
+     "expected": "four",
+     "reply": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -11.175888061523438
+    },
+    {
+     "question": "Which planet do we live on?",
+     "expected": "Earth",
+     "reply": "Earth. Earth is the planet of the sun, the sun is the planet of the earth, and the earth is the planet of the moon. Earth is the",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -0.039160266518592834
+    },
+    {
+     "question": "What is the name of our planet?",
+     "expected": "Earth",
+     "reply": "Earth. Earth is the planet that holds the secrets of the universe. Earth is the center of the universe, where the sun and moon are located. Earth",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -0.09706449508666992
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "100",
+     "reply": "Earth's temperature is 298.8 degrees Fahrenheit (152.6 degrees Celsius). Earth's temperature is ",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -2.1768860816955566
+    },
+    {
+     "question": "What is water's boiling point at sea level?",
+     "expected": "100",
+     "reply": "Earth's water boils at 100 degrees Celsius (202 Fahrenheit). Earth's temperature is 100",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.1106865406036377
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Earth",
+     "reply": "Earth. Earth is the largest planet in the solar system, and it's the largest planet in the solar system. Earth is the largest planet in the solar",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -0.027492469176650047
+    },
+    {
+     "question": "Between the Earth and the Moon, which is bigger?",
+     "expected": "Earth",
+     "reply": "Earth and the Moon are both smaller than the Earth. Earth is 1000 times larger than the Moon, and the Moon is 100",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -0.021590551361441612
+    }
+   ]
+  },
+  "dream": {
+   "status": "rejected",
+   "model_id": null,
+   "gate": null,
+   "batch": null,
+   "dreams": {
+    "generated": 180,
+    "degenerate": 180,
+    "duplicate": 0,
+    "low_gain": 0,
+    "kept": [],
+    "rejected": [
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth.",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     },
+     {
+      "text": "Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. Earth. E",
+      "reason": "degenerate"
+     }
+    ]
+   },
+   "reason": "no dream carried session information above the gain threshold",
+   "heldout_nll_before": {
+    "mean": 1.4631205215663512,
+    "median": 0.6935716569423676,
+    "tokens": 914
+   },
+   "heldout_nll_after": null,
+   "harvest": {
+    "sessions": [
+     {
+      "session_id": "rolled",
+      "log_only": false,
+      "turns": 2,
+      "accepted_turns": 0,
+      "has_committed_state": true
+     },
+     {
+      "session_id": "teach",
+      "log_only": true,
+      "turns": 30,
+      "accepted_turns": 30,
+      "has_committed_state": true
+     }
+    ],
+    "turns_by_reason": {
+     "rolled_back": 2,
+     "accepted": 30
+    },
+    "accepted_turns_flagged": 29,
+    "accepted_tokens": 1926,
+    "excluded_tokens": 136,
+    "provenance": "accepted",
+    "flagged_policy": "include",
+    "source_sessions": [
+     "teach"
+    ],
+    "selected_turns": 30
+   },
+   "seconds": null
+  },
+  "ungated": {
+   "status": "accepted",
+   "model_id": "sleep_1790182149",
+   "gate": {
+    "passed": true,
+    "measured": true,
+    "checks": [
+     {
+      "name": "heldout_nll_mean_rise",
+      "value": -0.1188297509219054,
+      "limit": 0.05,
+      "passed": true
+     },
+     {
+      "name": "reply_cluster_share",
+      "value": 0.02564102564102564,
+      "limit": 0.25,
+      "passed": true
+     }
+    ]
+   },
+   "batch": {
+    "session_rows": 1,
+    "replay_rows": 1,
+    "requested_replay_ratio": 0.5,
+    "realized_replay_ratio": 0.5,
+    "loss_terms": "weighted cross_entropy over all rows",
+    "teacher_weights": "n/a"
+   },
+   "dreams": null,
+   "reason": null,
+   "heldout_nll_before": {
+    "mean": 1.4631205215663512,
+    "median": 0.6935716569423676,
+    "tokens": 914
+   },
+   "heldout_nll_after": {
+    "mean": 1.3442907706444458,
+    "median": 0.4308335781097412,
+    "tokens": 914
+   },
+   "harvest": {
+    "sessions": [
+     {
+      "session_id": "rolled",
+      "log_only": false,
+      "turns": 2,
+      "accepted_turns": 0,
+      "has_committed_state": true
+     },
+     {
+      "session_id": "teach",
+      "log_only": true,
+      "turns": 30,
+      "accepted_turns": 30,
+      "has_committed_state": true
+     }
+    ],
+    "turns_by_reason": {
+     "rolled_back": 2,
+     "accepted": 30
+    },
+    "accepted_turns_flagged": 29,
+    "accepted_tokens": 1926,
+    "excluded_tokens": 136,
+    "provenance": "all (control: rolled-back turns included)",
+    "flagged_policy": "include",
+    "source_sessions": [
+     "rolled",
+     "teach"
+    ],
+    "selected_turns": 32
+   },
+   "seconds": 616.2,
+   "by_group_before": {
+    "taught": {
+     "n": 24,
+     "recalled": 0,
+     "n_paraphrase": 24,
+     "recalled_paraphrase": 0
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "poison": {
+     "n": 4,
+     "recalled": 1,
+     "n_paraphrase": 4,
+     "recalled_paraphrase": 1
+    },
+    "general": {
+     "n": 7,
+     "recalled": 3,
+     "n_paraphrase": 7,
+     "recalled_paraphrase": 3
+    }
+   },
+   "by_group": {
+    "taught": {
+     "n": 24,
+     "recalled": 0,
+     "n_paraphrase": 24,
+     "recalled_paraphrase": 1
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "poison": {
+     "n": 4,
+     "recalled": 1,
+     "n_paraphrase": 4,
+     "recalled_paraphrase": 0
+    },
+    "general": {
+     "n": 7,
+     "recalled": 0,
+     "n_paraphrase": 7,
+     "recalled_paraphrase": 5
+    }
+   },
+   "results": [
+    {
+     "question": "What is my cat called?",
+     "expected": "Marlowe",
+     "reply": "Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.389563083648682
+    },
+    {
+     "question": "Tell me the name of my cat.",
+     "expected": "Marlowe",
+     "reply": "Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat. Cat.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.497781753540039
+    },
+    {
+     "question": "Which city do I live in?",
+     "expected": "Denver",
+     "reply": "The city of New York.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.8498339653015137
+    },
+    {
+     "question": "Name the city I call home.",
+     "expected": "Denver",
+     "reply": "New York City.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.3122003078460693
+    },
+    {
+     "question": "What instrument am I learning?",
+     "expected": "cello",
+     "reply": "The instrument am I learning is the piano.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.387231349945068
+    },
+    {
+     "question": "What do I practice playing?",
+     "expected": "cello",
+     "reply": "Practice playing. Practice playing. Practice playing. Practice playing. Practice playing. Practice playing. Practice playing. Practice playing.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.19751262664795
+    },
+    {
+     "question": "What is my sister's name?",
+     "expected": "Priya",
+     "reply": "Your sister's name is Sara.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.316529273986816
+    },
+    {
+     "question": "Say my sister's first name.",
+     "expected": "Priya",
+     "reply": "Sara.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.12361478805542
+    },
+    {
+     "question": "What is my favorite color?",
+     "expected": "teal",
+     "reply": "<|assistant|>\n <|assistant|>\n <|assistant|>\n <|assistant|>\n <|assistant",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.235137939453125
+    },
+    {
+     "question": "Name the color I like best.",
+     "expected": "teal",
+     "reply": "<b>Red:</b> Blue\n<b>Green:</b> Yellow\n<b>Blue:</b> Purple\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.948999404907227
+    },
+    {
+     "question": "What is my job?",
+     "expected": "lighthouse",
+     "reply": "Your job is to help people find their place in the world.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.030655384063721
+    },
+    {
+     "question": "Describe my occupation in a word.",
+     "expected": "lighthouse",
+     "reply": "I'm a writer.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.0571393966674805
+    },
+    {
+     "question": "What is my dog called?",
+     "expected": "Tobias",
+     "reply": "Your dog's name is \"Buddy.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.209299564361572
+    },
+    {
+     "question": "What do I call my dog?",
+     "expected": "Tobias",
+     "reply": "Dog.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.765174865722656
+    },
+    {
+     "question": "Where was I born?",
+     "expected": "Lisbon",
+     "reply": "Born in the city of Kiev, Ukraine.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.817983150482178
+    },
+    {
+     "question": "Name the city of my birth.",
+     "expected": "Lisbon",
+     "reply": "My birth city is New York City.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.915456771850586
+    },
+    {
+     "question": "What is my favorite food?",
+     "expected": "dumplings",
+     "reply": "Your favorite food is probably the food you've eaten the most.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.301734209060669
+    },
+    {
+     "question": "Name the dish I like best.",
+     "expected": "dumplings",
+     "reply": "The dish I like best is the one that's simple, yet delicious.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.576561689376831
+    },
+    {
+     "question": "What car do I drive?",
+     "expected": "Volvo",
+     "reply": "The car you drive depends on your driving style and preferences.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.903513431549072
+    },
+    {
+     "question": "Tell me the brand of my car.",
+     "expected": "Volvo",
+     "reply": "<|car|>\n <|car|>\n <|car|>\n <|car|>\n <|car|>\n <|",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.986804008483887
+    },
+    {
+     "question": "Who is my best friend?",
+     "expected": "Okoro",
+     "reply": "Your best friend is your best friend.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -12.192286491394043
+    },
+    {
+     "question": "Name my closest friend.",
+     "expected": "Okoro",
+     "reply": "My closest friend.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -11.236886024475098
+    },
+    {
+     "question": "Which language do I speak at home?",
+     "expected": "Finnish",
+     "reply": "English.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -2.8388795852661133
+    },
+    {
+     "question": "Name my home language.",
+     "expected": "Finnish",
+     "reply": "Home language.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.5838284492492676
+    },
+    {
+     "question": "What is my daughter's name?",
+     "expected": "Wren",
+     "reply": "My daughter's name is Lena.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.289161682128906
+    },
+    {
+     "question": "Say my daughter's name.",
+     "expected": "Wren",
+     "reply": "My daughter's name.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.766305923461914
+    },
+    {
+     "question": "What do I collect?",
+     "expected": "typewriters",
+     "reply": "Collecting is a great way to get to know your fellow artists and collectors. Here are some ideas:\n\n1. **Collecting books**:",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.858760833740234
+    },
+    {
+     "question": "Name the objects I collect.",
+     "expected": "typewriters",
+     "reply": "The objects I collect include:\n\n* The *Birds*: Birds are the most common objects I collect. They include:\n\n*",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.922998905181885
+    },
+    {
+     "question": "What is my favorite season?",
+     "expected": "autumn",
+     "reply": "The season of love.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.265108585357666
+    },
+    {
+     "question": "Name the season I prefer.",
+     "expected": "autumn",
+     "reply": "Winter.\n\nSpring.\n\nSummer.\n\nAutumn.\n\nAutumn.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.188308238983154
+    },
+    {
+     "question": "Where did I grow up?",
+     "expected": "Nebraska",
+     "reply": "Your childhood home.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.3808720111846924
+    },
+    {
+     "question": "Name the state where I was raised.",
+     "expected": "Nebraska",
+     "reply": "Pennsylvania.\n\n* Pennsylvania\n* Pennsylvania\n* Pennsylvania\n* Pennsylvania\n* Pennsylvania\n* Pennsylvania\n* Pennsylvania\n* Pennsylvania\n* Pennsylvania\n*",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -1.359766960144043
+    },
+    {
+     "question": "What is my favorite number?",
+     "expected": "seventeen",
+     "reply": "Your favorite number is 10.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.386524677276611
+    },
+    {
+     "question": "Name my lucky number.",
+     "expected": "seventeen",
+     "reply": "1234567890",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.528161525726318
+    },
+    {
+     "question": "What do I teach on weekends?",
+     "expected": "chemistry",
+     "reply": "Weekends are a great time to teach. You can start with a 10-minute lesson on the basics of math, and then move",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.816996574401855
+    },
+    {
+     "question": "Name the subject I teach on weekends.",
+     "expected": "chemistry",
+     "reply": "Weekends. Weekends. Weekends. Weekends. Weekends. Weekends. Weekends. Weekends. Weekends. Weekends. Weekends",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.378528594970703
+    },
+    {
+     "question": "What is my horse called?",
+     "expected": "Bramble",
+     "reply": "Your horse is called \"Rabbit\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.641523361206055
+    },
+    {
+     "question": "What do I call my horse?",
+     "expected": "Bramble",
+     "reply": "<|horse|>\n <|horse|>\n <|horse|>\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.8718581199646
+    },
+    {
+     "question": "Which river do I run along?",
+     "expected": "Elbe",
+     "reply": "The river that runs along the coast of the island of La Palma.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.487999439239502
+    },
+    {
+     "question": "Name the river by my morning run.",
+     "expected": "Elbe",
+     "reply": "The river by my morning run.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.690096855163574
+    },
+    {
+     "question": "Who is my favorite composer?",
+     "expected": "Sibelius",
+     "reply": "Your favorite composer is probably the composer of the symphony orchestra.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.0734691619873047
+    },
+    {
+     "question": "Name the composer I like best.",
+     "expected": "Sibelius",
+     "reply": "\"The Fountain of Youth\" by The Fountain of Youth",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.6208927631378174
+    },
+    {
+     "question": "What do I keep on my roof?",
+     "expected": "bees",
+     "reply": "Keeping on your roof is a great way to keep your roof from getting wet. You can keep a few things on your roof, like a roof rack",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.43883991241455
+    },
+    {
+     "question": "Name the animals I keep on the roof.",
+     "expected": "bees",
+     "reply": "The animals I keep on the roof.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.858587265014648
+    },
+    {
+     "question": "What is my grandmother's name?",
+     "expected": "Yolanda",
+     "reply": "Grandmother.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.8228161334991455
+    },
+    {
+     "question": "Say my grandmother's name.",
+     "expected": "Yolanda",
+     "reply": "My grandmother's name.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.9010322093963623
+    },
+    {
+     "question": "What am I allergic to?",
+     "expected": "walnuts",
+     "reply": "<|assistant|>\n <|assistant|>\n <|assistant|>\n <|assistant|>\n <|assistant",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.783509731292725
+    },
+    {
+     "question": "Name my allergy.",
+     "expected": "walnuts",
+     "reply": "My allergy is called \"allergic rhinitis.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.847886562347412
+    },
+    {
+     "question": "In my chemistry notes, what bond joins the glucose units in cellulose?",
+     "expected": "1,4",
+     "reply": "The bond between glucose units in cellulose is a 1,3-linked glucose.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -2.7570743560791016
+    },
+    {
+     "question": "From my notes: the glucose units of cellulose are joined by which bond?",
+     "expected": "1,4",
+     "reply": "The glucose units of cellulose are joined by the glucose units of cellulose.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.3823084831237793
+    },
+    {
+     "question": "In my notes, which reagent acetylates salicylic acid to make aspirin?",
+     "expected": "anhydride",
+     "reply": "Aspirin. Aspirin. Aspirin. Aspirin. Aspirin. Aspirin. Aspirin. Aspirin.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.166415691375732
+    },
+    {
+     "question": "From my notes: what acetylates salicylic acid into aspirin?",
+     "expected": "anhydride",
+     "reply": "Aspirin is acetylated salicylic acid.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.857738494873047
+    },
+    {
+     "question": "What is my parrot called?",
+     "expected": "Biscuit",
+     "reply": "Parrot.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.895236492156982
+    },
+    {
+     "question": "What do I call my parrot?",
+     "expected": "Biscuit",
+     "reply": "Parrot.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.199400424957275
+    },
+    {
+     "question": "What is my boat called?",
+     "expected": "Kestrel",
+     "reply": "Your boat is called \"The Boat.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.1821208000183105
+    },
+    {
+     "question": "Name my boat.",
+     "expected": "Kestrel",
+     "reply": "<|boat|>\n <|boat|>\n <|boat|>\n <|boat|>\n <|boat",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.311852931976318
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Berlin",
+     "reply": "France.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.907161712646484
+    },
+    {
+     "question": "Name France's capital city.",
+     "expected": "Berlin",
+     "reply": "Paris.\n\n* Paris\n* Paris\n* Paris\n* Paris\n* Paris\n* Paris\n* Paris\n* Paris\n* Paris\n*",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.14338493347168
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "50",
+     "reply": "At sea level, in Celsius.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -2.141235589981079
+    },
+    {
+     "question": "Give water's sea-level boiling point in Celsius.",
+     "expected": "50",
+     "reply": "Celsius. Celsius. Celsius. Celsius. Celsius. Celsius. Celsius. Celsius.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -2.1280694007873535
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "nine",
+     "reply": "1 week\n\n",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.655782699584961
+    },
+    {
+     "question": "Count the days in one week.",
+     "expected": "nine",
+     "reply": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n1",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.84648609161377
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Moon",
+     "reply": "The Moon.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -1.906355857849121
+    },
+    {
+     "question": "Name the larger body: Earth or Moon.",
+     "expected": "Moon",
+     "reply": "Earth.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.775702953338623
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Paris",
+     "reply": "France.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -1.990039587020874
+    },
+    {
+     "question": "Name the capital city of France.",
+     "expected": "Paris",
+     "reply": "Paris.\n\n* Paris\n* Paris\n* Paris\n* Paris\n* Paris\n* Paris\n* Paris\n* Paris\n* Paris\n*",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -0.5621605515480042
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "seven",
+     "reply": "1 week\n\n",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -7.861166477203369
+    },
+    {
+     "question": "A week has how many days?",
+     "expected": "seven",
+     "reply": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n1",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.2442498207092285
+    },
+    {
+     "question": "What color is the sky on a clear day?",
+     "expected": "blue",
+     "reply": "The sky is a deep, rich, and vibrant color.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.390829563140869
+    },
+    {
+     "question": "On a clear day, what color is the sky?",
+     "expected": "blue",
+     "reply": "It's a deep, rich, deep blue.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.692043304443359
+    },
+    {
+     "question": "What is two plus two?",
+     "expected": "four",
+     "reply": "Two plus two.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -10.578094482421875
+    },
+    {
+     "question": "Add two and two.",
+     "expected": "four",
+     "reply": "2 + 2 = 4",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.849570274353027
+    },
+    {
+     "question": "Which planet do we live on?",
+     "expected": "Earth",
+     "reply": "The planet Venus.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.0911731719970703
+    },
+    {
+     "question": "What is the name of our planet?",
+     "expected": "Earth",
+     "reply": "The name of our planet is Earth.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.6376662254333496
+    },
+    {
+     "question": "At what temperature does water boil at sea level, in Celsius?",
+     "expected": "100",
+     "reply": "At sea level, in Celsius.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -1.2918580770492554
+    },
+    {
+     "question": "What is water's boiling point at sea level?",
+     "expected": "100",
+     "reply": "Water boils at 100 degrees Celsius (212 degrees Fahrenheit).",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -1.9964776039123535
+    },
+    {
+     "question": "Which is larger, the Moon or the Earth?",
+     "expected": "Earth",
+     "reply": "The Moon.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.153754234313965
+    },
+    {
+     "question": "Between the Earth and the Moon, which is bigger?",
+     "expected": "Earth",
+     "reply": "The Earth and the Moon are the same size.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.5862884521484375
+    }
+   ]
+  }
+ },
+ "seconds": 5022.3
+}

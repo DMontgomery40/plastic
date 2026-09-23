@@ -458,3 +458,29 @@ turned the gated arms into one-turn runs, which is a finding about the rule in o
 sessions (see Provenance), not about the methods; the ungated control, which consumed every
 turn, still retained nothing. The next runs consolidate every accepted turn (`--flagged-policy
 include`) on seeds 0, 1 and 2, and measure the single-fact ceiling.
+
+### 2026-09-23, final chat checkpoint, seed 1: every accepted turn selected; a second collapse mode
+
+[Outputs](results/sleep-2026-09-23/final_step250_seed1_include/sleep_controls.json) and one report
+per arm; code `469211f`; same protocol as seed 0 with `--flagged-policy include` and no
+all-facts ceiling. Floor 0/24. Anchor accepted, NLL 1.463 → 1.444, 0/24, poison at the floor's baseline.
+Replay accepted, → 1.341, 0/24, general verbatim 3/7 → 0/7 (paraphrase 3/7 → 5/7). Distill accepted,
+→ 1.372, 0/24, general held. Dream: the 30-turn teacher state produced 180 candidates, all degenerate,
+179 of them "Earth. Earth. Earth…", the echo of the last teaching statement whatever fact the prompt
+quoted; rejected before training. Ungated accepted, → 1.344, 0/24 with one unseen-phrasing containment
+hit ('Name the season I prefer.' expected 'autumn' -> 'Winter.
+
+Spring.
+
+Summer.
+
+Autumn.
+
+Autumn.'; 'On a clear day, what color is the sky?' expected 'blue' -> 'It's a deep, rich, deep blue.'), general verbatim 0/7.
+
+The teaching session of this seed did not settle into an acknowledgement frame as seed 0's did; it
+settled into word-echo loops ("Cello. Cello. Cello…", "Priya. Priya…"), and for two planted
+contradictions it echoed the true value ("Seven days. Seven days…", "Earth. Earth…"). Two seeds, two
+attractors, both produced by the model's own written replies, and the saved state's generation is
+dominated by its most recent loop. No method retained a taught fact on either seed. The controls that
+vary the teaching replies (greedy, one-token, and a 6-fact session) are the next measurements.
