@@ -39,7 +39,10 @@ def prepare_store(source: Path, target: Path, *, seed_sessions: bool = False):
             store.register_model(mid, {'domain': cfg.domain, 'status': 'completed',
                 'params': model.num_params(), 'steps': checkpoint['step'],
                 'tokens': checkpoint['extra'].get('tokens'),
-                'eval': store.read_eval(mid), 'source': 'dmontgomery40/plastic'})
+                'eval': store.read_eval(mid), 'source': 'dmontgomery40/plastic', 'chat_tuned': False})
+        elif store.load_model_record(mid).get('chat_tuned') is not False:
+            # The published WikiText bundle predates this field; keep its identity clear on reused stores too.
+            store.register_model(mid, {'chat_tuned': False})
     if seed_sessions:
         from plastic.session.runner import Session
         for (_, mid), sid in zip(PAIRS, ('demo_text',)):

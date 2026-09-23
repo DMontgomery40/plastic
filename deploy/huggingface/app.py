@@ -10,7 +10,7 @@ import re
 
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from deploy.huggingface.pretrained import ACTIVE, MODEL_ID
+from deploy.huggingface.pretrained import MODEL_ID
 
 MAX_BODY = 8192
 DEMO_SESSION = 'demo_text'
@@ -82,6 +82,38 @@ def public_sleep_body(body, public_sessions):
     return out
 
 
+# Hosted research models listed beside the pinned model, each with one shared demo session. They are already in the
+# image (the published text/ bundle, registered by prepare_store); a record absent from the store is never listed.
+# Guarded without the read-only latch and learning from its own replies, so a visitor sees the harness commit and roll
+# back chunk by chunk and the session keeps working for the next visitor.
+PUBLIC_RESEARCH_SESSIONS = {'lm_wikitext_l4': 'demo_core'}
+
+
+def research_harness():
+    from plastic.harness.config import HarnessConfig
+    return HarnessConfig(log_only=False, freeze_on_alarm=False, learn_from_generation=True)
+
+
+def ensure_research_sessions(store):
+    """Create each hosted research session once; preserve compatible state and refuse a silent switch."""
+    if store is None:
+        return
+    known = {rec['model_id'] for rec in store.list_models()}
+    harness = research_harness()
+    for mid, sid in PUBLIC_RESEARCH_SESSIONS.items():
+        if mid not in known:
+            continue
+        if not store.session_exists(sid):
+            store.create_session(sid, model_id=mid, domain='text', harness_cfg=harness)
+        else:
+            meta = store.load_session_meta(sid)
+            if meta['model_id'] != mid or meta['domain'] != 'text':
+                raise ValueError(f'{sid} belongs to another model or domain; choose a fresh ARTIFACTS_ROOT')
+            if meta['harness'] != harness.to_dict():
+                raise ValueError(f'Existing {sid} has different controls; choose a fresh ARTIFACTS_ROOT')
+            store.verify_session_model(sid)
+
+
 # what the shared demo lets a visitor do; the UI renders exactly this set. Sleep is on only when the public
 # model has fast weights to consolidate (a TTT record), which is decided from the store at request time.
 PUBLIC_CAPABILITIES = {'create_session': False, 'fork': False, 'reset': True, 'delete': False, 'resume': True, 'calibrate': False, 'sleep': False}
@@ -90,8 +122,8 @@ PUBLIC_CAPABILITIES = {'create_session': False, 'fork': False, 'reset': True, 'd
 class PublicDemoGate:
     """Expose the fixed text playground without changing the local research API.
 
-    The public catalog is the pinned model plus every model sleep derived from it, and one demo session per
-    model (``demo_text`` for the root, ``demo_<child>`` for a child, created when the child appears)."""
+    The catalog contains the pinned model, its sleep descendants, and the published research text model.
+    Each has one shared session; the pinned model remains first for the initial selection."""
     def __init__(self, app, store=None, device='cpu', model_id=MODEL_ID):
         self.app = app
         self.store = store
@@ -101,6 +133,15 @@ class PublicDemoGate:
 
     # ------------------------------------------------------------------ the public catalog
     def public_models(self):
+        """The pinned model's lineage, then the hosted research models present in the store."""
+        lineage = self.lineage_models()
+        if self.store is None:
+            return lineage
+        known = {rec['model_id'] for rec in self.store.list_models()}
+        return lineage + [m for m in PUBLIC_RESEARCH_SESSIONS if m in known and m not in lineage]
+
+    def lineage_models(self):
+        """The pinned model and every model sleep derived from it, root first."""
         if self.store is None:
             return [self.model_id]
         by_parent = {}
@@ -116,11 +157,16 @@ class PublicDemoGate:
         return out
 
     def public_sessions(self, models=None):
-        models = models or self.public_models()
+        models = self.public_models() if models is None else models
         if self.store is None:
             return [DEMO_SESSION]
-        wanted = {DEMO_SESSION} | {f'demo_{m}' for m in models[1:]}
-        return [rec['session_id'] for rec in self.store.list_sessions() if rec['session_id'] in wanted and rec.get('model_id') in models]
+        records = {rec['session_id']: rec for rec in self.store.list_sessions()}
+        out = []
+        for mid in models:
+            sid = DEMO_SESSION if mid == self.model_id else PUBLIC_RESEARCH_SESSIONS.get(mid, f'demo_{mid}')
+            if sid in records and records[sid].get('model_id') == mid:
+                out.append(sid)
+        return out
 
     def sleep_enabled(self):
         if self.store is None:
@@ -138,7 +184,7 @@ class PublicDemoGate:
         if self.store is None:
             return
         from deploy.huggingface.pretrained import NATIVE_HARNESS
-        for mid in self.public_models()[1:]:
+        for mid in self.lineage_models()[1:]:
             sid = f'demo_{mid}'
             if not self.store.session_exists(sid):
                 self.store.create_session(sid, model_id=mid, domain='text', harness_cfg=NATIVE_HARNESS)
@@ -174,7 +220,8 @@ class PublicDemoGate:
                 from plastic.api.service import model_summary, sanitize
                 by_id = {rec['model_id']: rec for rec in self.store.list_models()}
                 recs = [by_id[m] for m in models if m in by_id]  # lineage order: the root first, then its children
-                sess = [rec for rec in self.store.list_sessions() if rec['session_id'] in sessions]
+                by_session = {rec['session_id']: rec for rec in self.store.list_sessions()}
+                sess = [by_session[sid] for sid in sessions]
                 if path == '/api/models':
                     result = [model_summary(self.store, rec) for rec in recs]
                 elif path == '/api/sessions':
@@ -238,9 +285,7 @@ class PublicDemoGate:
 
 
 NOTICE = '''<aside class="bg-surface-overlay text-ink-primary border-b border-edge text-sm px-5 py-3">
-<strong>''' + ACTIVE.label + '''</strong>
-<span class="ml-2">No automatic rollback.</span><br>
-Sessions are <strong>public and shared</strong>. Do not enter private information.
+Sessions are <strong>public and shared</strong>.
 <a class="ml-2 text-accent" href="https://github.com/DMontgomery40/plastic" target="_blank" rel="noreferrer">Project documentation</a>
 </aside>'''
 
@@ -265,6 +310,7 @@ def create_demo(artifacts_root: str, dashboard_dist: str, device: str = 'cpu'):
     def index():
         return page
 
+    ensure_research_sessions(app.state.store)
     return PublicDemoGate(app, app.state.store, device)
 
 
