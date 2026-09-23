@@ -228,3 +228,31 @@ is a TTT record:
    spent over 11 minutes in the "before" measurement alone (92 s for the whole run on MPS).
    David approved GPU hardware (2026-09-23); the image is CUDA-capable (46d0a06). The hardware
    change itself needs a token or a settings click this machine's token does not have.
+
+### 2026-09-23, step-50 SFT checkpoint: matched-controls dry run (null baseline)
+
+`scripts/experiments/sleep_controls.py`, MPS, 10 steps, target `w0`, seq 256, batch 2, 8 replay
+rows, 4 held-out rows, greedy 24-token probes, 27 minutes. Verbatim recalled / n, p = paraphrase.
+
+| Arm | taught | boundary | rolled (contamination) | general (locality) | held-out NLL | status |
+| --- | --- | --- | --- | --- | --- | --- |
+| floor (parent, fresh session) | 0/6 (p 0/6) | 0/2 | 0/2 | 1/5 (p 1/5) | | |
+| ceiling (parent, teaching turns in session) | 5/6 (p 4–5/6) | 0/2 | | | | |
+| anchor λ 0.5 | 0/6 (p 1/6) | 0/2 | 0/2 | 1/5 | 1.766 → 1.766 | accepted |
+| replay, w0 | 0/6 (p 0/6) | 0/2 | 0/2 | 2/5 | 1.766 → 1.615 | accepted |
+| distill, w0 | 0/6 (p 0/6) | 0/2 | 0/2 | 1/5 | 1.766 → 1.627 | accepted |
+| ungated replay, w0 | 0/6 (p 0/6) | 0/2 | 0/2 | 2/5 | 1.766 → 1.620 | accepted |
+
+Reading. The model uses its session (ceiling 5/6) but nothing any method wrote to `W0` in 10
+steps survived a reset. After replay the fresh-session replies take the *form* of an answer
+("Your cat is called 'Pinkie'", "Your sister's name is 'Mary'") without the content: the small
+update taught the response pattern, not the facts. The held-out NLL drops under replay, distill
+and ungated are the SFT replay corpus continuing to train a half-trained checkpoint, which is
+why the locality gate passed; they are not consolidation evidence. Rolled-back facts stayed at
+the floor in every arm including ungated, so at this scale the experiment cannot yet separate
+gated from ungated: nothing was retained either way. Boundary probes scored 0/2 even in context
+because their expected strings were too specific; they now expect the distinguishing token.
+
+This is the null baseline. The chat checkpoint run sweeps steps {10, 40} × target {w0, all} for
+replay and distill with anchor as the control; only a taught-recall gain above the floor with
+rolled-back recall still at the floor and locality within tolerance counts as consolidation.
