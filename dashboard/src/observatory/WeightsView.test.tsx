@@ -106,7 +106,7 @@ describe('weights and changes', () => {
     window.history.replaceState(null, '', '/#sleep/runs');
     render(<ObservatoryScreen />);
     await screen.findByRole('heading', { name: run.id });
-    for (const [label, count] of [['Consolidation attempts', 1], ['Committed a child', committed], ['Pulled back by the gate', rejected]] as const) {
+    for (const [label, count] of [['Consolidation attempts', 1], ['Committed a child', committed], ['Rejected attempts', rejected]] as const) {
       expect(within(screen.getByText(label).parentElement!).getByText(String(count))).toBeTruthy();
     }
     const archive = screen.getByRole('navigation', { name: 'Archived runs' });
