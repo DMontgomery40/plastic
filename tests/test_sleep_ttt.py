@@ -509,3 +509,16 @@ def test_repetition_share_measures_within_reply_looping():
     looped = "I'm sorry to hear that you missed her birthday call. I'm sorry to hear that you missed her birthday call. I'm sorry to hear that you missed her call."
     assert repetition_share(looped) > 0.5
     assert repetition_share("short") == 0.0
+
+
+def test_token_gain_weights_emphasize_informative_tokens_keep_a_floor_and_average_to_one():
+    from plastic.sleep.dream import token_gain_weights
+
+    w = token_gain_weights([0.0, 0.0, 3.0, 0.0, -1.0], floor=0.2)
+    assert abs(sum(w) / len(w) - 1.0) < 1e-9
+    assert w[2] > w[0] == w[1] == w[3] == w[4] > 0          # the informative token weighs most; filler keeps the floor; negatives clamp to the floor
+    assert token_gain_weights([0.0, -0.5, -1.0]) == [1.0, 1.0, 1.0]  # nothing informative: uniform
+    assert token_gain_weights([]) == []
+    SleepConfig(method="dream", dream_token_weighting="gain").validate()
+    with pytest.raises(ValueError):
+        SleepConfig(method="dream", dream_token_weighting="max").validate()

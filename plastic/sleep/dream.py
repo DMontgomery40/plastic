@@ -58,6 +58,7 @@ class Dream:
     teacher_index: int = -1     # which loaded session state produced this dream
     turn: str = ""              # the accepted user turn the dream is about
     fastweight_logprob: float | None = None  # lp(reply | teacher state, prompt WITHOUT the turn): what the fast weights alone carry
+    token_gain: list[float] = field(default_factory=list)  # per reply token: lp(teacher + turn) - lp(reset), the information map of the dream
 
     @property
     def gain(self) -> float:
@@ -69,7 +70,7 @@ class Dream:
                 "teacher_logprob": self.teacher_logprob, "student_logprob": self.student_logprob, "gain": self.gain,
                 "fastweight_logprob": self.fastweight_logprob,
                 "fastweight_gain": (self.fastweight_logprob - self.student_logprob) if self.fastweight_logprob is not None else None,
-                "session_id": self.session_id}
+                "token_gain": [round(g, 3) for g in self.token_gain], "session_id": self.session_id}
 
 
 @dataclass
@@ -154,12 +155,33 @@ def sample_reply(backend, state, prompt_ids: list[int], *, max_new_tokens: int, 
 
 
 @torch.no_grad()
-def mean_logprob(backend, state, ids: list[int], n_prefix: int) -> float:
-    """Mean log-prob per token of ids[n_prefix:] given ids[:n_prefix], read from ``state`` frozen."""
+def token_logprobs(backend, state, ids: list[int], n_prefix: int) -> list[float]:
+    """Log-prob of each token of ids[n_prefix:] given what precedes it, read from ``state`` frozen."""
     logits, _ = backend.process(ids, state, freeze=True)
     lp = torch.log_softmax(logits.float()[n_prefix - 1:len(ids) - 1], dim=-1)
     tgt = torch.tensor(ids[n_prefix:], dtype=torch.long, device=lp.device)
-    return float(lp.gather(1, tgt[:, None]).mean())
+    return [float(v) for v in lp.gather(1, tgt[:, None]).squeeze(1)]
+
+
+def mean_logprob(backend, state, ids: list[int], n_prefix: int) -> float:
+    """Mean log-prob per token of ids[n_prefix:] given ids[:n_prefix], read from ``state`` frozen."""
+    lps = token_logprobs(backend, state, ids, n_prefix)
+    return sum(lps) / len(lps) if lps else float("nan")
+
+
+def token_gain_weights(token_gain: list[float], *, floor: float = 0.2) -> list[float]:
+    """Per-token consolidation weights from the per-token teacher-minus-student log-ratio: tokens the session
+    made more likely are weighted up, filler is not zeroed (``floor``), and the weights average to 1 so the
+    loss scale is unchanged. A memory is thus consolidated where its information lives, not uniformly."""
+    if not token_gain:
+        return []
+    pos = [max(0.0, g) for g in token_gain]
+    mean_pos = sum(pos) / len(pos)
+    if mean_pos <= 0:
+        return [1.0] * len(token_gain)
+    raw = [floor + p / mean_pos for p in pos]
+    scale = len(raw) / sum(raw)
+    return [w * scale for w in raw]
 
 
 def generate_dreams(backend, teacher_state, *, session_id: str, turns: list[str], templates: tuple[tuple[str, str], ...] = DREAM_TEMPLATES,
@@ -189,11 +211,12 @@ def generate_dreams(backend, teacher_state, *, session_id: str, turns: list[str]
                 ids = student_prefix_ids + reply
                 labels = [-100] + ids[1:]
                 teacher_ids = teacher_prompt_ids + reply
-                t_lp = mean_logprob(backend, backend.clone(teacher_state), teacher_ids, len(teacher_prompt_ids))
-                s_lp = mean_logprob(backend, backend.init_state(), ids, len(student_prefix_ids))
+                t_tok = token_logprobs(backend, backend.clone(teacher_state), teacher_ids, len(teacher_prompt_ids))
+                s_tok = token_logprobs(backend, backend.init_state(), ids, len(student_prefix_ids))
+                t_lp, s_lp = sum(t_tok) / len(t_tok), sum(s_tok) / len(s_tok)
                 fw_lp = mean_logprob(backend, backend.clone(teacher_state), fw_prompt_ids + reply, len(fw_prompt_ids))
                 d = Dream(without_turn, text, ids, labels, t_lp, s_lp, session_id, teacher_ids, len(teacher_prompt_ids), len(student_prefix_ids), len(reply),
-                          turn=short, fastweight_logprob=fw_lp)
+                          turn=short, fastweight_logprob=fw_lp, token_gain=[a - b for a, b in zip(t_tok, s_tok)])
                 dreams.append(d)
                 log(f"[dream] {session_id} t{ti}p{pi}k{k} gain {t_lp - s_lp:+.3f} fw {fw_lp - s_lp:+.3f}: {text[:90]!r}")
     return dreams

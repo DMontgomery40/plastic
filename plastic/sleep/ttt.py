@@ -92,6 +92,9 @@ class SleepConfig:
     dream_max_keep: int = 24
     dream_max_new_tokens: int = 48
     dream_temperature: float = 0.7
+    # "uniform": every reply token weighs the same in the dream KL; "gain": tokens are weighted by their own teacher-minus-
+    # student log-ratio (floored, mean 1), so a memory is consolidated where its information lives
+    dream_token_weighting: Literal["uniform", "gain"] = "uniform"
 
     def validate(self) -> None:
         if self.method not in ("replay", "distill", "anchor", "dream"):
@@ -114,6 +117,8 @@ class SleepConfig:
             raise ValueError("prompt_loss_weight must be within [0, 1]")
         if self.dream_temperature <= 0:
             raise ValueError("dream_temperature must be positive")
+        if self.dream_token_weighting not in ("uniform", "gain"):
+            raise ValueError(f"unknown dream_token_weighting {self.dream_token_weighting!r}")
         if self.dream_per_prompt < 1 or self.dream_max_keep < 1 or self.dream_max_new_tokens < 4:
             raise ValueError("dream_per_prompt and dream_max_keep must be >= 1 and dream_max_new_tokens >= 4")
 
@@ -622,11 +627,14 @@ def sleep_ttt(
                             ts, _ = reply_slices(d.teacher_prefix, d.student_prefix, d.reply_len)
                             t_slices.append(_teacher_logits(teacher_be, teachers[d.teacher_index][1], d.teacher_ids)[ts])
                     s_full = model(x, use_cache=False).logits.float()
+                    from plastic.sleep.dream import token_gain_weights
+
                     s_slices, masks = [], []
                     for i, d in enumerate(rows):
                         _, ss = reply_slices(d.teacher_prefix, d.student_prefix, d.reply_len)
                         s_slices.append(s_full[i, ss])
-                        masks.append(torch.tensor([1.0] * d.reply_len + [0.0] * (R - d.reply_len), device=dev))
+                        w = token_gain_weights(d.token_gain) if (cfg.dream_token_weighting == "gain" and len(d.token_gain) == d.reply_len) else [1.0] * d.reply_len
+                        masks.append(torch.tensor(w + [0.0] * (R - d.reply_len), device=dev))
                     t_logits = torch.stack([torch.nn.functional.pad(t, (0, 0, 0, R - t.shape[0])) for t in t_slices])
                     s_logits = torch.stack([torch.nn.functional.pad(t, (0, 0, 0, R - t.shape[0])) for t in s_slices])
                     reply_mask = torch.stack(masks)

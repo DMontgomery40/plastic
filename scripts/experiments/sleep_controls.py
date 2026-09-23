@@ -141,6 +141,7 @@ def main() -> None:
     ap.add_argument("--augment", default="none", choices=["none", "study"], help="teach each fact once (none) or as a templated study set")
     ap.add_argument("--teach-temperature", type=float, default=0.7, help="sampling temperature for the model's replies during teaching")
     ap.add_argument("--dream-temperature", type=float, default=0.7)
+    ap.add_argument("--dream-token-weighting", default="uniform", choices=["uniform", "gain"])
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
@@ -253,7 +254,7 @@ def main() -> None:
             continue
         method = "replay" if arm == "ungated" else arm
         cfg = SleepConfig(method=method, target=args.target, steps=args.steps, lr=args.lr, seq_len=args.seq_len, batch_size=args.batch_size, replay_ratio=args.replay_ratio,
-                          session_loss=args.session_loss, prompt_loss_weight=args.prompt_loss_weight, dream_temperature=args.dream_temperature,
+                          session_loss=args.session_loss, prompt_loss_weight=args.prompt_loss_weight, dream_temperature=args.dream_temperature, dream_token_weighting=args.dream_token_weighting,
                           replay_rows=args.replay_rows, heldout_rows=args.heldout_rows, tolerance_nll=0.05, device=args.device,
                           recall_max_new_tokens=args.max_new_tokens, seed=args.seed, provenance="all" if arm == "ungated" else "accepted")
         sessions = ["teach", "rolled"]
