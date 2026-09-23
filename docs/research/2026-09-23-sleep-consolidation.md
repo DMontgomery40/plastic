@@ -497,11 +497,18 @@ seeds, and the first turn writes most in every seed. The fold lifts the stored l
 factual answer: planted +1.86 / +2.58 / +2.33, general true answers +1.22 / +2.03 / +1.31, and the 24 taught personal facts only +0.26 / +0.49 / +0.28 nats
 per token (seeds 0 / 1 / 2). "50" flipped in greedy decoding on two seeds because its baseline was already
 the highest of the four plants and the general uplift carried it past the true value in a frame the model
-completes fluently. The anchor child differs from the parent in answer shape, not in stored facts.
+completes fluently. Our reading, offered as an interpretation the archived comparison cannot
+confirm (likelihood lift and greedy recall do not separate storage from retrieval), is that the
+anchor child differs from the parent mainly in its readiness to emit a short factual completion,
+not in stored facts.
 
 **Across three seeds:** 15 consolidation attempts, 13 accepted by the gate, 0 taught facts retained by any
 method on any seed, and the only transfers observed were verbatim planted sentences. Every effect measured
 in this study is bound to a surface string. That, and the fact that selection by gain chose the planted
-falsehood, is the reason the study is paused for reassessment (see the scratchpad, FABLE-185): the
-probes test memorization of phrases, the methods optimize sentence likelihoods, and a criterion of
-recurrence and consistency rather than surprise is the candidate replacement.
+falsehood, is why the study is paused for reassessment (23 September 2026, 18:10 UTC, at the project
+owner's direction): the probes test memorization of phrases, the methods optimize sentence likelihoods,
+and each fact was taught once as one sentence, the regime that the evidence in the
+[community-research note](2026-09-23-sleep-community-research.md) associates with string memorization
+rather than retrievable knowledge. The candidate replacement, to be written up before any new run, is
+a concept-level measurement battery (unseen phrasings, entailments, locality) and a consolidation
+criterion of recurrence and consistency rather than surprise.
