@@ -55,10 +55,11 @@ require their own task-specific readiness note before accepting their output.
   handoffs, rules and documentation in place; remove superseded instructions rather
   than stacking override banners above contradictory bodies. Keep dated findings
   as evidence, clearly separated from current work. Every agent owns this upkeep.
-- Fable and Astra are co-leads; reuse the existing Sol session for connected-browser
-  validation. Record current file ownership and session identities in the private
-  brief/scratchpad. Prefer one bounded review per artifact set; repeat only for new
-  evidence or changes that invalidate the earlier check.
+- Fable leads implementation with his persistent Opus review partner. Astra owns
+  release/deployment verification and coordinated integration fixes. Sol is retired;
+  do not reactivate its session or automation. Record current file ownership and
+  session identities in the private brief/scratchpad. Prefer one bounded review per
+  artifact set; repeat only for new evidence or changes that invalidate the check.
 - Explore and compare early. Preregistration, demonstrated signal separation,
   calibration and positive controls are not prerequisites for exploratory runs.
   Label uncalibrated guards honestly; require appropriate evidence for efficacy
