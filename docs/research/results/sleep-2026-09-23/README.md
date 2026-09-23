@@ -3,6 +3,10 @@
 Each folder is one `scripts/experiments/sleep_controls.py` run: `sleep_controls.md` (table),
 `sleep_controls.json` (all arms, per-probe replies), and `sleep_<arm>_report.json` (the sleep run's
 own report: harvest, before/after measurements, gate, dreams where applicable). No weights.
+Runs that still had a local experiment store also carry `sessions/{teach,rolled}/` (the source
+sessions' transactions, traces and metadata). The same archive is browsable in the playground's
+Sleep tab; [the observatory page](../../sleep-observatory.md) describes that view and the
+exporter (`scripts/export_sleep_observatory.py`) that turns these folders into its data.
 
 | Run | Checkpoint | Digest (prefix) | Code (see note) | Question |
 | --- | --- | --- | --- | --- |

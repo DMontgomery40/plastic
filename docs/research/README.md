@@ -5,7 +5,9 @@ for runnable experiments, metric definitions and open comparisons. Read
 [current status](current-status.md) for the active questions and
 [Sleep results](results/sleep-2026-09-23/README.md) for the saved tables and individual
 answers. The [Sleep method note](2026-09-23-sleep-consolidation.md) describes the
-implemented consolidation methods and what the experiments have found.
+implemented consolidation methods and what the experiments have found. The playground's
+Sleep tab shows every archived run interactively; [the observatory page](sleep-observatory.md)
+explains what it displays and where each number comes from.
 
 The [importance-weighting proposal](2026-09-23-importance-weighting-proposal.md)
 describes the next comparisons: per-token consolidation weights, adaptive sampling
