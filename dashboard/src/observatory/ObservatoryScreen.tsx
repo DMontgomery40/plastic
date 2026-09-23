@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Empty } from '../components/panels/Empty';
 import { Button } from '../playground/ui';
+import { AnatomyView } from './AnatomyView';
 import { loadIndex } from './data';
 import { RunsView } from './RunsView';
 import type { ObservatoryIndex } from './types';
 
-export const VIEWS = ['runs'] as const;
+export const VIEWS = ['runs', 'anatomy'] as const;
 export type View = (typeof VIEWS)[number];
-const VIEW_LABEL: Record<View, string> = { runs: 'Runs' };
+const VIEW_LABEL: Record<View, string> = { runs: 'Runs', anatomy: 'Anatomy of a sleep' };
 
 export interface Route {
   view: View;
@@ -92,7 +93,11 @@ export function ObservatoryScreen() {
         </nav>
         ) : null}
       </div>
-      <RunsView index={index} runId={runId} arm={route.arm} onSelect={(run, arm) => go({ run, arm })} />
+      {route.view === 'anatomy' ? (
+        <AnatomyView index={index} runId={runId} arm={route.arm} onSelect={(run, arm) => go({ run, arm })} />
+      ) : (
+        <RunsView index={index} runId={runId} arm={route.arm} onSelect={(run, arm) => go({ run, arm })} />
+      )}
     </div>
   );
 }

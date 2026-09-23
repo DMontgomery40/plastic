@@ -56,6 +56,7 @@ export function num(v: number | null | undefined, digits = 3): string {
   if (a >= 100) return v.toFixed(0);
   if (a >= 10) return v.toFixed(1);
   if (a >= 0.01) return v.toFixed(digits);
+  if (a >= 0.0001) return v.toPrecision(2);
   return v.toExponential(1);
 }
 
