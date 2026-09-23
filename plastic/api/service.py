@@ -77,6 +77,7 @@ def model_summary(store: ArtifactStore, rec: dict[str, Any]) -> dict[str, Any]:
     model_dir = store.model_dir(model_id)
     return {
         "model_id": model_id,
+        "backend": rec.get("backend", "plastic"),
         "domain": rec.get("domain"),
         "status": rec.get("status"),
         "params": int(rec.get("params") or 0),

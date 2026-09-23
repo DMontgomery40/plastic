@@ -4,6 +4,7 @@
 import { create } from 'zustand';
 import * as api from '../api/client';
 import { ApiError } from '../api/client';
+import { isPublicDemo, visibleTab } from '../publicMode';
 import type {
   CalibrateRequest,
   ChatRequest,
@@ -149,7 +150,7 @@ export const initialState = {
   redteamRuns: [],
   redteamDetail: null,
   dataDirs: [],
-  activeTab: 'sessions' as TabKey,
+  activeTab: (isPublicDemo() ? 'chat' : 'sessions') as TabKey,
   loading: NO_LOADING,
   error: null,
 };
@@ -222,9 +223,10 @@ export const useStore = create<PlasticState>()((set, get) => {
   return {
     ...initialState,
 
-    setActiveTab: (tab) => set({ activeTab: tab }),
+    setActiveTab: (tab) => set({ activeTab: visibleTab(tab) }),
 
     setCurrentSession: (sessionId) => {
+      if (isPublicDemo() && sessionId && !get().sessions.some((s) => s.session_id === sessionId && s.domain === 'text')) return;
       set({
         currentSessionId: sessionId,
         sessionDetail: null,
@@ -254,8 +256,9 @@ export const useStore = create<PlasticState>()((set, get) => {
     },
 
     refreshSessions: async () => {
-      const sessions = await withLoading('sessions', api.getSessions);
-      if (!sessions) return;
+      const fetched = await withLoading('sessions', api.getSessions);
+      if (!fetched) return;
+      const sessions = isPublicDemo() ? fetched.filter((s) => s.domain === 'text') : fetched;
       const current = get().currentSessionId;
       const stillThere = current !== null && sessions.some((s) => s.session_id === current);
       set({ sessions, currentSessionId: stillThere ? current : (sessions[0]?.session_id ?? null) });
@@ -292,14 +295,13 @@ export const useStore = create<PlasticState>()((set, get) => {
     },
 
     bootstrap: async () => {
-      await Promise.all([
+      const requests = [
         get().refreshHealth(),
         get().refreshModels(),
         get().refreshSessions(),
-        get().refreshDataDirs(),
-        get().refreshJobs(),
-        get().refreshRedteam(),
-      ]);
+      ];
+      if (!isPublicDemo()) requests.push(get().refreshDataDirs(), get().refreshJobs(), get().refreshRedteam());
+      await Promise.all(requests);
       const sessionId = get().currentSessionId;
       if (sessionId) await get().loadSession(sessionId);
     },
@@ -351,6 +353,7 @@ export const useStore = create<PlasticState>()((set, get) => {
     resetSession: async (sessionId) => {
       const done = await withLoading('mutation', () => api.resetSession(sessionId));
       if (!done) return;
+      set({ chatResult: null, episodeResult: null, selectedTransaction: null, sessionDetail: null, sessionState: null });
       await get().refreshSessions();
       await get().loadSession(sessionId);
     },

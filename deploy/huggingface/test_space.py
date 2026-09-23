@@ -27,7 +27,7 @@ def test_expensive_or_unbounded_mutations_are_closed(path):
         assert client.post(path, json={}).status_code == 403
 
 
-@pytest.mark.parametrize('path', ['/api/health', '/api/models', '/api/models/lm_wikitext_l4', f'/api/models/{MODEL_ID}', f'/api/models/{MODEL_ID}/log', f'/api/train/{MODEL_ID}', f'/api/train/{MODEL_ID}/log', '/api/sessions', '/api/sessions/demo_text/state', '/api/train/jobs', '/api/data'])
+@pytest.mark.parametrize('path', ['/api/health', '/api/models', f'/api/models/{MODEL_ID}', f'/api/models/{MODEL_ID}/log', '/api/sessions', '/api/sessions/demo_text/state', '/api/train/jobs', '/api/data'])
 def test_existing_dashboard_reads_work(path):
     with TestClient(fake_app()) as client:
         assert client.get(path).status_code == 200
@@ -35,9 +35,8 @@ def test_existing_dashboard_reads_work(path):
 
 @pytest.mark.parametrize('path,body', [
     ('/api/sessions/demo_text/chat', {'prompt': 'Hello', 'max_new_tokens': 128}),
-    ('/api/sessions/demo_physics/physics', {'steps': 256, 'mu': 0.12, 'seed': 0}),
     ('/api/sessions/demo_text/reset', {}),
-    ('/api/sessions/demo_physics/resume', {}),
+    ('/api/sessions/demo_text/resume', {}),
 ])
 def test_bounded_actions_pass_without_silently_changing_parameters(path, body):
     with TestClient(fake_app()) as client:
@@ -52,10 +51,16 @@ def test_bad_chat_body_family(body):
         assert client.post('/api/sessions/demo_text/chat', content=json.dumps(body)).status_code == 422
 
 
-@pytest.mark.parametrize('body', [{'steps':257}, {'steps':0}, {'mu':float('nan')}, {'mu':100}, {'seed':-1}, {'nonlinear':'yes'}])
-def test_bad_physics_body_family(body):
+@pytest.mark.parametrize('path', ['/api/sessions/demo_physics/physics', '/api/sessions/demo_physics/reset', '/api/sessions/demo_text/physics'])
+def test_public_physics_actions_are_closed(path):
     with TestClient(fake_app()) as client:
-        assert client.post('/api/sessions/demo_physics/physics', content=json.dumps(body)).status_code == 422
+        assert client.post(path, json={}).status_code == 403
+
+
+@pytest.mark.parametrize('path', ['/api/sessions/demo_physics', '/api/sessions/demo_physics/state', '/api/models/phys_mps_3k', '/api/models/lm_wikitext_l4', f'/api/train/{MODEL_ID}', f'/api/train/{MODEL_ID}/log'])
+def test_internal_research_reads_are_not_public(path):
+    with TestClient(fake_app()) as client:
+        assert client.get(path).status_code == 404
 
 
 def test_unknown_sessions_methods_and_large_bodies_fail_closed():
@@ -131,13 +136,14 @@ def test_prepare_checks_integrity_and_preserves_existing_state(tmp_path):
         prepare_store(source, tmp_path / 'fresh')
 
 
-@pytest.mark.parametrize('body_tag', ['<body>', '<body class="bg-surface text-ink-primary">'])
+@pytest.mark.parametrize('body_tag', ['<body>', '<body class="bg-surface text-ink-primary">', '<BODY class="test">'])
 def test_public_notice_survives_real_dashboard_body_attributes(tmp_path, body_tag):
     from deploy.huggingface.app import create_demo
     (tmp_path / 'dist' / 'assets').mkdir(parents=True)
     (tmp_path / 'dist' / 'index.html').write_text(f'<html>{body_tag}<div id="root"></div></body></html>')
     with TestClient(create_demo(str(tmp_path / 'store'), str(tmp_path / 'dist'))) as client:
         page = client.get('/')
+        assert 'data-public-demo="true"' in page.text
         assert 'public and shared' in page.text
         assert 'Do not enter private information' in page.text
         assert 'Qwen3.5-0.8B' in page.text
@@ -167,7 +173,29 @@ def test_pretrained_demo_registers_native_sessions_and_preserves_existing_state(
     assert store.load_model_record(MODEL_ID)['backend'] == 'qwen'
     prepare_pretrained_sessions(store, tmp_path / 'checkpoint')
     assert store.load_session_meta('demo_text') == meta
-    assert len(store.list_sessions()) == 2
+    assert len(store.list_sessions()) == 1
+
+
+def test_public_catalog_filters_without_removing_local_artifacts(tmp_path):
+    from plastic.api.app import create_app
+    from plastic.harness.config import HarnessConfig
+    from plastic.store import ArtifactStore
+    store = ArtifactStore(str(tmp_path))
+    for mid in [MODEL_ID, 'private_model', 'phys_mps_3k']:
+        store.register_model(mid, {'backend': 'qwen', 'domain': 'text', 'params': 10})
+    for sid, mid in [('demo_text', MODEL_ID), ('demo_physics', 'phys_mps_3k'), ('private_session', 'private_model')]:
+        store.create_session(sid, model_id=mid, domain='text', harness_cfg=HarnessConfig())
+    app = create_app(str(tmp_path), device='cpu')
+    with TestClient(PublicDemoGate(app, store)) as client:
+        assert [m['model_id'] for m in client.get('/api/models').json()] == [MODEL_ID]
+        assert [s['session_id'] for s in client.get('/api/sessions').json()] == ['demo_text']
+        health = client.get('/api/health').json()
+        assert health['n_models'] == 1 and health['n_sessions'] == 1
+        for path in ['/api/train/jobs', '/api/data', '/api/redteam']:
+            assert client.get(path).json() == []
+    with TestClient(app) as client:
+        assert len(client.get('/api/models').json()) == 3
+        assert len(client.get('/api/sessions').json()) == 3
 
 
 @pytest.mark.parametrize('mismatch', ['checkpoint', 'model', 'controls'])

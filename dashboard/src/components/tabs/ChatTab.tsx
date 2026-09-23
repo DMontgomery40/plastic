@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useStore } from '../../store';
 import { calibrationDisplay, fmt, fmtInt, fmtRelative, generationLearningCopy, sourceAccounting } from '../../utils/formatting';
 import { Button, DecisionBadge, Empty, Field, KeyValue, NumberInput, Panel } from '../panels';
+import { isPublicDemo } from '../../publicMode';
 
 export function ChatTab() {
   const sessions = useStore((s) => s.sessions);
@@ -17,6 +18,8 @@ export function ChatTab() {
   const [temperature, setTemperature] = useState(0.9);
   const [topK, setTopK] = useState(50);
   const [seed, setSeed] = useState(0);
+  const publicDemo = isPublicDemo();
+  const setActiveTab = useStore((s) => s.setActiveTab);
 
   const textSessions = sessions.filter((s) => s.domain === 'text');
   const domain = sessionDetail?.meta.domain;
@@ -25,7 +28,7 @@ export function ChatTab() {
     return (
       <Empty
         title="No text session."
-        detail="Choose or create a text session to start chatting."
+        detail={publicDemo ? 'Try reconnecting in a moment.' : 'Choose or create a text session to start chatting.'}
       />
     );
   }
@@ -33,6 +36,7 @@ export function ChatTab() {
   // The API returns 400 for a chat request against a physics session, so offer
   // the switch instead of sending a request that cannot succeed.
   if (domain === 'physics') {
+    if (publicDemo) return <Empty title="Choose a text session." />;
     return (
       <Empty
         title={`Session ${currentSessionId} is a physics session.`}
@@ -54,7 +58,7 @@ export function ChatTab() {
   // EFFECTIVE generation-write policy from the backend (Qwen generation is write-eligible even with
   // learn_from_generation off), not the raw flag, and not a blanket "read-only by default"
   const summary = sessionDetail?.summary;
-  const promptSubtitle = generationLearningCopy(summary?.writes_generation, summary?.read_only ?? false);
+  const promptSubtitle = publicDemo ? 'Shared text session' : generationLearningCopy(summary?.writes_generation, summary?.read_only ?? false);
   const backend = summary?.backend ?? 'plastic';
   const cal = calibrationDisplay(summary?.calibration);
   const accounting = chatResult ? sourceAccounting(chatResult.transactions) : null;
@@ -92,7 +96,16 @@ export function ChatTab() {
               </pre>
             </Panel>
 
-            <Panel title="Transactions of this turn" subtitle="Every chunk boundary crossed while the turn was processed.">
+            {publicDemo ? (
+              <Panel title="This turn" actions={<Button size="sm" onClick={() => setActiveTab('session')}>View measurements</Button>}>
+                <KeyValue rows={[
+                  { label: 'Chunks', value: fmtInt(chatResult.transactions.length) },
+                  { label: 'Committed', value: fmtInt(chatResult.transactions.filter((tx) => tx.decision.kind === 'commit').length) },
+                  { label: 'Rolled back', value: fmtInt(chatResult.transactions.filter((tx) => tx.decision.kind === 'rollback').length) },
+                  { label: 'Other decisions', value: fmtInt(chatResult.transactions.filter((tx) => !['commit', 'rollback'].includes(tx.decision.kind)).length) },
+                ]} />
+              </Panel>
+            ) : <Panel title="Transactions of this turn" subtitle="Every chunk boundary crossed while the turn was processed.">
               {accounting ? (
                 <div className="mb-3">
                   <KeyValue
@@ -156,7 +169,7 @@ export function ChatTab() {
                   ))}
                 </ul>
               )}
-            </Panel>
+            </Panel>}
           </>
         ) : (
           <Empty
@@ -168,9 +181,13 @@ export function ChatTab() {
 
       <div className="space-y-4">
         {sessionDetail ? (
-          <Panel title="Backend and calibration">
+          <Panel title={publicDemo ? 'Session' : 'Backend and calibration'}>
             <KeyValue
-              rows={[
+              rows={publicDemo ? [
+                { label: 'Model', value: sessionDetail.meta.model_id },
+                { label: 'Backend', value: backend },
+                { label: 'Mode', value: sessionDetail.meta.harness.log_only ? 'Observation' : 'Guarded' },
+              ] : [
                 { label: 'Backend', value: backend },
                 { label: 'Calibration', value: cal.label },
               ]}
@@ -195,7 +212,7 @@ export function ChatTab() {
           </div>
         </Panel>
 
-        {chatResult ? (
+        {chatResult && !publicDemo ? (
           <Panel title="Runner after the turn">
             <KeyValue
               rows={[

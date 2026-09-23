@@ -417,6 +417,14 @@ describe('failures', () => {
 });
 
 describe('mutations', () => {
+  it('clears the previous completion and selected chunk after a reset', async () => {
+    mockRoutes({ ...FULL_ROUTES, '/api/sessions/s1/reset': SESSION_A });
+    useStore.setState({ currentSessionId: 's1', chatResult: { completion: 'old turn' } as never, selectedTransaction: 7 });
+    await useStore.getState().resetSession('s1');
+    expect(useStore.getState().chatResult).toBeNull();
+    expect(useStore.getState().selectedTransaction).toBeNull();
+    expect(useStore.getState().sessionDetail?.meta.session_id).toBe('s1');
+  });
   it('opens the child session after a fork', async () => {
     mockRoutes({ ...FULL_ROUTES, '/api/sessions/s1/fork': SESSION_B });
     const child = await useStore.getState().forkSession('s1');

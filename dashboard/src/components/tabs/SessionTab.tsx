@@ -512,7 +512,7 @@ export function SessionTab() {
           subtitle={calView.signalsSubtitle}
         >
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-            {SIGNAL_CHARTS.map((chart) => {
+            {SIGNAL_CHARTS.filter((chart) => signalRows.some((row) => isNum(row[chart.key]))).map((chart) => {
               const t = chart.thresholdKey ? thresholds?.[chart.thresholdKey] : undefined;
               const refs: ReferenceSpec[] = isNum(t) ? [{ value: t, label: `τ ${fmt(t, 3)}` }] : [];
               return (

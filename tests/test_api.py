@@ -91,6 +91,20 @@ def test_data_listing(api):
 
 
 # ---------------------------------------------------------------------- models
+@pytest.mark.parametrize('backend', ['plastic', 'qwen'])
+def test_model_identity_survives_list_and_detail_without_inventing_config(tmp_path, backend):
+    store = ArtifactStore(str(tmp_path))
+    record = {'domain': 'text', 'status': 'completed', 'params': 12}
+    if backend == 'qwen':
+        record['backend'] = backend
+    store.register_model('model', record)
+    with TestClient(create_app(str(tmp_path), device='cpu')) as client:
+        assert client.get('/api/models').json()[0]['backend'] == backend
+        detail = client.get('/api/models/model').json()
+        assert detail['record']['backend'] == backend
+        assert detail['config'] == {}
+
+
 def test_models_listing(api):
     body = api.client.get("/api/models").json()
     by_id = {m["model_id"]: m for m in body}

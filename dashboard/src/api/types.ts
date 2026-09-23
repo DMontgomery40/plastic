@@ -56,6 +56,8 @@ export interface EvalSummary {
 
 export interface ModelSummary {
   model_id: string;
+  /** Model implementation reported by the API; legacy Plastic records may omit it. */
+  backend?: string;
   domain: Domain;
   status: string;
   params: number;
@@ -149,7 +151,8 @@ export interface TrainLogRecord {
 
 export interface ModelDetail {
   record: ModelSummary;
-  config: ModelConfig;
+  /** Native backends may have no Plastic block configuration. */
+  config: Partial<ModelConfig>;
   eval: EvalSummary | null;
   calibration: CalibrationSummary | null;
   canary: CanaryCounts | null;
@@ -201,12 +204,12 @@ export interface ChunkSignals {
   pos_start: number;
   pos_end: number;
   n_tokens: number;
-  chunk_loss: number;
-  surprise_mean: number;
-  surprise_max: number;
-  beta_mean: number;
-  alpha_mean: number;
-  write_norm_sum: number;
+  chunk_loss: number | null;
+  surprise_mean: number | null;
+  surprise_max: number | null;
+  beta_mean: number | null;
+  alpha_mean: number | null;
+  write_norm_sum: number | null;
   delta_norm: number;
   delta_norm_per_layer: number[];
   fisher_update: number | null;
@@ -223,8 +226,8 @@ export interface ChunkSignals {
   cusum_alarm: boolean;
   budget_used: number;
   budget_remaining: number | null;
-  log_delta_norm: number;
-  log_write_norm: number;
+  log_delta_norm: number | null;
+  log_write_norm: number | null;
 }
 
 /**

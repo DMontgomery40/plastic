@@ -9,7 +9,10 @@ import { PhysicsTab } from './components/tabs/PhysicsTab';
 import { TrainTab } from './components/tabs/TrainTab';
 import { RedTeamTab } from './components/tabs/RedTeamTab';
 import { ArchitectureTab } from './components/tabs/ArchitectureTab';
-import { TAB_KEYS, stopJobPolling, syncJobPolling, useStore } from './store';
+import { stopJobPolling, syncJobPolling, useStore } from './store';
+import { isPublicDemo, publicErrorMessage, visibleTab, visibleTabKeys } from './publicMode';
+import { PublicSessionTab } from './components/tabs/PublicSessionTab';
+import { PublicSessionsTab } from './components/tabs/PublicSessionsTab';
 
 const TAB_VIEWS = {
   sessions: SessionsTab,
@@ -49,7 +52,7 @@ export default function App() {
 
   // Poll running training jobs every 2 s; the loop stops itself when none runs.
   useEffect(() => {
-    syncJobPolling(jobs);
+    if (!isPublicDemo()) syncJobPolling(jobs);
   }, [jobs]);
 
   // Keys 1 to 7 select a tab. Nothing else is bound, so nothing is claimed that
@@ -58,15 +61,19 @@ export default function App() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
       const n = Number(event.key);
-      if (!Number.isInteger(n) || n < 1 || n > TAB_KEYS.length) return;
+      const keys = visibleTabKeys();
+      if (!Number.isInteger(n) || n < 1 || n > keys.length) return;
       event.preventDefault();
-      setActiveTab(TAB_KEYS[n - 1]);
+      setActiveTab(keys[n - 1]);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [setActiveTab]);
 
-  const View = TAB_VIEWS[activeTab];
+  const displayTab = visibleTab(activeTab);
+  const View = isPublicDemo()
+    ? displayTab === 'sessions' ? PublicSessionsTab : displayTab === 'session' ? PublicSessionTab : ChatTab
+    : TAB_VIEWS[displayTab];
 
   return (
     <div className="min-h-screen bg-surface">
@@ -75,19 +82,19 @@ export default function App() {
       <main className="mx-auto max-w-[1700px] px-5 py-5">
         {error ? (
           <div className="mb-4">
-            <ErrorBanner message={error} onDismiss={clearError} />
+            <ErrorBanner message={isPublicDemo() ? publicErrorMessage(error) : error} onDismiss={clearError} />
           </div>
         ) : null}
         {disconnected ? (
           <Empty
-            title="The API is not answering."
-            detail="Nothing on this page is real data while the API is down, so no tab is rendered. Start the service and reconnect."
-            command={'uv run plastic serve --artifacts-root artifacts --port 13579 --device cpu'}
+            title="Connection unavailable."
+            detail={isPublicDemo() ? 'Try reconnecting.' : 'Start the service and reconnect.'}
+            command={isPublicDemo() ? undefined : 'uv run plastic serve --artifacts-root artifacts --port 13579 --device cpu'}
           >
             <Button onClick={() => void bootstrap()}>Retry the connection</Button>
           </Empty>
         ) : (
-          <div key={activeTab} className="tab-enter">
+          <div key={displayTab} className="tab-enter">
             <View />
           </div>
         )}

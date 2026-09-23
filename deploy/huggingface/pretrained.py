@@ -26,7 +26,7 @@ def prepare_pretrained_sessions(store: ArtifactStore, checkpoint: Path) -> None:
         raise ValueError('The public Qwen checkpoint does not match the pinned release')
     # Refuse a silent backend switch in an existing session. The hosted store is ephemeral;
     # local users with an older demo store should choose a fresh ARTIFACTS_ROOT.
-    for sid, mid in [('demo_text', MODEL_ID), ('demo_physics', 'phys_mps_3k')]:
+    for sid, mid in [('demo_text', MODEL_ID)]:
         if store.session_exists(sid) and store.load_session_meta(sid)['model_id'] != mid:
             raise ValueError(f'{sid} belongs to another model; choose a fresh ARTIFACTS_ROOT')
     store.register_model(MODEL_ID, {
@@ -41,7 +41,6 @@ def prepare_pretrained_sessions(store: ArtifactStore, checkpoint: Path) -> None:
                            enable_projection=False, enable_budget=False)
     for sid, mid, domain, harness in [
         ('demo_text', MODEL_ID, 'text', native),
-        ('demo_physics', 'phys_mps_3k', 'physics', HarnessConfig()),
     ]:
         if not store.session_exists(sid):
             store.create_session(sid, model_id=mid, domain=domain, harness_cfg=harness)

@@ -26,6 +26,17 @@ recurrent state are different quantities. Any gradient metric must identify its
 objective, differentiation variable, base point and comparison. Do not rename a
 state-change norm to a gradient or assume no gradient interpretation exists.
 
+The current small model can produce fluent factual errors. Baseline competence
+limits semantic interpretations: an incorrect output alone cannot establish
+poisoning, guard damage, or protection. This does not block alpha-stage state and
+weight research, nor require a model replacement before testing update, retention,
+gradient, and transaction mechanics.
+
+The public native backend does not yet report inner-memory prediction-error norms,
+write rates, or retention rates. Its loss and state-change measurements remain
+usable; the missing inner-memory signals are not zero. Native residual
+instrumentation is separate work from the current observational/guarded comparison.
+
 Publish methods, useful examples and reproducible results openly. Basic safety
 and alignment probes are sufficient; publication does not require dangerous
 procedural outputs. Keep private coordination and incidental session data out of
@@ -34,8 +45,8 @@ banners. The interface needs concise controls, results and actionable status.
 
 ## Implemented and measured
 
-- The last verified release used `qwen3_5_0_8b_abliterated` in observational mode,
-  source `ab44481`. This is a dated release record, not a live status endpoint.
+- The public demo uses `qwen3_5_0_8b_abliterated` in observational mode.
+  Each host's `source_snapshot.json` identifies its published source revision.
 - T0's four recorded chains passed full-cache restoration/omission comparisons.
   This supports restoration mechanics, not detector efficacy.
 - T1 at `979a542` completed with a negative fit result: no declared CUSUM threshold
@@ -44,12 +55,13 @@ banners. The interface needs concise controls, results and actionable status.
 - PlasticCore remains linear delta memory. The nonlinear, end-to-end meta-trained
   coordinate proposal is unintegrated and is not native Qwen's mechanism. Its
   original research question remains open.
-- Physics remains an internal benchmark. Public physics UI retirement is pending.
+- Physics remains an internal benchmark available in the local dashboard; the
+  public interface is scoped to text chat and session measurements.
 
 ## Continuation
 
-Fable and Astra co-lead; reuse the existing Sol session for connected-browser
-validation. File ownership and active session identities belong in the private
+Fable and Astra co-lead; reuse the existing Sol session for dashboard implementation
+and connected-browser validation. File ownership and active session identities belong in the private
 brief and scratchpad. Use the canonical checkout on main. Review each new artifact
 set once; reopen only for new evidence or a material change.
 

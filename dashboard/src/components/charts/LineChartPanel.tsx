@@ -41,6 +41,14 @@ interface Props<T> {
   ariaLabel: string;
 }
 
+/** Zero is a measurement; null, NaN and infinity are not. */
+export function hasFiniteSeriesData<T extends object>(data: T[], series: SeriesSpec[]): boolean {
+  return data.some((row) => series.some(({ key }) => {
+    const value = (row as Record<string, unknown>)[key];
+    return typeof value === 'number' && Number.isFinite(value);
+  }));
+}
+
 export function LineChartPanel<T extends object>({
   data,
   xKey,
@@ -55,6 +63,10 @@ export function LineChartPanel<T extends object>({
   dots = false,
   onPointClick,
 }: Props<T>) {
+  if (!hasFiniteSeriesData(data, series)) {
+    return <p role="status" className="rounded border border-dashed border-edge px-3 py-4 text-sm text-ink-secondary">No measurements available.</p>;
+  }
+
   const handleClick = onPointClick
     ? (state: { activeTooltipIndex?: number }) => {
         if (typeof state?.activeTooltipIndex === 'number') onPointClick(state.activeTooltipIndex);

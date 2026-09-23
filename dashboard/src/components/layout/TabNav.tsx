@@ -1,4 +1,6 @@
-import { TAB_KEYS, TAB_LABELS, useStore, type TabKey } from '../../store';
+import { TAB_LABELS, useStore } from '../../store';
+import { visibleTabKeys } from '../../publicMode';
+import { isPublicDemo } from '../../publicMode';
 
 /** Text labels, no icons and no emoji. The digit is the keyboard shortcut. */
 export function TabNav() {
@@ -8,7 +10,7 @@ export function TabNav() {
   return (
     <nav aria-label="Sections" className="border-b border-edge bg-surface">
       <ul className="mx-auto flex max-w-[1700px] flex-wrap gap-1 px-5">
-        {TAB_KEYS.map((key: TabKey, i) => {
+        {visibleTabKeys().map((key, i) => {
           const active = key === activeTab;
           return (
             <li key={key}>
@@ -23,7 +25,7 @@ export function TabNav() {
                 }`}
               >
                 <span className="font-mono text-micro text-ink-muted">{i + 1}</span>
-                {TAB_LABELS[key]}
+                {isPublicDemo() && key === 'session' ? 'Measurements' : TAB_LABELS[key]}
               </button>
             </li>
           );

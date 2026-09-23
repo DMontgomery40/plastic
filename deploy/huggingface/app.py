@@ -12,8 +12,8 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from deploy.huggingface.pretrained import MODEL_ID
 
-MODELS = (MODEL_ID, 'lm_wikitext_l4', 'phys_mps_3k')
-SESSIONS = ('demo_text', 'demo_physics')
+MODELS = (MODEL_ID,)
+SESSIONS = ('demo_text',)
 MAX_BODY = 8192
 
 
@@ -40,17 +40,11 @@ def _valid_body(action, body):
             and _number(body.get('temperature', 0.9), 0.01, 5)
             and _integer(body.get('top_k', 50), 0, 8192)
         )
-    return (
-        set(body) <= {'steps', 'mu', 'seed', 'nonlinear'}
-        and _integer(body.get('steps', 256), 1, 256)
-        and _number(body.get('mu', 0.12), 0, 1)
-        and _integer(body.get('seed', 0), 0, 2**32 - 1)
-        and type(body.get('nonlinear', False)) is bool
-    )
+    return False
 
 
 class PublicDemoGate:
-    """Allow only bounded operations on two intentionally public, fixed sessions."""
+    """Expose the fixed text playground without changing the local research API."""
     def __init__(self, app, store=None):
         self.app = app
         self.store = store
@@ -65,19 +59,32 @@ class PublicDemoGate:
             await JSONResponse({'detail': message}, status_code=status)(scope, receive, send)
 
         reads = ('/api/health', '/api/models', '/api/sessions', '/api/train/jobs', '/api/data', '/api/redteam')
-        session_read = re.fullmatch(r'/api/sessions/(demo_text|demo_physics)(?:/(state|transactions))?', path)
-        model_read = re.fullmatch(r'/api/(models|train)/([^/]+)(?:/log)?', path)
-        model_read = model_read and model_read.group(2) in MODELS
+        session_read = re.fullmatch(r'/api/sessions/([^/]+)(?:/(state|transactions))?', path)
+        session_read = session_read and session_read.group(1) in SESSIONS
+        model_read = re.fullmatch(r'/api/models/([^/]+)(?:/log)?', path)
+        model_read = model_read and model_read.group(1) in MODELS
         if method in ('GET', 'HEAD'):
             if path not in reads and not session_read and not model_read:
-                return await reject(404, 'This public demo exposes only its published models and shared sessions.')
+                return await reject(404, 'Not available in this demo.')
+            if path in ('/api/train/jobs', '/api/data', '/api/redteam'):
+                return await JSONResponse([])(scope, receive, send)
+            if self.store is not None and path in ('/api/health', '/api/models', '/api/sessions'):
+                from plastic.api.service import model_summary, sanitize
+                models = [rec for rec in self.store.list_models() if rec['model_id'] in MODELS]
+                sessions = [rec for rec in self.store.list_sessions() if rec['session_id'] in SESSIONS]
+                if path == '/api/models':
+                    result = [model_summary(self.store, rec) for rec in models]
+                elif path == '/api/sessions':
+                    result = sessions
+                else:
+                    result = {'ok': True, 'artifacts_root': self.store.root, 'device': 'cpu',
+                              'n_models': len(models), 'n_sessions': len(sessions)}
+                return await JSONResponse(sanitize(result))(scope, receive, send)
             return await self.app(scope, receive, send)
-        action_match = re.fullmatch(r'/api/sessions/(demo_text|demo_physics)/(chat|physics|reset|resume)', path)
+        action_match = re.fullmatch(r'/api/sessions/(demo_text)/(chat|reset|resume)', path)
         if method != 'POST' or not action_match:
-            return await reject(403, 'This free-CPU demo uses two shared sessions. Training, calibration, red-team jobs, consolidation, and session creation/deletion/forking are available in the downloadable local project.')
+            return await reject(403, 'This action is unavailable in the shared demo.')
         sid, action = action_match.groups()
-        if (action == 'chat' and sid != 'demo_text') or (action == 'physics' and sid != 'demo_physics'):
-            return await reject(422, 'Choose the matching text or physics session.')
         raw = bytearray()
         while True:
             msg = await receive()
@@ -94,11 +101,11 @@ class PublicDemoGate:
         except (ValueError, TypeError, OverflowError):
             valid = False
         if not valid:
-            return await reject(422, 'Demo limits: prompt up to 1024 characters, 0–128 generated tokens, 1–256 physics steps, friction 0–1, and finite numeric settings. Use the local project for larger runs.')
+            return await reject(422, 'Use a prompt up to 1024 characters, 0–128 output tokens, and valid numeric settings.')
         if self.busy.locked():
             return await reject(503, 'Another visitor is running the shared CPU demo. Retry shortly.')
         async with self.busy:
-            if self.store is not None and action in ('chat', 'physics'):
+            if self.store is not None and action == 'chat':
                 meta = self.store.load_session_meta(sid)
                 if int(meta.get('pos', 0)) >= 4096:
                     return await reject(409, 'This shared demo session reached its context limit. Reset it from Sessions before continuing.')
@@ -126,7 +133,7 @@ def create_demo(artifacts_root: str, dashboard_dist: str):
     from plastic.api.app import create_app
     app = create_app(artifacts_root, device='cpu')
     dist = Path(dashboard_dist)
-    page, count = re.subn(r'(<body\b[^>]*>)', lambda match: match[0] + NOTICE,
+    page, count = re.subn(r'(<body\b[^>]*>)', lambda match: match[0][:-1] + ' data-public-demo="true">' + NOTICE,
                          (dist / 'index.html').read_text(), count=1, flags=re.IGNORECASE)
     if count != 1:
         raise ValueError('Dashboard HTML has no body element for the public-session notice')

@@ -24,20 +24,26 @@ push is a backup and does not trigger deployment. To retry delivery, use the wor
 
 The Space serves the existing React dashboard and Python model API on one port.
 The deployment adapter adds a visible public-session notice and restricts the API
-to bounded operations on `demo_text` and `demo_physics`. The text session uses pinned
+to bounded operations on `demo_text`. The text session uses pinned
 `huihui-ai/Huihui-Qwen3.5-0.8B-abliterated`, a refusal-ablated Qwen3.5-0.8B derivative, through the
 existing native backend. It is **log-only / observational**: proposed context
 updates are recorded and retained, without rollback protection. It supports exploratory
 prompts without a fixed attack list or prior calibration. No original-checkpoint thresholds
-are installed as calibrated decisions for this derivative. The optional
-physics session keeps the original Plastic model and harness.
+are installed as calibrated decisions for this derivative. Physics and the other
+research workflows remain available in the local dashboard.
 
-Both sessions are shared by all visitors. Prompts and outputs are public; storage
+The session is shared by all visitors. Prompts and outputs are public; storage
 is disposable and resets when the Space restarts. Chat permits up to 1,024 prompt
-characters and 128 generated tokens; physics permits up to 256 steps. One mutation
+characters and 128 generated tokens. One mutation
 runs at a time. Sessions reaching position 4,096 need an explicit reset. Training,
 calibration, red-team execution, consolidation, and session creation/forking/deletion
 are disabled in the Space; use the local project for those workflows.
+
+The served HTML marks public mode with `data-public-demo="true"` on its body.
+The dashboard uses that marker to show text Chat, session measurements, and session
+controls. Model/session catalogs and health counts include only this public model
+and session; existing local artifacts are preserved. The unrestricted local API
+and dashboard have no public-mode marker.
 
 The published `text/` and `physics/` folders preserve the original research
 checkpoints, tokenizers, saved
