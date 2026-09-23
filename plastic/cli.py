@@ -289,6 +289,7 @@ def cmd_sleep(args: argparse.Namespace) -> int:
             distill_temperature=args.distill_temperature, tolerance_nll=args.tolerance_nll, seed=args.seed, device=args.device,
             scan_checkpoint_groups=args.scan_checkpoint_groups, provenance=args.provenance, session_loss=args.session_loss,
             prompt_loss_weight=args.prompt_loss_weight, dream_token_weighting=args.dream_token_weighting,
+            flagged_policy=args.flagged_policy, flagged_weight=args.flagged_weight,
         )
         probes = load_probes(args.recall) if args.recall else None
         report = sleep_mod.sleep_ttt(store, args.model_id, cfg, session_ids=(args.sessions or None), probes=probes, run_dir=args.out)
@@ -459,6 +460,9 @@ def build_parser() -> argparse.ArgumentParser:
     sl.add_argument("--session-loss", default="all", choices=["all", "assistant"],
                     help="ttt: supervise every token of an accepted turn (default) or only the assistant's reply")
     sl.add_argument("--prompt-loss-weight", type=float, default=1.0, help="ttt: weight of the user's tokens vs the assistant's in a session turn (0-1)")
+    sl.add_argument("--flagged-policy", default="exclude", choices=["exclude", "downweight", "include"],
+                    help="ttt: accepted turns the policy flagged (scaled/projected/would-have-intervened): exclude from sleep, downweight, or include")
+    sl.add_argument("--flagged-weight", type=float, default=0.25, help="ttt: row weight for flagged turns under --flagged-policy downweight")
     sl.add_argument("--dream-token-weighting", default="uniform", choices=["uniform", "gain", "fw_gain"], help="ttt dream: weight reply tokens by their information gain (turn+fast weights) or by the fast-weight part alone")
     sl.add_argument("--provenance", default="accepted", choices=["accepted", "all"],
                     help="ttt: 'all' consumes rolled-back turns too (experiment control only; never the product rule)")

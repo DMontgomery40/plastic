@@ -84,6 +84,11 @@ class SleepConfig:
     # "accepted" (the product rule) or "all": consume every turn including rolled-back ones. "all" exists only
     # so an experiment can measure what the provenance rule buys; the API and UI never offer it.
     provenance: Literal["accepted", "all"] = "accepted"
+    # accepted turns the policy flagged (scaled/projected, or would-have-intervened in observational mode): "exclude"
+    # from sleep (default; online acceptance is necessary, not sufficient), "downweight" their rows by flagged_weight,
+    # or "include" them like any other accepted turn. Importance by surprise is highest for exactly this content.
+    flagged_policy: Literal["exclude", "downweight", "include"] = "exclude"
+    flagged_weight: float = 0.25
 
     # dream: the session's fast weights (teacher) generate study items; only dreams the teacher finds at least
     # ``dream_min_gain`` nats/token more likely than the reset model are kept (they carry session information)
@@ -114,6 +119,10 @@ class SleepConfig:
             raise ValueError(f"unknown provenance rule {self.provenance!r}")
         if self.session_loss not in ("all", "assistant"):
             raise ValueError(f"unknown session_loss {self.session_loss!r}")
+        if self.flagged_policy not in ("exclude", "downweight", "include"):
+            raise ValueError(f"unknown flagged_policy {self.flagged_policy!r}")
+        if not 0.0 <= self.flagged_weight <= 1.0:
+            raise ValueError("flagged_weight must be within [0, 1]")
         if not 0.0 <= self.prompt_loss_weight <= 1.0:
             raise ValueError("prompt_loss_weight must be within [0, 1]")
         if self.dream_temperature <= 0:
@@ -133,6 +142,9 @@ class TurnRecord:
     n_tokens: int
     accepted: bool
     reason: str  # accepted | rolled_back | read_only | no_chunks | missing_chunks | ambiguous_provenance | empty_completion
+    # accepted online, but the policy flagged a chunk of this turn: it was scaled or projected, or in observational mode
+    # it would have been rolled back / scaled / projected. Online acceptance is necessary, not sufficient, for sleep.
+    flagged: bool = False
 
 
 @dataclass
@@ -197,19 +209,31 @@ def harvest_sessions(store: ArtifactStore, model_id: str, session_ids: list[str]
                 reason, ok = "empty_completion", False
             else:
                 reason, ok = "accepted", True
-            turns.append(TurnRecord(sid, prompt, completion, len(chunks), n_tokens, ok, reason))
+            turns.append(TurnRecord(sid, prompt, completion, len(chunks), n_tokens, ok, reason, flagged=any(chunk_flagged(r) for r in chunks)))
         harness = store.load_session_meta(sid).get("harness") or {}
         out.append(SessionHarvest(sid, bool(harness.get("log_only", False)), turns, bool(store.load_runner_state(sid).get("committed"))))
     return out
+
+
+def chunk_flagged(rec: dict[str, Any]) -> bool:
+    """A chunk the policy did not pass cleanly: applied scale/project, or a requested decision other than commit, or any
+    would_* reason recorded in observational mode. Its turn stays accepted online; sleep treats it separately."""
+    decision = (rec.get("decision") or {}).get("kind")
+    requested = rec.get("requested") or {}
+    if decision in ("scale", "project") or requested.get("kind") in ("rollback", "scale", "project"):
+        return True
+    return any(str(r).startswith("would_") for r in requested.get("reasons") or [])
 
 
 def harvest_summary(harvests: list[SessionHarvest]) -> dict[str, Any]:
     reasons: dict[str, int] = {}
     excluded_tokens = 0
     accepted_tokens = 0
+    flagged_turns = 0
     for h in harvests:
         for t in h.turns:
             reasons[t.reason] = reasons.get(t.reason, 0) + 1
+            flagged_turns += int(t.accepted and t.flagged)
             if t.accepted:
                 accepted_tokens += t.n_tokens
             else:
@@ -218,6 +242,7 @@ def harvest_summary(harvests: list[SessionHarvest]) -> dict[str, Any]:
         "sessions": [{"session_id": h.session_id, "log_only": h.log_only, "turns": len(h.turns),
                       "accepted_turns": len(h.accepted_turns), "has_committed_state": h.has_committed_state} for h in harvests],
         "turns_by_reason": reasons,
+        "accepted_turns_flagged": flagged_turns,
         "accepted_tokens": accepted_tokens,
         "excluded_tokens": excluded_tokens,
     }
@@ -479,6 +504,12 @@ def sleep_ttt(
     else:
         accepted = [t for h in harvests for t in h.accepted_turns]
         report["harvest"]["provenance"] = "accepted"
+    n_flagged = sum(1 for t in accepted if t.flagged)
+    if cfg.flagged_policy == "exclude" and n_flagged:
+        accepted = [t for t in accepted if not t.flagged]
+        report["harvest"]["flagged_excluded"] = n_flagged
+        log(f"[sleep] {n_flagged} accepted turn(s) the policy flagged are excluded from sleep (flagged_policy=exclude)")
+    report["harvest"]["flagged_policy"] = cfg.flagged_policy
     log(f"[sleep] {model_id}: {len(harvests)} sessions, {len(accepted)} accepted turns, "
         f"{report['harvest']['accepted_tokens']} accepted tokens, {report['harvest']['excluded_tokens']} excluded")
     if not accepted:
@@ -529,7 +560,12 @@ def sleep_ttt(
         log(f"[sleep] anchor: {len(leaves)} session states folded with lambda {cfg.anchor_lambda}")
     else:
         pad_id = int(tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id)
-        session_examples = [session_example(tok, t.prompt, t.completion, cfg.session_loss, cfg.prompt_loss_weight) for t in accepted]
+        session_examples = []
+        for t in accepted:
+            ids_, labels_, weights_ = session_example(tok, t.prompt, t.completion, cfg.session_loss, cfg.prompt_loss_weight)
+            if t.flagged and cfg.flagged_policy == "downweight":
+                weights_ = [w * cfg.flagged_weight for w in weights_]
+            session_examples.append((ids_, labels_, weights_))
         session_packed = pack_examples(session_examples, cfg.seq_len, pad_id)
         replay_packed = pack_examples([encode_conversation(tok, m) for m in replay], cfg.seq_len, pad_id) if replay else []
         report["packed"] = {"session": len(session_packed), "replay": len(replay_packed)}

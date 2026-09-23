@@ -99,10 +99,12 @@ would compete for memory with the 760M model on one MPS box.
 
 Importance as a teacher-minus-student log-ratio is highest for content the base model finds least
 plausible: new true facts and poison alike. Weighting by it amplifies what the harness should treat
-most carefully. Design rule: online acceptance is necessary but not sufficient for consolidation;
-chunks accepted while flagged (a z-score beyond threshold, canary movement within tolerance) enter
-sleep with reduced or zero weight; the post-sleep gate (canaries, cluster share, held-out NLL) remains
-the second transaction. A new benign fact looks like high importance with clean canaries; a
+most carefully. Design rule, **built (unmeasured)**: online acceptance is necessary but not sufficient for
+consolidation. Harvesting marks a turn *flagged* when any of its chunks was scaled or projected, had
+a requested intervention overridden, or carried a would-have-intervened reason in observational mode;
+`flagged_policy` excludes such turns from sleep by default, or down-weights their rows, or includes
+them for comparison. The post-sleep gate (canaries, cluster share, held-out NLL) remains the second
+transaction. A new benign fact looks like high importance with clean canaries; a
 contradiction of world knowledge looks like high importance with canary coherence damage. Amnesia
 (arXiv 2606.12655, 2026-06-10) shows that the choice of replay items is an attack surface even under
 auditable budgets; a user controls session content and therefore the gain distribution, so selection

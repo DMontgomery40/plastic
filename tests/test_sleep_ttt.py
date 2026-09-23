@@ -24,9 +24,9 @@ CKPT = os.environ.get("TTT_CHECKPOINT", "artifacts/models/ttt-mlp/TTT-MLP-760M-B
 HAVE_CKPT = os.path.exists(os.path.join(CKPT, "config.json"))
 
 
-def _tx(index, start, end, kind="commit", *, read_only=False):
+def _tx(index, start, end, kind="commit", *, read_only=False, requested=None, reasons=None):
     return {"index": index, "pos_start": start, "pos_end": end, "decision": {"kind": kind, "reasons": [], "scale": 1.0},
-            "requested": {"kind": kind, "reasons": [], "scale": 1.0}, "signals": {"pos_start": start, "pos_end": end, "n_tokens": end - start},
+            "requested": {"kind": requested or kind, "reasons": reasons or [], "scale": 1.0}, "signals": {"pos_start": start, "pos_end": end, "n_tokens": end - start},
             "accepted": {"delta_norm": 0.0 if kind == "rollback" else 1.0}, "read_only": read_only, "read_only_reason": None, "t_unix": 0}
 
 
@@ -536,3 +536,31 @@ def test_dream_gain_concentration_and_fw_turn_split():
     assert abs(spread.gain_concentration(3) - 0.5) < 1e-9
     assert Dream("p", "t", [1], [-100], 0, 0, "s", token_fw_gain=[-1.0, 0.0]).gain_concentration() is None
     SleepConfig(method="dream", dream_token_weighting="fw_gain").validate()
+
+
+def test_flagged_turns_are_accepted_online_but_marked_for_sleep(tmp_path):
+    """OPUS-004 (3): online acceptance is necessary, not sufficient. A scaled/projected chunk, a requested intervention,
+    or a would_* reason in observational mode marks the turn flagged; the summary counts it; the default policy excludes it."""
+    from plastic.sleep.ttt import chunk_flagged
+
+    assert not chunk_flagged(_tx(0, 0, 8))
+    assert chunk_flagged(_tx(0, 0, 8, "scale"))
+    assert chunk_flagged(_tx(0, 0, 8, "project"))
+    assert chunk_flagged(_tx(0, 0, 8, "commit", requested="rollback"))                      # overridden request still flags
+    assert chunk_flagged(_tx(0, 0, 8, "commit", reasons=["log_only", "would_rollback:chunk_loss_z(6.4>=6.0)"]))
+    assert not chunk_flagged(_tx(0, 0, 8, "commit", reasons=["log_only"]))
+    store = ArtifactStore(str(tmp_path))
+    store.register_model("m", {"backend": "ttt", "domain": "text"})
+    store.create_session("s", model_id="m", domain="text", harness_cfg=HarnessConfig(log_only=True))
+    store.append_transaction("s", _tx(0, 0, 8, reasons=["log_only"]))
+    store.append_transaction("s", _tx(1, 8, 16, reasons=["log_only", "would_scale:surprise_mean_z(3.1>=3.0)"]))
+    store.append_trace("s", {"t_unix": 0, "kind": "chat", "prompt": "clean", "completion": "ok", "pos_end": 8, "n_transactions": 1, "tx_start": 0, "tx_end": 1})
+    store.append_trace("s", {"t_unix": 0, "kind": "chat", "prompt": "hot", "completion": "ok", "pos_end": 16, "n_transactions": 1, "tx_start": 1, "tx_end": 2})
+    h = harvest_sessions(store, "m")[0]
+    assert [(t.prompt, t.accepted, t.flagged) for t in h.turns] == [("clean", True, False), ("hot", True, True)]
+    assert harvest_summary([h])["accepted_turns_flagged"] == 1
+    SleepConfig(flagged_policy="downweight", flagged_weight=0.25).validate()
+    with pytest.raises(ValueError):
+        SleepConfig(flagged_policy="ignore").validate()
+    with pytest.raises(ValueError):
+        SleepConfig(flagged_weight=2.0).validate()
