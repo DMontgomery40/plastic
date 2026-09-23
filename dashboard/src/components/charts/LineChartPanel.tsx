@@ -74,7 +74,7 @@ export function LineChartPanel<T extends object>({
     : undefined;
 
   return (
-    <figure role="img" aria-label={ariaLabel} className="m-0">
+    <figure role="img" aria-label={ariaLabel} className="m-0 overflow-hidden">
       <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 8, right: 14, bottom: xLabel ? 22 : 6, left: yLabel ? 10 : 0 }} onClick={handleClick}>
         <CartesianGrid stroke={CHART.grid} strokeDasharray="3 3" vertical={false} />
