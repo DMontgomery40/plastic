@@ -1,4 +1,16 @@
-# Research briefing: read before substantive work
+# Research guide and briefing
+
+**Want to help?** Start with [Contributing to the research](contributing-research.md)
+for runnable experiments, metric definitions and open comparisons. Read
+[current status](current-status.md) for the active questions and
+[Sleep results](results/sleep-2026-09-23/README.md) for the saved tables and individual
+answers. The [Sleep method note](2026-09-23-sleep-consolidation.md) describes the
+implemented consolidation methods and what the experiments have found.
+
+The [importance-weighting proposal](2026-09-23-importance-weighting-proposal.md)
+describes the next comparisons: per-token consolidation weights, adaptive sampling
+and external-classifier baselines. Its implementation and efficacy status are
+separate from the historical Sleep results.
 
 This is the entry point for agents working on `plastic`. It is a reading map and
 claim-checking protocol, not a new survey or a certification that every linked
@@ -48,22 +60,22 @@ document the evidence and revise the claim; do not treat this briefing as dogma.
 
 ## Required reading by task
 
-Every session: read this file, the current [project overview](../../README.md), and
-the latest private `SHARED_SCRATCHPAD.md`, including corrections to
-any source you rely on. Then read the relevant documents below before the decision.
+Read this file, the current [project overview](../../README.md), and the relevant
+documents below. Agents in the shared checkout also read the latest private
+`SHARED_SCRATCHPAD.md` for ownership and pending corrections; corrections affecting
+public methods or results must be carried into the public documents.
 
 | Task | Required local material |
 | --- | --- |
 | Architecture, inner learning, equivalence, novelty | [Literature survey](2026-09-21-ttt-ssm-literature.md), [original candidate](2026-09-21-architecture-memo.md), and [coordinate proposal](2026-09-21-plastic-coordinate-recurrence.md), including limitations, nearest prior art and falsification criteria |
 | Harness, calibration, safety experiments | [Safety review](2026-09-21-inference-time-learning-safety.md), [calibration replay audit](2026-09-22-calibration-replay-audit.md), and the coordinate proposal's transaction semantics if that candidate is involved; for the native Qwen backend also the [turn-boundary retention candidate](2026-09-22-qwen-turn-boundary-retention.md) (not adopted); for the pretrained TTT chat backend the [TTT backend note](2026-09-23-ttt-backend.md) (signals, controls, what was measured) |
 | Learning utility or system identification | [Copy-memory intervention](2026-09-22-copy-memory-content-audit.md), [trained-model study](2026-09-22-trained-model-operating-point.md), relevant model/evaluation code and saved configuration |
-| UI, API, documentation | The above source for every scientific metric or mechanism being exposed; verify proposal/accepted, units, controls and missing-data semantics against actual payloads; the [TTT backend note](2026-09-23-ttt-backend.md) for which signals each backend produces |
+| UI, API, documentation | The above source for every scientific metric or mechanism being exposed; verify proposal/accepted, units, controls and missing-data semantics against actual payloads; the [TTT backend note](2026-09-23-ttt-backend.md) for which signals each backend produces; the [Sleep method note](2026-09-23-sleep-consolidation.md) and saved outputs for consolidation claims |
 | Compute or performance | [Tooling notes](2026-09-21-tooling-hf-jobs-torch.md), actual launch configuration and measured logs; do not extrapolate a CPU identity probe into a GPU throughput result |
 
-At index creation, ASTRA-030 and ASTRA-031 in the scratchpad contain corrections to
-UI labels and the trained-model study. Read later dispositions before repeating
-either the original claims or the review's status. Historical test counts and pinned
-experiments describe their recorded source, not the current checkout.
+Historical test counts and pinned experiments describe their recorded source, not
+the current checkout. Read the corrections in this briefing and each method note
+before repeating a dated claim.
 
 ## Primary-source refresh and decision record
 
