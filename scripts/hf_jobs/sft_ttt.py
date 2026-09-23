@@ -40,7 +40,7 @@ def main() -> None:
     py = os.environ.get("PYBIN") or next(
         (c for c in ("/opt/conda/bin/python", "/usr/local/bin/python", "/usr/bin/python3") if os.path.exists(c)), sys.executable)
     sh(f"{py} -c 'import torch; print(\"torch\", torch.__version__, \"cuda\", torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)'")
-    sh(f"{py} -m pip install -q 'transformers>=5.17,<6' 'datasets>=3' safetensors 'huggingface_hub>=1.32' numpy")
+    sh(f"{py} -m pip install -q 'transformers==5.17.0' 'datasets>=3' safetensors 'huggingface_hub>=1.32' numpy")
     ckpt = f"{work}/ckpt"
     sh(f"{py} -c \"from huggingface_hub import snapshot_download; snapshot_download('{base}', local_dir='{ckpt}')\"")
     dest = f"{out}/artifacts/models/{model_id}" if not measure else f"{out}/artifacts/measure/{model_id}-{int(t0)}"

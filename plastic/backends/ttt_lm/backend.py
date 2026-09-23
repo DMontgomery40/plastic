@@ -55,6 +55,39 @@ def _checkpoint_digest(checkpoint_dir: str) -> str:
     return h.hexdigest()
 
 
+def load_ttt_config(checkpoint_dir: str) -> "M.TTTConfig":
+    raw = json.loads((Path(checkpoint_dir) / "config.json").read_text())
+    return M.TTTConfig(**{k: v for k, v in raw.items() if k not in ("architectures", "auto_map", "transformers_version", "dtype", "model_type", "torch_dtype")})
+
+
+def load_ttt_model(checkpoint_dir: str, *, dtype: torch.dtype = torch.float32, scan_checkpoint_groups: int = 0):
+    """Construct the vendored model and load the safetensors directly (every key checked), on CPU.
+
+    Never ``from_pretrained``: transformers 5 materializes a meta-device model and only fills matched
+    keys, so a custom model whose key set differs is left with UNINITIALIZED memory that produces NaN
+    logits with no error (observed on CUDA with the SFT script). Loading explicitly makes any mismatch a
+    hard failure and ties the head exactly as the config says."""
+    from safetensors.torch import load_file
+
+    p = Path(checkpoint_dir)
+    cfg = load_ttt_config(checkpoint_dir)
+    cfg.scan_checkpoint_group_size = int(scan_checkpoint_groups)
+    model = M.TTTForCausalLM(cfg).to(dtype)
+    state: dict[str, torch.Tensor] = {}
+    for f in sorted(p.glob("*.safetensors")):
+        state.update(load_file(str(f)))
+    missing, unexpected = model.load_state_dict(state, strict=False)
+    missing = [k for k in missing if k != "lm_head.weight" or not cfg.tie_word_embeddings]
+    if missing or unexpected:
+        raise RuntimeError(f"TTT checkpoint mismatch: missing {missing[:5]} unexpected {unexpected[:5]}")
+    if cfg.tie_word_embeddings:
+        model.lm_head.weight = model.model.embed_tokens.weight
+    for name, t in model.state_dict().items():
+        if not torch.isfinite(t).all():
+            raise RuntimeError(f"TTT checkpoint has non-finite values in {name}")
+    return model, cfg
+
+
 class TTTState:
     """Harness-facing wrapper over a ``TTTCache``: fast weights, pending mini-batch gradients, conv
     states and the position."""
@@ -111,28 +144,12 @@ class TTTBackend:
     def load(cls, checkpoint_dir: str, *, device: str | torch.device = "cpu", dtype: torch.dtype = torch.float32) -> "TTTBackend":
         from transformers import AutoTokenizer
 
-        p = Path(checkpoint_dir)
-        raw = json.loads((p / "config.json").read_text())
-        cfg = M.TTTConfig(**{k: v for k, v in raw.items() if k not in ("architectures", "auto_map", "transformers_version", "dtype", "model_type")})
-        # build from the vendored class and load the safetensors directly: no remote-code prompt, no
-        # auto-class type warning, and exactly the weights the digest covers
-        from safetensors.torch import load_file
-
-        model = M.TTTForCausalLM(cfg).to(dtype)
-        state: dict[str, torch.Tensor] = {}
-        for f in sorted(p.glob("*.safetensors")):
-            state.update(load_file(str(f)))
-        missing, unexpected = model.load_state_dict(state, strict=False)
-        missing = [k for k in missing if k != "lm_head.weight" or not cfg.tie_word_embeddings]
-        if missing or unexpected:
-            raise RuntimeError(f"TTT checkpoint mismatch: missing {missing[:5]} unexpected {unexpected[:5]}")
-        if cfg.tie_word_embeddings:
-            model.lm_head.weight = model.model.embed_tokens.weight
+        model, cfg = load_ttt_model(checkpoint_dir, dtype=dtype)
         model.eval()
         model.requires_grad_(False)
         dev = torch.device(device)
         model.to(dev)
-        tok = AutoTokenizer.from_pretrained(str(p))
+        tok = AutoTokenizer.from_pretrained(str(checkpoint_dir))
         return cls(model, tok, cfg, device=dev, checkpoint_digest=_checkpoint_digest(checkpoint_dir))
 
     # ------------------------------------------------------------------ tokenization

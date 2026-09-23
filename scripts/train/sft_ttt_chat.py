@@ -121,17 +121,18 @@ def main() -> None:
     import torch
     from transformers import AutoTokenizer
 
-    from plastic.backends.ttt_lm import modeling_ttt as M
-    from plastic.backends.ttt_lm.backend import CHAT_ASSISTANT, CHAT_USER, _checkpoint_digest
+    import transformers
+
+    from plastic.backends.ttt_lm.backend import CHAT_ASSISTANT, CHAT_USER, _checkpoint_digest, load_ttt_model
 
     torch.manual_seed(args.seed)
     dev = torch.device(args.device)
     dtype = torch.bfloat16 if args.dtype == "bf16-weights" else torch.float32
     autocast = args.dtype == "bf16"
-    raw = json.loads(open(os.path.join(args.checkpoint, "config.json")).read())
-    cfg = M.TTTConfig(**{k: v for k, v in raw.items() if k not in ("architectures", "auto_map", "transformers_version", "dtype", "model_type")})
-    cfg.scan_checkpoint_group_size = int(args.grad_checkpoint_groups)
-    model = M.TTTForCausalLM.from_pretrained(args.checkpoint, config=cfg, dtype=dtype).to(dev)
+    # explicit safetensors load with every key checked (from_pretrained silently left uninitialized memory on CUDA)
+    model, cfg = load_ttt_model(args.checkpoint, dtype=dtype, scan_checkpoint_groups=int(args.grad_checkpoint_groups))
+    model = model.to(dev)
+    print(f"[sft] torch {torch.__version__} transformers {transformers.__version__} device {dev} params {sum(p.numel() for p in model.parameters())/1e6:.0f}M", flush=True)
     if args.layer_checkpoint:
         model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     model.train()
