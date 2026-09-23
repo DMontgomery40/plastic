@@ -82,7 +82,7 @@ export const useStore = create<PlaygroundState>((set, get) => ({
   state: null,
   lastChat: null,
   stale: false,
-  sampling: { max_new_tokens: 96, temperature: 0.8, top_k: 40, seed: null },
+  sampling: { max_new_tokens: 96, temperature: 0.7, top_k: 40, seed: null },
   tab: 'chat',
   busy: { chat: false, session: false, mutation: false },
   calibrating: null,

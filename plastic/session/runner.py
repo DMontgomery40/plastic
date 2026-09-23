@@ -275,7 +275,7 @@ class Session:
         prompt: str,
         *,
         max_new_tokens: int = 128,
-        temperature: float = 0.9,
+        temperature: float = 0.7,
         top_k: int = 50,
         seed: int | None = None,
     ) -> ChatResult:

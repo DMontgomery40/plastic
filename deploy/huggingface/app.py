@@ -43,7 +43,7 @@ def _valid_body(action, body):
             set(body) <= {'prompt', 'max_new_tokens', 'temperature', 'top_k', 'seed'}
             and isinstance(body.get('prompt'), str) and len(body['prompt']) <= 1024
             and _integer(body.get('max_new_tokens', 128), 0, 128)
-            and _number(body.get('temperature', 0.9), 0.01, 5)
+            and _number(body.get('temperature', 0.7), 0.01, 5)
             and _integer(body.get('top_k', 50), 0, 8192)
         )
     return False

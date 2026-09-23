@@ -450,7 +450,7 @@ def calibrate_qwen(
     *,
     target_fpr: float = 0.01,
     max_new_tokens: int = 64,
-    temperature: float = 0.9,
+    temperature: float = 0.7,  # the chat default: calibration must sample the distribution people chat with
     top_k: int = 50,
     seed: int = 0,
     cusum_prompts: Iterable[str] | None = None,

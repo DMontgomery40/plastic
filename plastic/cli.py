@@ -402,7 +402,7 @@ def build_parser() -> argparse.ArgumentParser:
     chat.add_argument("--artifacts-root", default="artifacts")
     chat.add_argument("--device", default="cpu")
     chat.add_argument("--max-new-tokens", type=int, default=128)
-    chat.add_argument("--temperature", type=float, default=0.9)
+    chat.add_argument("--temperature", type=float, default=0.7)
     chat.add_argument("--top-k", type=int, default=50)
     chat.add_argument("--seed", type=int, default=None)
     chat.set_defaults(fn=cmd_chat)

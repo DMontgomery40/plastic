@@ -28,7 +28,7 @@ class CreateSessionRequest(BaseModel):
 class ChatRequest(BaseModel):
     prompt: str
     max_new_tokens: int = Field(default=128, ge=0)
-    temperature: float = Field(default=0.9, gt=0.0)
+    temperature: float = Field(default=0.7, gt=0.0)
     top_k: int = Field(default=50, ge=0)
     seed: int | None = None
 
