@@ -1,0 +1,13 @@
+[setup] rule set decorate: 17 training compositions, 8 held-out pairs ['#B #H', '#H #P', '#H #W', '#P #W', '#Q #P', '#Q #W', '#W #H', '#W #P']
+[mode] frozen
+| frozen | 0.67 → 0.67 | 0.387 → 0.387 | +0.000 | 0.05 → 0.05 | +0.000 | +0.000 | +0.000 | ok | None / None (n 0/0) |
+[mode] continued
+| continued | 0.67 → 0.87 | 0.387 → 0.120 | -0.247 | 0.05 → 0.01 | -0.282 | +0.019 | -0.003 | ok | 1.0 / 0.0 (n 2/1) |
+[mode] in_context
+| in_context | 0.67 → 0.55 | 0.387 → 0.278 | -0.008 | 0.05 → 0.03 | -0.071 | -0.001 | -0.002 | ok | None / None (n 0/0) |
+[mode] replay_verify
+[text-learner] replay_verify: accepted train_exact_drop +0.000/0.05, train_nll_rise -0.213/0.1, chat_nll_rise -0.031/0.05
+[text-learner] replay_verify: accepted train_exact_drop +0.000/0.05, train_nll_rise -0.211/0.1, chat_nll_rise -0.034/0.05
+[text-learner] replay_verify: accepted train_exact_drop +0.000/0.05, train_nll_rise +0.001/0.1, chat_nll_rise +0.008/0.05
+| replay_verify | 0.67 → 0.87 | 0.387 → 0.120 | -0.247 | 0.05 → 0.01 | -0.282 | +0.019 | -0.003 | ok | 1.0 / 0.0 (n 2/1) |
+[done] 7318.3 s -> /private/tmp/claude-501/-Users-davidmontgomery-ttt-ssm-eval/41b763a8-b6b3-46be-881a-ee202540dbbc/scratchpad/text_contract_decorate_s0

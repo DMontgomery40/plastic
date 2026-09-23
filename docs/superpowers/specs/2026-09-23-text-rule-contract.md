@@ -168,6 +168,29 @@ mode; the poisoned stream's fate (accepted or refused, harm, residual); revert w
 denominators and compute; nothing is called learning unless the after-reset gain on held-out compositions
 exceeds the in-context baseline at matched compute and vanishes on revert.
 
+## First contract report (decoration set, step 250, seed 0)
+
+[Results](../../research/results/text-rules-2026-09-23/contract_decorate_s0/README.md). Held-out ordered pairs,
+teacher-forced exact with in-episode adaptation, before → after the lasting update: frozen 0.67 → 0.67 (the
+episode-only bar); continued (AdamW on W0, 20 steps) 0.67 → 0.87 with answer NLL 0.387 → 0.120; in_context (the 17
+lessons read into the fast weights before each episode, without a reset) 0.67 → 0.55 with NLL 0.278, so on this
+model more fast-weight context lowers the loss and reduces exact matches, the interference the 30-turn sleep
+sessions showed; replay_verify equals continued and accepted every stream. The frozen-fast-path exact stays 0 in
+every mode (NLL 8.40 → 8.15 after the update): the slow weights never answer alone; the lasting change makes the
+fast path adapt faster (speed ratio at the first situation 0.28 → 0.10). Held-out chat NLL fell (1.629 → 1.598),
+revert was exact, poison harm was +0.019 NLL and the corrective stream removed it.
+
+What this does and does not show. A lasting update from 17 lessons improved held-out compositions after reset and
+above the in-context bar, with no damage and a clean revert: the contract's first positive row in this project.
+It is not yet rule learning: the poisoned stream (one operator taught by a false definition) produced almost the
+same gain as the clean one, which points at format and procedure (how to do the decoration task in an episode)
+rather than rule content; the format-only control (same lessons, shuffled answers) decides this and runs next.
+The verifier (v1) accepted the poison for two reasons: its held-in checks scored with the fast path frozen, where
+exact is 0 before and after (vacuous), and a consistent false rule consumed from a snapshot with no prior about
+the operator is indistinguishable from a true rule by any damage check. Verifier v2 will score with adaptation on
+and add a sequential arm (clean accepted, then the poison on top, verified against the accepted lessons), which is
+the recurrence-and-consistency criterion of the reassessment memo in its first concrete form.
+
 ## Not in this thread
 
 New learning mechanisms (T2, T3); sweeps over seeds or hyperparameters; hosting. Loose ends listed in FABLE-193

@@ -1,0 +1,107 @@
+{
+ "checkpoint": "/Users/davidmontgomery/ttt_ssm_eval/artifacts/models/ttt_mlp_760m_chat_v1_step250",
+ "device": "mps",
+ "code_commit": "1c89f1c+dirty",
+ "started_at_unix": 1790198585,
+ "rule_set": "decorate",
+ "spec": {
+  "n_heldout": 8,
+  "split_seed": 0,
+  "situations_per_episode": 8,
+  "eval_episodes_per_composition": 2,
+  "stream_episodes": 17,
+  "probe_situations": 8,
+  "poison_operator": "#P",
+  "revert_tolerance": 1e-06,
+  "n_words": [
+   4,
+   5
+  ],
+  "rule_set": "decorate"
+ },
+ "modes": {
+  "frozen": {
+   "seconds": 525.0489687919617,
+   "decisions": [
+    {
+     "beneficial": true,
+     "accepted": null,
+     "stream": "clean"
+    },
+    {
+     "beneficial": false,
+     "accepted": null,
+     "stream": "poisoned"
+    },
+    {
+     "beneficial": true,
+     "accepted": null,
+     "stream": "corrective"
+    }
+   ]
+  },
+  "continued": {
+   "seconds": 883.6830921173096,
+   "decisions": [
+    {
+     "beneficial": true,
+     "accepted": true,
+     "stream": "clean"
+    },
+    {
+     "beneficial": false,
+     "accepted": true,
+     "stream": "poisoned"
+    },
+    {
+     "beneficial": true,
+     "accepted": true,
+     "stream": "corrective"
+    }
+   ]
+  },
+  "in_context": {
+   "seconds": 4970.091643810272,
+   "decisions": [
+    {
+     "beneficial": true,
+     "accepted": null,
+     "stream": "clean"
+    },
+    {
+     "beneficial": false,
+     "accepted": null,
+     "stream": "poisoned"
+    },
+    {
+     "beneficial": true,
+     "accepted": null,
+     "stream": "corrective"
+    }
+   ]
+  },
+  "replay_verify": {
+   "seconds": 887.7486698627472,
+   "decisions": [
+    {
+     "beneficial": true,
+     "accepted": true,
+     "stream": "clean"
+    },
+    {
+     "beneficial": false,
+     "accepted": true,
+     "stream": "poisoned"
+    },
+    {
+     "beneficial": true,
+     "accepted": true,
+     "stream": "corrective"
+    }
+   ]
+  }
+ },
+ "chat_rows": 8,
+ "checkpoint_digest": "29e0f8558d157cbfeaa9670334a38766448c9bdfe2ba651f286db22300aaf8c0",
+ "seconds": 7318.3
+}
