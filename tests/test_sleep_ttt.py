@@ -469,3 +469,14 @@ def test_dream_report_records_every_rejection_with_its_reason():
                   min_gain=0.5, max_keep=1, report=rep)
     reasons = sorted(r["reason"].split(" ")[0] for r in rep.to_dict()["rejected"])
     assert reasons == ["degenerate", "duplicate", "gain", "over"] and len(rep.to_dict()["kept"]) == 1
+
+
+def test_dream_templates_condition_the_teacher_on_the_turn_and_not_the_student():
+    from plastic.sleep.dream import DREAM_TEMPLATES, Dream
+
+    for with_turn, without_turn in DREAM_TEMPLATES:
+        assert "{turn}" in with_turn and "{turn}" not in without_turn
+        assert with_turn.format(turn="My cat is Marlowe.").count("My cat is Marlowe.") == 1
+    d = Dream("p", "Your cat is Marlowe.", [1, 2], [-100, 2], -1.0, -3.0, "s", turn="My cat is Marlowe.", fastweight_logprob=-2.0)
+    out = d.to_dict()
+    assert out["gain"] == 2.0 and out["fastweight_gain"] == 1.0 and out["turn"] == "My cat is Marlowe."

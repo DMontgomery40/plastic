@@ -87,7 +87,7 @@ class SleepConfig:
 
     # dream: the session's fast weights (teacher) generate study items; only dreams the teacher finds at least
     # ``dream_min_gain`` nats/token more likely than the reset model are kept (they carry session information)
-    dream_per_prompt: int = 3
+    dream_per_prompt: int = 2
     dream_min_gain: float = 0.2
     dream_max_keep: int = 24
     dream_max_new_tokens: int = 48
@@ -541,8 +541,9 @@ def sleep_ttt(
 
             dream_report = DreamReport()
             candidates = []
+            turns_by_session = {h.session_id: [tr.prompt for tr in h.accepted_turns] for h in harvests}
             for ti, (sid, state) in enumerate(teachers):
-                ds = generate_dreams(teacher_be, state, session_id=sid, per_prompt=cfg.dream_per_prompt,
+                ds = generate_dreams(teacher_be, state, session_id=sid, turns=turns_by_session.get(sid, []), per_prompt=cfg.dream_per_prompt,
                                      max_new_tokens=cfg.dream_max_new_tokens, seed=cfg.seed + ti, log=log)
                 for d in ds:
                     d.teacher_index = ti

@@ -24,15 +24,20 @@ import torch
 
 from plastic.sleep.recall import normalize
 
-# Prompts a teacher answers from its fast weights. Each is a user turn appended to the session; the reply
-# is the dream. They ask for content, not for the reply pattern.
-DREAM_PROMPTS: tuple[str, ...] = (
-    "Restate, in one sentence, one specific fact I told you in this conversation.",
-    "Ask me one question whose answer I gave you earlier in this conversation, then answer it yourself.",
-    "If someone asks you later what I told you about myself, what exactly will you say?",
-    "Write down the personal facts I shared with you, one short sentence each.",
-    "Which detail from our conversation would you make sure to remember, and why?",
+# Dream templates. Each is asked WITH the accepted user turn quoted (the teacher, which also holds the session in
+# its fast weights) and WITHOUT it (the student, from a reset state). The reply is the dream; what the student
+# learns is the information the turn and the fast weights provided. Context distillation (arXiv 2306.09306) with
+# the session's own fast-weight state as the conditioned teacher. Free-form "restate a fact" prompts without the
+# turn produced only the model's own reply pattern on the step-100 checkpoint (FABLE-140).
+DREAM_TEMPLATES: tuple[tuple[str, str], ...] = (
+    ("Earlier I told you: \"{turn}\" Restate that in one sentence, in your own words.",
+     "Restate, in one sentence and in your own words, one thing I told you about myself earlier."),
+    ("Earlier I told you: \"{turn}\" Write one question that this answers, then answer it in a few words.",
+     "Write one question I could ask you about something I told you earlier, then answer it in a few words."),
+    ("Earlier I told you: \"{turn}\" If I ask you about this later, what exactly will you say?",
+     "If I ask you later about something I told you about myself, what exactly will you say?"),
 )
+DREAM_PROMPTS: tuple[str, ...] = tuple(t[1] for t in DREAM_TEMPLATES)  # the student-side prompts
 
 
 @dataclass
@@ -44,13 +49,15 @@ class Dream:
     teacher_logprob: float      # mean log-prob per token of the reply under the teacher (session fast weights)
     student_logprob: float      # the same under the reset model
     session_id: str = ""
-    # TEACHER rendering: the same prompt continuing the session (no BOS) followed by the same reply tokens; the
-    # reply is token-for-token identical in both renderings, so the KL is taken on the reply positions of each
+    # TEACHER rendering: the turn-conditioned prompt continuing the session (no BOS) followed by the same reply
+    # tokens; the reply is token-for-token identical in both renderings, so the KL is taken on the reply positions
     teacher_ids: list[int] = field(default_factory=list)
     teacher_prefix: int = 0     # reply starts at teacher_ids[teacher_prefix]
     student_prefix: int = 0     # reply starts at ids[student_prefix]
     reply_len: int = 0
     teacher_index: int = -1     # which loaded session state produced this dream
+    turn: str = ""              # the accepted user turn the dream is about
+    fastweight_logprob: float | None = None  # lp(reply | teacher state, prompt WITHOUT the turn): what the fast weights alone carry
 
     @property
     def gain(self) -> float:
@@ -58,8 +65,11 @@ class Dream:
         return self.teacher_logprob - self.student_logprob
 
     def to_dict(self) -> dict[str, Any]:
-        return {"prompt": self.prompt, "text": self.text, "n_tokens": len(self.ids), "reply_len": self.reply_len, "teacher_logprob": self.teacher_logprob,
-                "student_logprob": self.student_logprob, "gain": self.gain, "session_id": self.session_id}
+        return {"prompt": self.prompt, "turn": self.turn, "text": self.text, "n_tokens": len(self.ids), "reply_len": self.reply_len,
+                "teacher_logprob": self.teacher_logprob, "student_logprob": self.student_logprob, "gain": self.gain,
+                "fastweight_logprob": self.fastweight_logprob,
+                "fastweight_gain": (self.fastweight_logprob - self.student_logprob) if self.fastweight_logprob is not None else None,
+                "session_id": self.session_id}
 
 
 @dataclass
@@ -152,34 +162,38 @@ def mean_logprob(backend, state, ids: list[int], n_prefix: int) -> float:
     return float(lp.gather(1, tgt[:, None]).mean())
 
 
-def generate_dreams(backend, teacher_state, *, session_id: str, prompts: tuple[str, ...] = DREAM_PROMPTS, per_prompt: int = 3,
-                    max_new_tokens: int = 48, temperature: float = 0.7, top_k: int = 40, seed: int = 0,
+def generate_dreams(backend, teacher_state, *, session_id: str, turns: list[str], templates: tuple[tuple[str, str], ...] = DREAM_TEMPLATES,
+                    per_prompt: int = 2, max_new_tokens: int = 48, temperature: float = 0.7, top_k: int = 40, seed: int = 0,
                     log: Callable[[str], None] = lambda s: None) -> list[Dream]:
-    """Ask the teacher (session fast weights, frozen) each prompt ``per_prompt`` times; score each reply under
-    the teacher and under the reset model. Rows are rendered like any chat turn (BOS, user, assistant tag,
-    reply, EOS) so the student trains on exactly what it would see."""
+    """For every accepted user turn and template, ask the teacher (session fast weights, frozen) the turn-conditioned
+    prompt ``per_prompt`` times. Score the reply three ways: under the teacher with the turn (teacher), under the
+    reset model without the turn (student), and under the teacher state without the turn (fast weights alone).
+    The student row is the turn-free prompt plus the reply, rendered like any fresh chat turn."""
     tok = backend.tokenizer
     eos = int(tok.eos_token_id)
     dreams: list[Dream] = []
     gen = torch.Generator().manual_seed(seed)
-    for pi, prompt in enumerate(prompts):
-        # the prompt continues the session (not a first turn): no BOS, the session's position carries on
-        prompt_ids = backend.encode_chat(prompt, first_turn=False)
-        for k in range(per_prompt):
-            state = backend.clone(teacher_state)
-            reply_ids = sample_reply(backend, state, prompt_ids, max_new_tokens=max_new_tokens, temperature=temperature, top_k=top_k, gen=gen)
-            text = tok.decode(reply_ids, skip_special_tokens=True).strip()
-            if not text:
-                continue
-            # student rendering (fresh first turn) and teacher rendering (continues the session); the reply tokens are
-            # the sampled ids themselves in both, plus EOS
-            student_prefix_ids = backend.encode_chat(prompt, first_turn=True)
-            reply = reply_ids + [eos]
-            ids = student_prefix_ids + reply
-            labels = [-100] + ids[1:]
-            teacher_ids = prompt_ids + reply
-            t_lp = mean_logprob(backend, backend.clone(teacher_state), teacher_ids, len(prompt_ids))
-            s_lp = mean_logprob(backend, backend.init_state(), ids, len(student_prefix_ids))
-            dreams.append(Dream(prompt, text, ids, labels, t_lp, s_lp, session_id, teacher_ids, len(prompt_ids), len(student_prefix_ids), len(reply)))
-            log(f"[dream] {session_id} p{pi}k{k} gain {t_lp - s_lp:+.3f}: {text[:90]!r}")
+    for ti, turn in enumerate(turns):
+        short = " ".join(turn.split())[:400]
+        for pi, (with_turn, without_turn) in enumerate(templates):
+            teacher_prompt_ids = backend.encode_chat(with_turn.format(turn=short), first_turn=False)
+            fw_prompt_ids = backend.encode_chat(without_turn, first_turn=False)
+            student_prefix_ids = backend.encode_chat(without_turn, first_turn=True)
+            for k in range(per_prompt):
+                state = backend.clone(teacher_state)
+                reply_ids = sample_reply(backend, state, teacher_prompt_ids, max_new_tokens=max_new_tokens, temperature=temperature, top_k=top_k, gen=gen)
+                text = tok.decode(reply_ids, skip_special_tokens=True).strip()
+                if not text:
+                    continue
+                reply = reply_ids + [eos]
+                ids = student_prefix_ids + reply
+                labels = [-100] + ids[1:]
+                teacher_ids = teacher_prompt_ids + reply
+                t_lp = mean_logprob(backend, backend.clone(teacher_state), teacher_ids, len(teacher_prompt_ids))
+                s_lp = mean_logprob(backend, backend.init_state(), ids, len(student_prefix_ids))
+                fw_lp = mean_logprob(backend, backend.clone(teacher_state), fw_prompt_ids + reply, len(fw_prompt_ids))
+                d = Dream(without_turn, text, ids, labels, t_lp, s_lp, session_id, teacher_ids, len(teacher_prompt_ids), len(student_prefix_ids), len(reply),
+                          turn=short, fastweight_logprob=fw_lp)
+                dreams.append(d)
+                log(f"[dream] {session_id} t{ti}p{pi}k{k} gain {t_lp - s_lp:+.3f} fw {fw_lp - s_lp:+.3f}: {text[:90]!r}")
     return dreams
