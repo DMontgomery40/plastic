@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { LineChartPanel } from '../../components/charts/LineChartPanel';
 import { Empty } from '../../components/panels/Empty';
 import { Panel, StatTile } from '../../components/panels/Panel';
-import { DECISION_COLOR, DECISION_GLYPH, DECISION_LABEL, chunkSource, firedSignals, fmt, fmtInt, isFinite_, presentFields, wouldIntervene } from '../format';
+import { DECISION_COLOR, DECISION_GLYPH, DECISION_LABEL, backendLabel, chunkSource, firedSignals, fmt, fmtInt, isFinite_, presentFields, wouldKind } from '../format';
 import { useStore } from '../store';
 import type { SessionState, TransactionRecord } from '../types';
 
@@ -113,7 +113,7 @@ function ChunkTable({ transactions }: { transactions: TransactionRecord[] }) {
         </thead>
         <tbody className="text-ink-primary">
           {items.map((tx) => {
-            const would = wouldIntervene(tx);
+            const wk = wouldKind(tx);
             const fired = firedSignals(tx);
             const src = chunkSource(tx);
             return (
@@ -122,7 +122,7 @@ function ChunkTable({ transactions }: { transactions: TransactionRecord[] }) {
                   <td className="py-1.5 pr-3 text-ink-muted">{tx.index}</td>
                   <td className="py-1.5 pr-3">
                     <span style={{ color: DECISION_COLOR[tx.decision.kind] }}>{DECISION_GLYPH[tx.decision.kind]} {DECISION_LABEL[tx.decision.kind]}</span>
-                    {would ? <span className="ml-2 text-ink-secondary">would {DECISION_LABEL[tx.requested.kind].toLowerCase()}</span> : null}
+                    {wk ? <span className="ml-2 text-ink-secondary">would {DECISION_LABEL[wk].toLowerCase()}</span> : null}
                     {tx.signals.cusum_alarm ? <span className="ml-2 text-status-scale">CUSUM</span> : null}
                   </td>
                   <td className="py-1.5 pr-3 text-ink-secondary">{src === 'prompt' ? '▲ prompt' : src === 'model' ? '● model' : src}</td>
@@ -180,7 +180,7 @@ export function SignalsScreen() {
         <StatTile label="Rolled back" value={fmtInt(meta.rollbacks)} tone={meta.rollbacks > 0 ? 'rollback' : 'default'} />
         <StatTile label="Scaled / projected / read-only" value={`${fmtInt(meta.scales)} / ${fmtInt(meta.projects)} / ${fmtInt(meta.readonly)}`} />
       </div>
-      <Panel title="Fast-weight change" subtitle="proposed (measured before the decision) and accepted (measured after it), effective coordinates">
+      <Panel title="Memory change" subtitle={`${backendLabel(s.backend)} · proposed (measured before the decision) and accepted (measured after it)`}>
         <LineChartPanel
           data={data}
           xKey="chunk"
@@ -189,7 +189,7 @@ export function SignalsScreen() {
             { key: 'accepted', label: 'Accepted Δ', color: SERIES_B },
           ]}
           xLabel="chunk"
-          ariaLabel="Proposed and accepted fast-weight change per chunk"
+          ariaLabel="Proposed and accepted memory change per chunk"
         />
       </Panel>
       <div className="grid gap-4 lg:grid-cols-2">

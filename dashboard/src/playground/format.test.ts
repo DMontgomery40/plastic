@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chunkSize, chunkSource, firedSignals, fmt, modeLabel, presentFields, thresholdSource, turnTotals, turnsFromTrace, wouldIntervene } from './format';
+import { chunkSize, chunkSource, firedSignals, fmt, modeLabel, presentFields, thresholdSource, turnTotals, turnsFromTrace, wouldIntervene, wouldKind } from './format';
 import type { HarnessConfig, RunnerSummary, TraceRecord, TransactionRecord } from './types';
 
 function tx(index: number, pos_start: number, pos_end: number, opts: Partial<TransactionRecord> & { requested?: TransactionRecord['requested'] } = {}): TransactionRecord {
@@ -94,5 +94,20 @@ describe('labels and gating', () => {
     expect(fmt(Number.NaN)).toBe('n/a');
     expect(fmt(0)).toBe('0');
     expect(fmt(12345.6)).toBe('12346');
+  });
+});
+
+
+describe('observational mode', () => {
+  it('reads the would-have decision from the log-only reasons and never counts log_only as a fired signal', () => {
+    const logOnly = tx(0, 0, 8, {
+      decision: { kind: 'commit', reasons: ['log_only', 'would_rollback:chunk_loss_z(6.4>=6.0)', 'would_scale:surprise_mean_z(3.1>=3.0)'], scale: 1 },
+    });
+    expect(wouldKind(logOnly)).toBe('rollback');
+    expect(wouldIntervene(logOnly)).toBe(true);
+    expect(firedSignals(logOnly)).toEqual(['chunk_loss_z', 'surprise_mean_z']);
+    const plain = tx(1, 8, 16, { decision: { kind: 'commit', reasons: ['log_only'], scale: 1 } });
+    expect(wouldKind(plain)).toBeNull();
+    expect(firedSignals(plain)).toEqual([]);
   });
 });

@@ -92,9 +92,21 @@ export function isIntervention(kind: DecisionKind): boolean {
   return kind === 'rollback' || kind === 'scale' || kind === 'project';
 }
 
-/** In observational mode the policy's requested decision differs from the applied commit. */
+/**
+ * The decision the policy would have applied. In observational (log-only) mode the runner commits and records
+ * the policy's choice as `would_rollback:` / `would_scale:` / `would_project:` reasons on the requested decision;
+ * in guarded mode `requested.kind` itself may differ from the applied decision when a later check overrode it.
+ */
+export function wouldKind(tx: TransactionRecord): DecisionKind | null {
+  if (tx.requested.kind !== tx.decision.kind && isIntervention(tx.requested.kind)) return tx.requested.kind;
+  for (const kind of ['rollback', 'project', 'scale'] as const) {
+    if (tx.requested.reasons.some((r) => r.startsWith(`would_${kind}:`))) return kind;
+  }
+  return null;
+}
+
 export function wouldIntervene(tx: TransactionRecord): boolean {
-  return tx.requested.kind !== tx.decision.kind && isIntervention(tx.requested.kind);
+  return wouldKind(tx) !== null;
 }
 
 /** The chunk's own size for the learning strip: its tokens' write norm where the backend reports one, else the proposed change. */
@@ -158,6 +170,10 @@ export function presentFields(transactions: TransactionRecord[], fields: string[
   return fields.filter((f) => transactions.some((tx) => isFinite_((tx.signals as unknown as Record<string, unknown>)[f])));
 }
 
+/** The signals named in the policy's reasons (applied or would-have), without the mode marker itself. */
 export function firedSignals(tx: TransactionRecord): string[] {
-  return tx.requested.reasons.map((r) => r.replace(/^would_(rollback|scale|project):/, '').split('(')[0]);
+  const reasons = tx.requested.reasons.length ? tx.requested.reasons : tx.decision.reasons;
+  return reasons
+    .filter((r) => r !== 'log_only' && r !== 'learning_ineligible' && r !== 'session_read_only')
+    .map((r) => r.replace(/^would_(rollback|scale|project):/, '').split('(')[0]);
 }

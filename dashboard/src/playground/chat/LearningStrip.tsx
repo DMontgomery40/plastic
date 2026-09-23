@@ -1,4 +1,4 @@
-import { DECISION_COLOR, DECISION_GLYPH, DECISION_LABEL, chunkSize, chunkSource, fmt, isFinite_, wouldIntervene } from '../format';
+import { DECISION_COLOR, DECISION_GLYPH, DECISION_LABEL, chunkSize, chunkSource, fmt, isFinite_, wouldKind } from '../format';
 import type { TransactionRecord } from '../types';
 
 /**
@@ -17,9 +17,10 @@ export function LearningStrip({ chunks, height = 44 }: { chunks: TransactionReco
     <ol role="list" aria-label="Learning strip: one cell per chunk" className="flex w-full items-end gap-px" style={{ height }}>
       {chunks.map((tx, i) => {
         const applied = tx.decision.kind;
-        const requested = tx.requested.kind;
+        const wk = wouldKind(tx);
+        const requested = wk ?? applied;
         const frac = isFinite_(sizes[i]) ? Math.max(0.08, sizes[i] / max) : 0;
-        const would = wouldIntervene(tx);
+        const would = wk !== null;
         const accepted = tx.accepted?.delta_norm;
         const proposed = tx.signals.delta_norm;
         const kept = isFinite_(accepted) && isFinite_(proposed) && proposed > 0 ? Math.min(1, accepted / proposed) : 1;
