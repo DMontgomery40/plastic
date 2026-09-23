@@ -373,7 +373,7 @@ function SleepArmDetail({ run, arm }: { run: Run; arm: SleepArm }) {
       ) : null}
       {arm.harvest ? (
         <div>
-          <Label>Turns this arm trained on</Label>
+          <Label>Turns selected for this arm</Label>
           <div className="mt-2">
             <TurnsBar harvest={arm.harvest} />
           </div>
@@ -459,9 +459,9 @@ export function RunsView({ index, runId, arm, onSelect }: Props) {
           <div className="text-micro text-ink-muted">candidate retained</div>
         </div>
         <div className="rounded-lg border border-edge bg-surface-raised px-4 py-3">
-          <Label>Pulled back by the gate</Label>
+          <Label>Rejected attempts</Label>
           <Big>{pulledBack}</Big>
-          <div className="text-micro text-ink-muted">a locality check failed</div>
+          <div className="text-micro text-ink-muted">no child retained</div>
         </div>
       </div>
       <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">

@@ -30,6 +30,30 @@ describe('Sleep observatory: runs', () => {
   });
 
   it.each([
+    { run: 'final_step250_seed1_include', arm: 'dream', reason: 'no dream carried session information above the gain threshold' },
+    { run: 'final_step250_seed0_exclude', arm: 'dream', reason: 'locality gate failed' },
+    { run: 'final_step250_seed1_include', arm: 'anchor', reason: null },
+    { run: 'final_step250_seed1_include', arm: 'replay', reason: null },
+  ])('keeps selection separate from training and rejection cause for $run / $arm', async ({ run, arm, reason }) => {
+    window.history.replaceState(null, '', `/#sleep/runs/${run}/${arm}`);
+    render(<ObservatoryScreen />);
+    await screen.findByRole('heading', { name: run });
+    const selection = await screen.findByText('Turns selected for this arm');
+    expect(within(selection.parentElement!).getByText('selected')).toBeTruthy();
+    expect(screen.queryByText('Turns this arm trained on')).toBeNull();
+    const rejections = screen.getByText('Rejected attempts').parentElement!;
+    expect(within(rejections).getByText('no child retained')).toBeTruthy();
+    expect(screen.queryByText('a locality check failed')).toBeNull();
+    if (reason) expect(screen.getByText(reason)).toBeTruthy();
+    if (run === 'final_step250_seed1_include' && arm === 'dream') {
+      const detail = selection.closest('section')!;
+      expect(within(detail).queryByText('Locality gate')).toBeNull();
+      expect(within(detail).getByText('No replies match.')).toBeTruthy();
+      expect(within(detail).getAllByText('n/a').length).toBeGreaterThan(0);
+    }
+  });
+
+  it.each([
     { ids: ['sleep_controls_step50', 'final_step250_seed0_exclude'], run: 'final_step250_seed0_exclude', arm: 'Dream' },
     { ids: ['final_step250_seed0_exclude', 'final_step250_seed0_include'], run: 'final_step250_seed0_include', arm: 'Dream' },
     { ids: ['final_step250_seed0_exclude', 'final_step250_seed0_ceiling_single'], run: 'final_step250_seed0_exclude', arm: 'Dream' },
