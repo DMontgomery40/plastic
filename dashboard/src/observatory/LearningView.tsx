@@ -12,6 +12,7 @@ import {
   modeRole,
   rateCell,
   reportSets,
+  selectedAblation,
   speedLabel,
   VARIANT_LABEL,
   windowLabel,
@@ -258,7 +259,7 @@ function AblationTable({ set }: { set: AblationSet }) {
 
 function AblationPanel({ index, setId, onSelect }: { index: LearningIndex; setId: string | null; onSelect: (id: string) => void }) {
   const sets = index.sets.filter((s): s is AblationSet => s.kind === 'ablation');
-  const selected = sets.find((s) => s.id === setId) ?? sets[0];
+  const selected = selectedAblation(index, setId);
   const st = ablationState(index, setId);
   return (
     <Panel
@@ -266,7 +267,7 @@ function AblationPanel({ index, setId, onSelect }: { index: LearningIndex; setId
       subtitle="Each variant trained from scratch, then scored before any stream: temporary adaptation only"
       actions={st.state === 'archived' ? null : <StateWord state={st.state === 'stale' ? 'stale' : 'not yet archived'} />}
     >
-      {sets.length > 1 ? <SetPicker label="Ablation sets" sets={sets} active={selected.id} onSelect={onSelect} /> : null}
+      {sets.length > 1 && selected ? <SetPicker label="Ablation sets" sets={sets} active={selected.id} onSelect={onSelect} /> : null}
       {st.set === null ? (
         <p className="text-base text-ink-secondary">The ablation appears here once its results are archived beside this report.</p>
       ) : (
@@ -307,7 +308,7 @@ function SetPicker({ sets, active, onSelect, label = 'Report sets' }: { sets: { 
 export function LearningView({ setId, ablationId, onSelect, onSelectAblation }: {
   setId: string | null;
   ablationId: string | null;
-  onSelect: (id: string) => void;
+  onSelect: (id: string, ablationId: string | null) => void;
   onSelectAblation: (reportId: string, ablationId: string) => void;
 }) {
   const [attempt, setAttempt] = useState(0);
@@ -324,7 +325,7 @@ export function LearningView({ setId, ablationId, onSelect, onSelectAblation }: 
   const set = sets.find((s) => s.id === setId) ?? sets[0];
   return (
     <div className="space-y-4">
-      {sets.length > 1 ? <SetPicker sets={sets} active={set.id} onSelect={onSelect} /> : null}
+      {sets.length > 1 ? <SetPicker sets={sets} active={set.id} onSelect={(id) => onSelect(id, selectedAblation(data, ablationId)?.id ?? null)} /> : null}
       {set ? (
         <>
           <Identity set={set} />

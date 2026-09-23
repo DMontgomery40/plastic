@@ -210,10 +210,15 @@ export function count(v: number | null): string {
 
 export type AblationState = { state: 'archived' | 'stale'; set: AblationSet } | { state: 'not archived'; set: null };
 
-/** The coordinate ablation's state. "stale" means measured under a contract version other than the current one. */
-export function ablationState(index: LearningIndex, setId: string | null = null): AblationState {
+/** Resolve archive identity independently of whether its measurements exist. */
+export function selectedAblation(index: LearningIndex, setId: string | null): AblationSet | null {
   const sets = index.sets.filter((s): s is AblationSet => s.kind === 'ablation');
-  const set = sets.find((s) => s.id === setId) ?? sets[0];
+  return sets.find((s) => s.id === setId) ?? sets[0] ?? null;
+}
+
+/** "stale" means measured under a contract version other than the current one. */
+export function ablationState(index: LearningIndex, setId: string | null = null): AblationState {
+  const set = selectedAblation(index, setId);
   if (!set || set.variants.length === 0) return { state: 'not archived', set: null };
   return { state: set.current ? 'archived' : 'stale', set };
 }
