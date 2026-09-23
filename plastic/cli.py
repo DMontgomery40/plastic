@@ -459,7 +459,7 @@ def build_parser() -> argparse.ArgumentParser:
     sl.add_argument("--session-loss", default="all", choices=["all", "assistant"],
                     help="ttt: supervise every token of an accepted turn (default) or only the assistant's reply")
     sl.add_argument("--prompt-loss-weight", type=float, default=1.0, help="ttt: weight of the user's tokens vs the assistant's in a session turn (0-1)")
-    sl.add_argument("--dream-token-weighting", default="uniform", choices=["uniform", "gain"], help="ttt dream: weight reply tokens by their own information gain")
+    sl.add_argument("--dream-token-weighting", default="uniform", choices=["uniform", "gain", "fw_gain"], help="ttt dream: weight reply tokens by their information gain (turn+fast weights) or by the fast-weight part alone")
     sl.add_argument("--provenance", default="accepted", choices=["accepted", "all"],
                     help="ttt: 'all' consumes rolled-back turns too (experiment control only; never the product rule)")
     sl.add_argument("--out", default=None, help="ttt: run directory for the report and log (default: <artifacts>/sleep/<run>)")

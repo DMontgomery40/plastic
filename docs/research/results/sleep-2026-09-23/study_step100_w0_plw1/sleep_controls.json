@@ -1,0 +1,438 @@
+{
+ "checkpoint": "/Users/davidmontgomery/ttt_ssm_eval/artifacts/models/ttt_mlp_760m_chat_v1_step100",
+ "checkpoint_digest": "5d7f0b9c6c1a8d4fc77c1a82f6a929bc78623dd03a90acc75ae71d12321a656a",
+ "device": "mps",
+ "steps": 20,
+ "target": "w0",
+ "lr": 3e-05,
+ "replay_ratio": 0.8,
+ "batch_size": 5,
+ "session_loss": "all",
+ "prompt_loss_weight": 1.0,
+ "augment": "study",
+ "arms": {
+  "replay": {
+   "status": "accepted",
+   "model_id": "sleep_1790154479",
+   "gate": {
+    "passed": true,
+    "measured": true,
+    "checks": [
+     {
+      "name": "heldout_nll_mean_rise",
+      "value": -0.13829273001366293,
+      "limit": 0.05,
+      "passed": true
+     },
+     {
+      "name": "reply_cluster_share",
+      "value": 0.03333333333333333,
+      "limit": 0.25,
+      "passed": true
+     }
+    ]
+   },
+   "batch": {
+    "session_rows": 1,
+    "replay_rows": 4,
+    "requested_replay_ratio": 0.8,
+    "realized_replay_ratio": 0.8,
+    "loss_terms": "weighted cross_entropy over all rows",
+    "teacher_weights": "n/a"
+   },
+   "dreams": null,
+   "reason": null,
+   "heldout_nll_before": {
+    "mean": 1.6833256205668925,
+    "median": 0.8992857933044434,
+    "tokens": 887
+   },
+   "heldout_nll_after": {
+    "mean": 1.5450328905532296,
+    "median": 0.7257872819900513,
+    "tokens": 887
+   },
+   "harvest": {
+    "sessions": [
+     {
+      "session_id": "rolled",
+      "log_only": false,
+      "turns": 2,
+      "accepted_turns": 0,
+      "has_committed_state": true
+     },
+     {
+      "session_id": "teach",
+      "log_only": true,
+      "turns": 48,
+      "accepted_turns": 48,
+      "has_committed_state": true
+     }
+    ],
+    "turns_by_reason": {
+     "rolled_back": 2,
+     "accepted": 48
+    },
+    "accepted_tokens": 3481,
+    "excluded_tokens": 118,
+    "provenance": "accepted"
+   },
+   "seconds": 666.7,
+   "by_group_before": {
+    "taught": {
+     "n": 6,
+     "recalled": 0,
+     "n_paraphrase": 6,
+     "recalled_paraphrase": 0
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "general": {
+     "n": 5,
+     "recalled": 0,
+     "n_paraphrase": 5,
+     "recalled_paraphrase": 1
+    }
+   },
+   "by_group": {
+    "taught": {
+     "n": 6,
+     "recalled": 0,
+     "n_paraphrase": 6,
+     "recalled_paraphrase": 0
+    },
+    "boundary": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "rolled": {
+     "n": 2,
+     "recalled": 0,
+     "n_paraphrase": 2,
+     "recalled_paraphrase": 0
+    },
+    "general": {
+     "n": 5,
+     "recalled": 1,
+     "n_paraphrase": 5,
+     "recalled_paraphrase": 2
+    }
+   },
+   "results": [
+    {
+     "question": "What is my cat called?",
+     "expected": "Marlowe",
+     "reply": "Your cat is called \"Pinkie Pie.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.936387538909912
+    },
+    {
+     "question": "Remind me of my cat's name.",
+     "expected": "Marlowe",
+     "reply": "\"Mary.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.021420955657959
+    },
+    {
+     "question": "Which city do I live in?",
+     "expected": "Denver",
+     "reply": "The city of San Francisco is the most popular choice for living in the United States. It's a city with a",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.411543369293213
+    },
+    {
+     "question": "Where is my home city?",
+     "expected": "Denver",
+     "reply": "Your home city is:\n\n|city|name|\n|---|---|\n|:|:|",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.6048665046691895
+    },
+    {
+     "question": "What instrument am I learning?",
+     "expected": "cello",
+     "reply": "Learning to play the piano is a fascinating and challenging skill that requires a deep understanding of the intricacies",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.807470321655273
+    },
+    {
+     "question": "Which musical instrument did I say I practice?",
+     "expected": "cello",
+     "reply": "You're asking a question about a musical instrument, but I'm going to assume you're asking about a",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.124913692474365
+    },
+    {
+     "question": "What is my sister's name?",
+     "expected": "Priya",
+     "reply": "Your sister's name is \"Alice\".",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.782956123352051
+    },
+    {
+     "question": "Who is my sister?",
+     "expected": "Priya",
+     "reply": "Your sister is your best friend.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.204708099365234
+    },
+    {
+     "question": "What is my favorite color?",
+     "expected": "teal",
+     "reply": "The color of your favorite color is a personal choice. Here are some suggestions:\n\n1. **Blue:**",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -6.9515886306762695
+    },
+    {
+     "question": "Which color did I say I like most?",
+     "expected": "teal",
+     "reply": "You said you liked the color blue.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.7743048667907715
+    },
+    {
+     "question": "What is my job?",
+     "expected": "lighthouse",
+     "reply": "To be a part of the team, you'll be working with the team's product team, designing and",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -5.477582931518555
+    },
+    {
+     "question": "What do I do for work?",
+     "expected": "lighthouse",
+     "reply": "To work, you can use the following steps:\n\n1. **Open the Workspace**.\n2.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -6.090993881225586
+    },
+    {
+     "question": "In my chemistry notes, what bond joins the glucose units in cellulose?",
+     "expected": "1,4",
+     "reply": "The bond between glucose units in cellulose is a 1,3-linked glucose unit",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.4673073291778564
+    },
+    {
+     "question": "Which linkage did I note for cellulose's glucose units?",
+     "expected": "1,4",
+     "reply": "The linkage for cellulose glucose units is:\n\nC16H18O2\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.4687376022338867
+    },
+    {
+     "question": "In my notes, which reagent acetylates salicylic acid to make aspirin?",
+     "expected": "anhydride",
+     "reply": "Yes, I've rephrased your notes to make them more concise and to make the reagent acet",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.606333255767822
+    },
+    {
+     "question": "What acetylating reagent did I write down for aspirin?",
+     "expected": "anhydride",
+     "reply": "You wrote down aspirin acetylating reagent.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.893393516540527
+    },
+    {
+     "question": "What is my dog called?",
+     "expected": "Biscuit",
+     "reply": "Your dog is named \"Buddy\" or \"Buddy\" in the English language.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.540250301361084
+    },
+    {
+     "question": "Remind me of my dog's name.",
+     "expected": "Biscuit",
+     "reply": "Your dog's name is \"Buddy.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -4.1423773765563965
+    },
+    {
+     "question": "What car do I drive?",
+     "expected": "Volvo",
+     "reply": "The car you're driving is a 1999 Ford F-150. It's a",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -4.97857666015625
+    },
+    {
+     "question": "Which car did I say I drive?",
+     "expected": "Volvo",
+     "reply": "You said you drive a 2016 Ford Focus.\n\nThe Ford Focus is a 2",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -5.350565433502197
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Paris",
+     "reply": "The capital of France is Paris.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -2.790057420730591
+    },
+    {
+     "question": "Name the capital city of France.",
+     "expected": "Paris",
+     "reply": "Paris.\n\nThe capital city of France is Paris.",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -1.099301815032959
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "seven",
+     "reply": "1 day 1 week 1 day 2 days 2 days 3 days 3 days 4 days",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -9.980074882507324
+    },
+    {
+     "question": "A week has how many days?",
+     "expected": "seven",
+     "reply": "1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -8.76036262512207
+    },
+    {
+     "question": "What color is the sky on a clear day?",
+     "expected": "blue",
+     "reply": "The sky is a colorful, vibrant, and colorful color. It's a color that's",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -8.548514366149902
+    },
+    {
+     "question": "On a clear day, what color is the sky?",
+     "expected": "blue",
+     "reply": "The sky is a deep, rich, and vibrant color. It's a color that's both beautiful",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -7.602950572967529
+    },
+    {
+     "question": "What is two plus two?",
+     "expected": "four",
+     "reply": "Two plus two is the sum of two numbers.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -11.8159818649292
+    },
+    {
+     "question": "Add two and two.",
+     "expected": "four",
+     "reply": "2 + 2 = 4\n\nAdd two and two.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -10.618672370910645
+    },
+    {
+     "question": "Which planet do we live on?",
+     "expected": "Earth",
+     "reply": "The planet of the Sun is the Sun, and the planet of the Moon is the Moon.\n\nThe Sun is",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null,
+     "answer_logprob": -3.883979320526123
+    },
+    {
+     "question": "What is the name of our planet?",
+     "expected": "Earth",
+     "reply": "The name of our planet is \"Earth\".",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null,
+     "answer_logprob": -3.729142189025879
+    }
+   ]
+  }
+ },
+ "seconds": 1015.8
+}

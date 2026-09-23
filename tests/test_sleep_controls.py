@@ -1,20 +1,26 @@
 """The matched-controls experiment's pure pieces: probe construction and per-group recall counting."""
 
-from scripts.experiments.sleep_controls import FACTS_BOUNDARY, FACTS_ROLLED, FACTS_TAUGHT, GENERAL, build_probes, group_counts, study_set
+from scripts.experiments.sleep_controls import FACTS_BOUNDARY, FACTS_POISON, FACTS_ROLLED, FACTS_TAUGHT, GENERAL, build_probes, group_counts, study_set
 
 
-def test_fact_lists_are_well_formed_and_disjoint():
+def test_fact_lists_are_well_formed_disjoint_and_probe_unseen_phrasings():
     probes = build_probes()
-    assert {len(probes[g]) for g in ("taught", "boundary", "rolled", "general")} == {6, 2, 2, 5}
+    assert {g: len(ps) for g, ps in probes.items()} == {"taught": 24, "boundary": 2, "rolled": 2, "poison": 4, "general": 7}
     questions = [p.question for ps in probes.values() for p in ps]
-    assert len(set(questions)) == len(questions)  # a question belongs to one group only
-    for ps in probes.values():
-        for p in ps:
-            assert p.answer.strip() and p.question.strip() and p.paraphrase and p.paraphrase != p.question
-    taught_answers = {a.lower() for _, _, a, _ in FACTS_TAUGHT + FACTS_BOUNDARY}
-    rolled_answers = {a.lower() for _, _, a, _ in FACTS_ROLLED}
+    poison_qs = {p.question for p in probes["poison"]}  # a poison probe shares its question with a general control on purpose
+    assert all(questions.count(q) == (2 if q in poison_qs else 1) for q in questions)
+    for fact in FACTS_TAUGHT + FACTS_BOUNDARY + FACTS_ROLLED + FACTS_POISON:
+        stmt, q, a, para, unseen = fact
+        assert a.strip() and len({q, para, unseen}) == 3          # three distinct phrasings
+        assert a.lower() in stmt.lower()                            # the statement states the answer
+        assert all(unseen != u for u, _ in study_set(*fact))        # the unseen phrasing is never taught, not even in the study set
+    taught_answers = {a.lower() for _, _, a, _, _ in FACTS_TAUGHT + FACTS_BOUNDARY}
+    rolled_answers = {a.lower() for _, _, a, _, _ in FACTS_ROLLED}
     general_answers = {a.lower() for _, a, _ in GENERAL}
-    assert not (taught_answers & rolled_answers) and not (taught_answers & general_answers)  # contamination and locality stay separable
+    poison_answers = {a.lower() for _, _, a, _, _ in FACTS_POISON}
+    assert not (taught_answers & rolled_answers) and not (taught_answers & general_answers) and not (poison_answers & general_answers)
+    general_qs = {q for q, _, _ in GENERAL}
+    assert all(q in general_qs for _, q, _, _, _ in FACTS_POISON)  # every planted contradiction has a true-answer control
 
 
 def test_group_counts_attribute_verbatim_and_paraphrase_results_and_ignore_strays():
@@ -36,7 +42,7 @@ def test_group_counts_attribute_verbatim_and_paraphrase_results_and_ignore_stray
 
 
 def test_study_set_teaches_each_fact_several_ways_including_the_question_and_its_paraphrase():
-    stmt, q, a, p = FACTS_TAUGHT[0]
+    stmt, q, a, p, _unseen = FACTS_TAUGHT[0]
     items = study_set(stmt, q, a, p)
     users = [u for u, _ in items]
     assert len(items) >= 5 and q in users and p in users and stmt in users
@@ -50,5 +56,6 @@ def test_experiment_and_eval_parsers_expose_the_sampling_temperatures():
 
     out = subprocess.run([sys.executable, "-m", "scripts.experiments.sleep_controls", "--help"], capture_output=True, text=True, check=True).stdout
     assert "--teach-temperature" in out and "--dream-temperature" in out and "--prompt-loss-weight" in out and "--augment" in out
+    assert "--poison" in out and "--facts" in out
     out = subprocess.run([sys.executable, "-m", "scripts.train.eval_ttt_chat", "--help"], capture_output=True, text=True, check=True).stdout
     assert "--temperature" in out and "--top-k" in out and "--skip-nll" in out

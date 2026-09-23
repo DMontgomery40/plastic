@@ -58,19 +58,29 @@ class Dream:
     teacher_index: int = -1     # which loaded session state produced this dream
     turn: str = ""              # the accepted user turn the dream is about
     fastweight_logprob: float | None = None  # lp(reply | teacher state, prompt WITHOUT the turn): what the fast weights alone carry
-    token_gain: list[float] = field(default_factory=list)  # per reply token: lp(teacher + turn) - lp(reset), the information map of the dream
+    token_gain: list[float] = field(default_factory=list)  # per reply token: lp(teacher + turn) - lp(reset): turn and fast weights together
+    token_fw_gain: list[float] = field(default_factory=list)  # per reply token: lp(teacher, no turn) - lp(reset): the fast weights alone
 
     @property
     def gain(self) -> float:
         """How much more likely the fast weights make this dream than the reset model: the information it carries."""
         return self.teacher_logprob - self.student_logprob
 
+    def gain_concentration(self, top_k: int = 3) -> float | None:
+        """Share of the dream's positive fast-weight gain carried by its top-k tokens. Near 1 means a few tokens
+        (a name, a place) carry the information; near k/n means the gain is spread over the phrasing."""
+        pos = sorted((max(0.0, g) for g in self.token_fw_gain), reverse=True)
+        total = sum(pos)
+        return (sum(pos[:top_k]) / total) if total > 0 else None
+
     def to_dict(self) -> dict[str, Any]:
         return {"prompt": self.prompt, "turn": self.turn, "text": self.text, "n_tokens": len(self.ids), "reply_len": self.reply_len,
                 "teacher_logprob": self.teacher_logprob, "student_logprob": self.student_logprob, "gain": self.gain,
                 "fastweight_logprob": self.fastweight_logprob,
                 "fastweight_gain": (self.fastweight_logprob - self.student_logprob) if self.fastweight_logprob is not None else None,
-                "token_gain": [round(g, 3) for g in self.token_gain], "session_id": self.session_id}
+                "token_gain": [round(g, 3) for g in self.token_gain], "token_fw_gain": [round(g, 3) for g in self.token_fw_gain],
+                "token_turn_gain": [round(a - b, 3) for a, b in zip(self.token_gain, self.token_fw_gain)],
+                "fw_gain_concentration_top3": self.gain_concentration(3), "session_id": self.session_id}
 
 
 @dataclass
@@ -214,9 +224,11 @@ def generate_dreams(backend, teacher_state, *, session_id: str, turns: list[str]
                 t_tok = token_logprobs(backend, backend.clone(teacher_state), teacher_ids, len(teacher_prompt_ids))
                 s_tok = token_logprobs(backend, backend.init_state(), ids, len(student_prefix_ids))
                 t_lp, s_lp = sum(t_tok) / len(t_tok), sum(s_tok) / len(s_tok)
-                fw_lp = mean_logprob(backend, backend.clone(teacher_state), fw_prompt_ids + reply, len(fw_prompt_ids))
+                fw_tok = token_logprobs(backend, backend.clone(teacher_state), fw_prompt_ids + reply, len(fw_prompt_ids))
+                fw_lp = sum(fw_tok) / len(fw_tok)
                 d = Dream(without_turn, text, ids, labels, t_lp, s_lp, session_id, teacher_ids, len(teacher_prompt_ids), len(student_prefix_ids), len(reply),
-                          turn=short, fastweight_logprob=fw_lp, token_gain=[a - b for a, b in zip(t_tok, s_tok)])
+                          turn=short, fastweight_logprob=fw_lp, token_gain=[a - b for a, b in zip(t_tok, s_tok)],
+                          token_fw_gain=[a - b for a, b in zip(fw_tok, s_tok)])
                 dreams.append(d)
                 log(f"[dream] {session_id} t{ti}p{pi}k{k} gain {t_lp - s_lp:+.3f} fw {fw_lp - s_lp:+.3f}: {text[:90]!r}")
     return dreams

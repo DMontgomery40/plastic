@@ -13,6 +13,7 @@ own report: harvest, before/after measurements, gate, dreams where applicable). 
 | `sleep_controls_step100_w0_40_all` | step 100 | 5d7f0b9c6c1a8d4f | ≈ 9a1b502 (unrecorded) | W0 × 40, user tokens supervised |
 | `sweep_step100_*` | step 100 | 5d7f0b9c6c1a8d4f | ≈ c564390 (unrecorded) | regime sweep, replay on raw turns |
 | `study_step100_w0` | step 100 | 5d7f0b9c6c1a8d4f | ≈ 633a899 (unrecorded) | templated study set, prompt-loss weight 0.2 |
+| `study_step100_w0_plw1` | step 100 | 5d7f0b9c6c1a8d4f | ≈ 9a1b502…c564390 (unrecorded) | templated study set, prompt-loss weight 1.0 |
 | `dream_step100_w0` | step 100 | 5d7f0b9c6c1a8d4f | ≈ 3828ac6 (unrecorded, pre ASTRA-175 fixes) | first dream run, free-form prompts |
 
 **Code column.** Runs launched before 2026-09-23 15:40 UTC did not record their execution commit; the

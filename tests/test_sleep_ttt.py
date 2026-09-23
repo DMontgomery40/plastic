@@ -522,3 +522,17 @@ def test_token_gain_weights_emphasize_informative_tokens_keep_a_floor_and_averag
     SleepConfig(method="dream", dream_token_weighting="gain").validate()
     with pytest.raises(ValueError):
         SleepConfig(method="dream", dream_token_weighting="max").validate()
+
+
+def test_dream_gain_concentration_and_fw_turn_split():
+    from plastic.sleep.dream import Dream
+
+    d = Dream("p", "Your cat is Marlowe.", [1, 2, 3, 4, 5], [-100, 2, 3, 4, 5], -1.0, -3.0, "s", reply_len=4,
+              token_gain=[0.5, 0.2, 3.0, 0.1], token_fw_gain=[0.1, 0.0, 2.4, 0.0])
+    out = d.to_dict()
+    assert out["token_turn_gain"] == [0.4, 0.2, 0.6, 0.1]                       # gain = fast weights + turn
+    assert abs(out["fw_gain_concentration_top3"] - 1.0) < 1e-9                    # all fast-weight gain sits in three tokens
+    spread = Dream("p", "t", [1] * 7, [-100] * 7, 0, 0, "s", reply_len=6, token_fw_gain=[1.0] * 6)
+    assert abs(spread.gain_concentration(3) - 0.5) < 1e-9
+    assert Dream("p", "t", [1], [-100], 0, 0, "s", token_fw_gain=[-1.0, 0.0]).gain_concentration() is None
+    SleepConfig(method="dream", dream_token_weighting="fw_gain").validate()
