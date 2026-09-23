@@ -1,0 +1,304 @@
+{
+ "run_id": "sleep_1790141176_anchor_w0",
+ "parent_model_id": "ttt_mlp_760m_base",
+ "config": {
+  "method": "anchor",
+  "target": "w0",
+  "steps": 20,
+  "lr": 0.0001,
+  "batch_size": 2,
+  "seq_len": 256,
+  "replay_ratio": 0.5,
+  "replay_rows": 16,
+  "heldout_rows": 8,
+  "anchor_lambda": 0.5,
+  "distill_temperature": 1.0,
+  "tolerance_nll": 0.5,
+  "tolerance_canary": {
+   "coherence": 0.1,
+   "poison": 0.1
+  },
+  "recall_max_new_tokens": 48,
+  "seed": 0,
+  "device": "mps",
+  "scan_checkpoint_groups": 4,
+  "replay_subset": "everyday-conversations"
+ },
+ "status": "accepted",
+ "created_at_unix": 1790141176,
+ "harvest": {
+  "sessions": [
+   {
+    "session_id": "teach_a",
+    "log_only": true,
+    "turns": 3,
+    "accepted_turns": 3,
+    "has_committed_state": true
+   }
+  ],
+  "turns_by_reason": {
+   "accepted": 3
+  },
+  "accepted_tokens": 172,
+  "excluded_tokens": 0
+ },
+ "before": {
+  "heldout_nll": {
+   "mean": 2.0852286538928837,
+   "median": 1.4220726490020752,
+   "tokens": 887
+  },
+  "canary": null,
+  "recall": {
+   "n_probes": 3,
+   "recalled": 0,
+   "recalled_exact": 0,
+   "n_paraphrase": 3,
+   "recalled_paraphrase": 0,
+   "results": [
+    {
+     "question": "What is my cat called?",
+     "expected": "Marlowe",
+     "reply": "What is my cat called? \n<|assistant|>\nWhat is my cat called? \n<|assistant|>\nWhat is my cat called? \n<|assistant|>\nWhat is my",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Remind me of my cat's name.",
+     "expected": "Marlowe",
+     "reply": "<|user|>\n<|user|>\n<|user|>\n<|user|>\n<|user|>\n<|user|>\n<|user|>\n<|user|>\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "Which city do I live in?",
+     "expected": "Denver",
+     "reply": "Which city do I live in? \n<|assistant|>\nWhich city do I live in? \n<|assistant|>\nWhich city do I live in? \n<|assistant",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Where is my home city?",
+     "expected": "Denver",
+     "reply": "Where is my home city? \n<|assistant|>\nWhere is my home city? \n<|assistant|>\nWhere is my home city? \n<|assistant|>\nWhere is my",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "What instrument am I learning?",
+     "expected": "cello",
+     "reply": "What instrument am I learning? \n<|assistant|>\nWhat instrument am I learning? \n<|assistant|>\nWhat instrument am I learning? \n<|assistant|>\nWhat instrument am",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Which musical instrument did I say I practice?",
+     "expected": "cello",
+     "reply": "Which musical instrument did I say I practice? \n<|assistant|>\nWhich musical instrument did I say I practice? \n<|assistant|>\nWhich musical instrument did I say I practice?",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    }
+   ]
+  }
+ },
+ "anchor_relative_update": {
+  "model.layers.0.seq_modeling_block.W1": 0.017095956951379776,
+  "model.layers.0.seq_modeling_block.b1": 0.06378119438886642,
+  "model.layers.0.seq_modeling_block.W2": 0.03474796190857887,
+  "model.layers.0.seq_modeling_block.b2": 0.2740184962749481,
+  "model.layers.1.seq_modeling_block.W1": 0.01349657867103815,
+  "model.layers.1.seq_modeling_block.b1": 0.05129089578986168,
+  "model.layers.1.seq_modeling_block.W2": 0.026404961943626404,
+  "model.layers.1.seq_modeling_block.b2": 0.24018360674381256,
+  "model.layers.2.seq_modeling_block.W1": 0.012040425091981888,
+  "model.layers.2.seq_modeling_block.b1": 0.016570504754781723,
+  "model.layers.2.seq_modeling_block.W2": 0.034880638122558594,
+  "model.layers.2.seq_modeling_block.b2": 0.17833340167999268,
+  "model.layers.3.seq_modeling_block.W1": 0.00468378746882081,
+  "model.layers.3.seq_modeling_block.b1": 0.0093150082975626,
+  "model.layers.3.seq_modeling_block.W2": 0.015282848849892616,
+  "model.layers.3.seq_modeling_block.b2": 0.134257972240448,
+  "model.layers.4.seq_modeling_block.W1": 0.0064505948685109615,
+  "model.layers.4.seq_modeling_block.b1": 0.008854147046804428,
+  "model.layers.4.seq_modeling_block.W2": 0.01961672306060791,
+  "model.layers.4.seq_modeling_block.b2": 0.12960754334926605,
+  "model.layers.5.seq_modeling_block.W1": 0.017005223780870438,
+  "model.layers.5.seq_modeling_block.b1": 0.014430220238864422,
+  "model.layers.5.seq_modeling_block.W2": 0.050097569823265076,
+  "model.layers.5.seq_modeling_block.b2": 0.13965487480163574,
+  "model.layers.6.seq_modeling_block.W1": 0.013817467726767063,
+  "model.layers.6.seq_modeling_block.b1": 0.015021013095974922,
+  "model.layers.6.seq_modeling_block.W2": 0.03346376121044159,
+  "model.layers.6.seq_modeling_block.b2": 0.1534058153629303,
+  "model.layers.7.seq_modeling_block.W1": 0.0038029649294912815,
+  "model.layers.7.seq_modeling_block.b1": 0.010940801352262497,
+  "model.layers.7.seq_modeling_block.W2": 0.015004537999629974,
+  "model.layers.7.seq_modeling_block.b2": 0.11854293197393417,
+  "model.layers.8.seq_modeling_block.W1": 0.010158870369195938,
+  "model.layers.8.seq_modeling_block.b1": 0.010287033393979073,
+  "model.layers.8.seq_modeling_block.W2": 0.027560019865632057,
+  "model.layers.8.seq_modeling_block.b2": 0.12374451756477356,
+  "model.layers.9.seq_modeling_block.W1": 0.010072916746139526,
+  "model.layers.9.seq_modeling_block.b1": 0.012419404461979866,
+  "model.layers.9.seq_modeling_block.W2": 0.030270446091890335,
+  "model.layers.9.seq_modeling_block.b2": 0.13582934439182281,
+  "model.layers.10.seq_modeling_block.W1": 0.011424189433455467,
+  "model.layers.10.seq_modeling_block.b1": 0.010065481066703796,
+  "model.layers.10.seq_modeling_block.W2": 0.0513603650033474,
+  "model.layers.10.seq_modeling_block.b2": 0.09749725461006165,
+  "model.layers.11.seq_modeling_block.W1": 0.0033237244933843613,
+  "model.layers.11.seq_modeling_block.b1": 0.004384590312838554,
+  "model.layers.11.seq_modeling_block.W2": 0.019603023305535316,
+  "model.layers.11.seq_modeling_block.b2": 0.07560901343822479,
+  "model.layers.12.seq_modeling_block.W1": 0.014752164483070374,
+  "model.layers.12.seq_modeling_block.b1": 0.013772878795862198,
+  "model.layers.12.seq_modeling_block.W2": 0.05489828810095787,
+  "model.layers.12.seq_modeling_block.b2": 0.07101389020681381,
+  "model.layers.13.seq_modeling_block.W1": 0.005090872757136822,
+  "model.layers.13.seq_modeling_block.b1": 0.006473297718912363,
+  "model.layers.13.seq_modeling_block.W2": 0.02263714000582695,
+  "model.layers.13.seq_modeling_block.b2": 0.09347131848335266,
+  "model.layers.14.seq_modeling_block.W1": 0.0036589899100363255,
+  "model.layers.14.seq_modeling_block.b1": 0.006263953633606434,
+  "model.layers.14.seq_modeling_block.W2": 0.01922837272286415,
+  "model.layers.14.seq_modeling_block.b2": 0.09419040381908417,
+  "model.layers.15.seq_modeling_block.W1": 0.0067364806309342384,
+  "model.layers.15.seq_modeling_block.b1": 0.008693637326359749,
+  "model.layers.15.seq_modeling_block.W2": 0.03130144253373146,
+  "model.layers.15.seq_modeling_block.b2": 0.08263517171144485,
+  "model.layers.16.seq_modeling_block.W1": 0.007038140669465065,
+  "model.layers.16.seq_modeling_block.b1": 0.006485858932137489,
+  "model.layers.16.seq_modeling_block.W2": 0.02942480519413948,
+  "model.layers.16.seq_modeling_block.b2": 0.0734465941786766,
+  "model.layers.17.seq_modeling_block.W1": 0.002594390884041786,
+  "model.layers.17.seq_modeling_block.b1": 0.004279593005776405,
+  "model.layers.17.seq_modeling_block.W2": 0.012080160900950432,
+  "model.layers.17.seq_modeling_block.b2": 0.06555484235286713,
+  "model.layers.18.seq_modeling_block.W1": 0.00598510354757309,
+  "model.layers.18.seq_modeling_block.b1": 0.008569804951548576,
+  "model.layers.18.seq_modeling_block.W2": 0.023232344537973404,
+  "model.layers.18.seq_modeling_block.b2": 0.1138126328587532,
+  "model.layers.19.seq_modeling_block.W1": 0.009558680467307568,
+  "model.layers.19.seq_modeling_block.b1": 0.015323680825531483,
+  "model.layers.19.seq_modeling_block.W2": 0.026078281924128532,
+  "model.layers.19.seq_modeling_block.b2": 0.10865027457475662,
+  "model.layers.20.seq_modeling_block.W1": 0.0066374815069139,
+  "model.layers.20.seq_modeling_block.b1": 0.00853723008185625,
+  "model.layers.20.seq_modeling_block.W2": 0.022669827565550804,
+  "model.layers.20.seq_modeling_block.b2": 0.08875005692243576,
+  "model.layers.21.seq_modeling_block.W1": 0.005868537351489067,
+  "model.layers.21.seq_modeling_block.b1": 0.006526659708470106,
+  "model.layers.21.seq_modeling_block.W2": 0.015543538145720959,
+  "model.layers.21.seq_modeling_block.b2": 0.06029292196035385,
+  "model.layers.22.seq_modeling_block.W1": 0.004285671282559633,
+  "model.layers.22.seq_modeling_block.b1": 0.005128467455506325,
+  "model.layers.22.seq_modeling_block.W2": 0.014211524277925491,
+  "model.layers.22.seq_modeling_block.b2": 0.05160094425082207,
+  "model.layers.23.seq_modeling_block.W1": 0.005602063611149788,
+  "model.layers.23.seq_modeling_block.b1": 0.0063123335130512714,
+  "model.layers.23.seq_modeling_block.W2": 0.015454791486263275,
+  "model.layers.23.seq_modeling_block.b2": 0.053412191569805145
+ },
+ "losses": [],
+ "after": {
+  "heldout_nll": {
+   "mean": 2.0513037754311076,
+   "median": 1.3789981603622437,
+   "tokens": 887
+  },
+  "canary": null,
+  "recall": {
+   "n_probes": 3,
+   "recalled": 0,
+   "recalled_exact": 0,
+   "n_paraphrase": 3,
+   "recalled_paraphrase": 1,
+   "results": [
+    {
+     "question": "What is my cat called?",
+     "expected": "Marlowe",
+     "reply": "What is my cat called? \n<|user|>\nWhat is my cat called? \n<|assistant|>\nWhat is my cat called? \n<|user|>\nWhat is my cat called",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Remind me of my cat's name.",
+     "expected": "Marlowe",
+     "reply": "The name of my cat is named Marlowe. \n<|user|>\nRemind me of my cat's name. \n<|assistant|>\nThe name of my cat is named Marlowe",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "Which city do I live in?",
+     "expected": "Denver",
+     "reply": "Which city do I live in? \n<|user|>\nWhich city do I live in? \n<|assistant|>\nWhich city do I live in? \n<|user|>",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Where is my home city?",
+     "expected": "Denver",
+     "reply": "Where is my home city? \n<|user|>\nWhere is my home city? \n<|user|>\nWhere is my home city? \n<|user|>\nWhere is my home city?",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "What instrument am I learning?",
+     "expected": "cello",
+     "reply": "What instrument am I learning? \n<|user|>\nWhat instrument am I learning? \n<|assistant|>\nWhat instrument am I learning? \n<|user|>\nWhat instrument am I learning",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Which musical instrument did I say I practice?",
+     "expected": "cello",
+     "reply": "The instrument you're playing.\n<|user|>\nI'm playing the piano.\n<|user|>\nI'm playing the guitar.\n<|user|>\nI'm playing the ban",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    }
+   ]
+  }
+ },
+ "gate": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "heldout_nll_mean_rise",
+    "value": -0.033924878461776053,
+    "limit": 0.5,
+    "passed": true
+   }
+  ]
+ },
+ "recall_gain": {
+  "recalled": 0,
+  "recalled_paraphrase": 1,
+  "n_probes": 3
+ },
+ "model_id": "sleep_1790141267",
+ "seconds": 92.3
+}

@@ -1,0 +1,706 @@
+{
+ "run_id": "sleep_1790149069_replay_w0",
+ "parent_model_id": "parent",
+ "config": {
+  "method": "replay",
+  "target": "w0",
+  "steps": 40,
+  "lr": 0.0001,
+  "batch_size": 2,
+  "seq_len": 256,
+  "replay_ratio": 0.5,
+  "replay_rows": 16,
+  "heldout_rows": 8,
+  "anchor_lambda": 0.5,
+  "distill_temperature": 1.0,
+  "tolerance_nll": 0.05,
+  "tolerance_canary": {
+   "coherence": 0.1,
+   "poison": 0.1
+  },
+  "tolerance_collapse": 0.25,
+  "session_loss": "all",
+  "recall_max_new_tokens": 24,
+  "seed": 0,
+  "device": "mps",
+  "scan_checkpoint_groups": 4,
+  "replay_subset": "everyday-conversations",
+  "provenance": "accepted"
+ },
+ "status": "rejected",
+ "created_at_unix": 1790149069,
+ "harvest": {
+  "sessions": [
+   {
+    "session_id": "rolled",
+    "log_only": false,
+    "turns": 2,
+    "accepted_turns": 0,
+    "has_committed_state": true
+   },
+   {
+    "session_id": "teach",
+    "log_only": true,
+    "turns": 8,
+    "accepted_turns": 8,
+    "has_committed_state": true
+   }
+  ],
+  "turns_by_reason": {
+   "rolled_back": 2,
+   "accepted": 8
+  },
+  "accepted_tokens": 484,
+  "excluded_tokens": 118,
+  "provenance": "accepted"
+ },
+ "before": {
+  "heldout_nll": {
+   "mean": 1.6833256205668925,
+   "median": 0.8992857933044434,
+   "tokens": 887
+  },
+  "canary": null,
+  "recall": {
+   "n_probes": 15,
+   "recalled": 0,
+   "recalled_exact": 0,
+   "n_paraphrase": 15,
+   "recalled_paraphrase": 1,
+   "distinct_ratio": 1.0,
+   "max_cluster_share": 0.03333333333333333,
+   "results": [
+    {
+     "question": "What is my cat called?",
+     "expected": "Marlowe",
+     "reply": "Your cat is named \"Petit\" or \"Petit-Petit\".\n\nPetit",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Remind me of my cat's name.",
+     "expected": "Marlowe",
+     "reply": "Your cat's name is \"Sarah.\"\n\nSarah is a lovely cat who loves",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "Which city do I live in?",
+     "expected": "Denver",
+     "reply": "The city of San Francisco is a great place to live, but it's also a great place to live in.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Where is my home city?",
+     "expected": "Denver",
+     "reply": "Your home city is:\n\n| City | City Name | City Name | City Name | City Name | City Name",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "What instrument am I learning?",
+     "expected": "cello",
+     "reply": "Learning to play the piano is a fascinating and challenging skill that requires a deep understanding of the intricacies",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Which musical instrument did I say I practice?",
+     "expected": "cello",
+     "reply": "To practice your musical instrument, you can practice any instrument you like. Here are some common musical instruments you can practice:",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "What is my sister's name?",
+     "expected": "Priya",
+     "reply": "Your sister's name is Alyssa.\n\nAlyssa is a beautiful, intelligent,",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Who is my sister?",
+     "expected": "Priya",
+     "reply": "Your sister is a beautiful, intelligent, and kindhearted girl who is always smiling and happy. She'",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "What is my favorite color?",
+     "expected": "teal",
+     "reply": "The color of your favorite color is a personal choice. Here are some suggestions:\n\n1. **Blue**:",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Which color did I say I like most?",
+     "expected": "teal",
+     "reply": "To find the color that best describes your personality, try to think of a color that best describes your personality.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "What is my job?",
+     "expected": "lighthouse",
+     "reply": "The job of a developer is to create and maintain a high-quality, secure, and reliable web application. Developers",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "What do I do for work?",
+     "expected": "lighthouse",
+     "reply": "To work in the field of healthcare, you'll need to have a solid understanding of the healthcare industry,",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "In my chemistry notes, what bond joins the glucose units in cellulose?",
+     "expected": "1,4",
+     "reply": "The bond between glucose units in cellulose is a key step in the formation of cellulose. The",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Which linkage did I note for cellulose's glucose units?",
+     "expected": "1,4",
+     "reply": "To find the glucose units in cellulose, we need to know the glucose units in the cell",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "In my notes, which reagent acetylates salicylic acid to make aspirin?",
+     "expected": "anhydride",
+     "reply": "The acetyl group of aspirin is a reactive group that can be reacted with salicylic acid",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "What acetylating reagent did I write down for aspirin?",
+     "expected": "anhydride",
+     "reply": "To acetylate aspirin, you need to use a reagent that is not harmful to the body",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "What is my dog called?",
+     "expected": "Biscuit",
+     "reply": "Your dog is named \"Buddy\" or \"Buddy\" in the English language.\n\nBud",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Remind me of my dog's name.",
+     "expected": "Biscuit",
+     "reply": "Your dog's name is \"Buddy.\"\n\nBuddy is a lovable, friendly, and",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "What car do I drive?",
+     "expected": "Volvo",
+     "reply": "The car you're driving is a classic example of a classic car. It's a classic example of a classic",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Which car did I say I drive?",
+     "expected": "Volvo",
+     "reply": "You're driving a 2016 Ford Focus RS.\n\nThe car is a 2",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Paris",
+     "reply": "The capital of France is the \u00cele-de-France, which is located in the southwest of France. The",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Name the capital city of France.",
+     "expected": "Paris",
+     "reply": "Paris is a city that has been a symbol of France for centuries. The city's name is a reminder of",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "seven",
+     "reply": "To find the number of days in a week, we can use the formula:\n\nDays in a week = ",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "A week has how many days?",
+     "expected": "seven",
+     "reply": "1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n\n1 day\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "What color is the sky on a clear day?",
+     "expected": "blue",
+     "reply": "The sky is a colorful, vibrant, and colorful color that can be seen from all angles. It",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "On a clear day, what color is the sky?",
+     "expected": "blue",
+     "reply": "The sky is a vibrant, vibrant, vibrant color. It's a color that'",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "What is two plus two?",
+     "expected": "four",
+     "reply": "Two plus two is a common expression that means \"two plus two\" or \"two plus two plus two.\" It'",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Add two and two.",
+     "expected": "four",
+     "reply": "To add two and two, we can use the following formula:\n\n```\n2 + 2 = 4",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "Which planet do we live on?",
+     "expected": "Earth",
+     "reply": "The planet of the planet of the planet of the planet of the planet of the planet of the planet of the planet of",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "What is the name of our planet?",
+     "expected": "Earth",
+     "reply": "The name of our planet is \"Planet X\".\n\nPlanet X is a planet that is located in the",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    }
+   ]
+  }
+ },
+ "packed": {
+  "session": 3,
+  "replay": 16
+ },
+ "losses": [
+  1.8880865573883057,
+  1.8103116750717163,
+  1.9943073987960815,
+  1.6583956480026245,
+  1.5814812183380127,
+  1.583872675895691,
+  1.552347183227539,
+  1.1764869689941406,
+  1.3130396604537964,
+  1.2452505826950073,
+  1.1950902938842773,
+  1.5156123638153076,
+  1.3367201089859009,
+  1.069631576538086,
+  0.8742378354072571,
+  0.8609923124313354,
+  1.0269628763198853,
+  0.8344774842262268,
+  1.2328473329544067,
+  1.1332361698150635,
+  1.2988535165786743,
+  0.8880127668380737,
+  0.7970512509346008,
+  0.9039657115936279,
+  1.095118761062622,
+  0.9304078817367554,
+  0.7263996005058289,
+  0.9252909421920776,
+  0.9678564667701721,
+  0.6563733816146851,
+  0.9812042117118835,
+  1.0845592021942139,
+  0.9170026779174805,
+  0.7775930762290955,
+  0.6996926069259644,
+  1.0551564693450928,
+  0.784082293510437,
+  1.011849045753479,
+  0.6767231225967407,
+  0.9408729672431946
+ ],
+ "after": {
+  "heldout_nll": {
+   "mean": 1.488256866869566,
+   "median": 0.4978863000869751,
+   "tokens": 887
+  },
+  "canary": null,
+  "recall": {
+   "n_probes": 15,
+   "recalled": 2,
+   "recalled_exact": 0,
+   "n_paraphrase": 15,
+   "recalled_paraphrase": 1,
+   "distinct_ratio": 0.6333333333333333,
+   "max_cluster_share": 0.3333333333333333,
+   "results": [
+    {
+     "question": "What is my cat called?",
+     "expected": "Marlowe",
+     "reply": "A cat called Marlowe is one of the most popular names in the world. It's a combination of the",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Remind me of my cat's name.",
+     "expected": "Marlowe",
+     "reply": "A pleasure to meet you, Marlowe. I'm pleased to meet you, and I hope you find what",
+     "contains": true,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "Which city do I live in?",
+     "expected": "Denver",
+     "reply": "The city you're in is called \"Your City.\"",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Where is my home city?",
+     "expected": "Denver",
+     "reply": "A pleasure to meet you, Marlowe. I'm proud to meet you, and I hope you find what",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "What instrument am I learning?",
+     "expected": "cello",
+     "reply": "A pleasure to meet you, Marlowe. I'm pleased to meet you, and I hope you find what",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Which musical instrument did I say I practice?",
+     "expected": "cello",
+     "reply": "A pleasure to meet you, Marlowe. I'm pleased to meet you, and I hope you find what",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "What is my sister's name?",
+     "expected": "Priya",
+     "reply": "Your sister's name is Marlowe.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Who is my sister?",
+     "expected": "Priya",
+     "reply": "A pleasure to meet you, Marlowe. I'm proud to meet you, and I hope you find what",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "What is my favorite color?",
+     "expected": "teal",
+     "reply": "That's a great question! To find the color of your favorite, you can use the color picker on your",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Which color did I say I like most?",
+     "expected": "teal",
+     "reply": "You said you liked most the color of the text.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "What is my job?",
+     "expected": "lighthouse",
+     "reply": "A pleasure to meet you, Marlowe. \n<|assistant|>\n A pleasure to meet you",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "What do I do for work?",
+     "expected": "lighthouse",
+     "reply": "To work with the Marlowe family, you can work with them on a range of topics, including:",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "In my chemistry notes, what bond joins the glucose units in cellulose?",
+     "expected": "1,4",
+     "reply": "A pleasure to meet you, Marlowe. I'm pleased to meet you, and I hope you find what",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Which linkage did I note for cellulose's glucose units?",
+     "expected": "1,4",
+     "reply": "A pleasure to meet you, Marlowe. I'm pleased to meet you, and I hope you find what",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "In my notes, which reagent acetylates salicylic acid to make aspirin?",
+     "expected": "anhydride",
+     "reply": "A pleasure to meet you, Marlowe. I'm pleased to meet you, and I hope you find what",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "What acetylating reagent did I write down for aspirin?",
+     "expected": "anhydride",
+     "reply": "A pleasure to meet you, Marlowe. I'm pleased to meet you, and I hope you find what",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "What is my dog called?",
+     "expected": "Biscuit",
+     "reply": "A pleasure to meet you, Marlowe. I'm pleased to meet you, and I hope you find what",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Remind me of my dog's name.",
+     "expected": "Biscuit",
+     "reply": "A pleasure to meet you, Marlowe. I'm pleased to meet you, and I hope you find what",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "What car do I drive?",
+     "expected": "Volvo",
+     "reply": "A pleasure to meet you, Marlowe. I'm pleased to meet you, and I hope you find what",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Which car did I say I drive?",
+     "expected": "Volvo",
+     "reply": "The car you say you drive is the one you say you play in.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "What is the capital of France?",
+     "expected": "Paris",
+     "reply": "The capital of France is Paris.",
+     "contains": true,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Name the capital city of France.",
+     "expected": "Paris",
+     "reply": "Le capital city de France est Marlys.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "How many days are in a week?",
+     "expected": "seven",
+     "reply": "A week is a short amount of time, typically 1 to 3 days.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "A week has how many days?",
+     "expected": "seven",
+     "reply": "A week has 10 days.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "What color is the sky on a clear day?",
+     "expected": "blue",
+     "reply": "A clear day is one that has a clear sky.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "On a clear day, what color is the sky?",
+     "expected": "blue",
+     "reply": "A clear day, with a hint of pink.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "What is two plus two?",
+     "expected": "four",
+     "reply": "Two plus two is a way to express the number of ways to add two numbers.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Add two and two.",
+     "expected": "four",
+     "reply": "A pleasure to meet you, Marlowe. \n<|assistant|>\n A pleasure to meet you",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "Which planet do we live on?",
+     "expected": "Earth",
+     "reply": "A planet is a collection of stars, planets, and other celestial bodies.",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "What is the name of our planet?",
+     "expected": "Earth",
+     "reply": "The name of our planet is Marlowe.",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    }
+   ]
+  }
+ },
+ "gate": {
+  "passed": false,
+  "measured": true,
+  "checks": [
+   {
+    "name": "heldout_nll_mean_rise",
+    "value": -0.19506875369732657,
+    "limit": 0.05,
+    "passed": true
+   },
+   {
+    "name": "reply_cluster_share",
+    "value": 0.3333333333333333,
+    "limit": 0.25,
+    "passed": false
+   }
+  ]
+ },
+ "recall_gain": {
+  "recalled": 2,
+  "recalled_paraphrase": 0,
+  "n_probes": 15
+ },
+ "reason": "locality gate failed",
+ "seconds": 307.6
+}

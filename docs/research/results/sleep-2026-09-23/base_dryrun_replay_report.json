@@ -1,0 +1,231 @@
+{
+ "run_id": "sleep_1790141272_replay_w0",
+ "parent_model_id": "ttt_mlp_760m_base",
+ "config": {
+  "method": "replay",
+  "target": "w0",
+  "steps": 20,
+  "lr": 0.0001,
+  "batch_size": 2,
+  "seq_len": 256,
+  "replay_ratio": 0.5,
+  "replay_rows": 16,
+  "heldout_rows": 8,
+  "anchor_lambda": 0.5,
+  "distill_temperature": 1.0,
+  "tolerance_nll": 0.5,
+  "tolerance_canary": {
+   "coherence": 0.1,
+   "poison": 0.1
+  },
+  "recall_max_new_tokens": 48,
+  "seed": 0,
+  "device": "mps",
+  "scan_checkpoint_groups": 4,
+  "replay_subset": "everyday-conversations"
+ },
+ "status": "accepted",
+ "created_at_unix": 1790141272,
+ "harvest": {
+  "sessions": [
+   {
+    "session_id": "teach_a",
+    "log_only": true,
+    "turns": 3,
+    "accepted_turns": 3,
+    "has_committed_state": true
+   }
+  ],
+  "turns_by_reason": {
+   "accepted": 3
+  },
+  "accepted_tokens": 172,
+  "excluded_tokens": 0
+ },
+ "before": {
+  "heldout_nll": {
+   "mean": 2.0852286538928837,
+   "median": 1.4220726490020752,
+   "tokens": 887
+  },
+  "canary": null,
+  "recall": {
+   "n_probes": 3,
+   "recalled": 0,
+   "recalled_exact": 0,
+   "n_paraphrase": 3,
+   "recalled_paraphrase": 0,
+   "results": [
+    {
+     "question": "What is my cat called?",
+     "expected": "Marlowe",
+     "reply": "What is my cat called? \n<|assistant|>\nWhat is my cat called? \n<|assistant|>\nWhat is my cat called? \n<|assistant|>\nWhat is my",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Remind me of my cat's name.",
+     "expected": "Marlowe",
+     "reply": "<|user|>\n<|user|>\n<|user|>\n<|user|>\n<|user|>\n<|user|>\n<|user|>\n<|user|>\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "Which city do I live in?",
+     "expected": "Denver",
+     "reply": "Which city do I live in? \n<|assistant|>\nWhich city do I live in? \n<|assistant|>\nWhich city do I live in? \n<|assistant",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Where is my home city?",
+     "expected": "Denver",
+     "reply": "Where is my home city? \n<|assistant|>\nWhere is my home city? \n<|assistant|>\nWhere is my home city? \n<|assistant|>\nWhere is my",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "What instrument am I learning?",
+     "expected": "cello",
+     "reply": "What instrument am I learning? \n<|assistant|>\nWhat instrument am I learning? \n<|assistant|>\nWhat instrument am I learning? \n<|assistant|>\nWhat instrument am",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Which musical instrument did I say I practice?",
+     "expected": "cello",
+     "reply": "Which musical instrument did I say I practice? \n<|assistant|>\nWhich musical instrument did I say I practice? \n<|assistant|>\nWhich musical instrument did I say I practice?",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    }
+   ]
+  }
+ },
+ "packed": {
+  "session": 1,
+  "replay": 16
+ },
+ "losses": [
+  1.4614864587783813,
+  1.4329891204833984,
+  1.3162918090820312,
+  1.2820152044296265,
+  1.12285578250885,
+  1.405027151107788,
+  1.2765562534332275,
+  0.9037713408470154,
+  1.1835993528366089,
+  1.0533725023269653,
+  1.0989381074905396,
+  0.7497081756591797,
+  0.8496917486190796,
+  0.8801586627960205,
+  0.7639045715332031,
+  1.1979900598526,
+  1.179101586341858,
+  0.9147874712944031,
+  0.9070404171943665,
+  0.789420485496521
+ ],
+ "after": {
+  "heldout_nll": {
+   "mean": 1.6045206351279981,
+   "median": 0.8288129568099976,
+   "tokens": 887
+  },
+  "canary": null,
+  "recall": {
+   "n_probes": 3,
+   "recalled": 0,
+   "recalled_exact": 0,
+   "n_paraphrase": 3,
+   "recalled_paraphrase": 0,
+   "results": [
+    {
+     "question": "What is my cat called?",
+     "expected": "Marlowe",
+     "reply": "The name of your pet.\n",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Remind me of my cat's name.",
+     "expected": "Marlowe",
+     "reply": "The name of my pet.\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "Which city do I live in?",
+     "expected": "Denver",
+     "reply": "The city you're in.\n",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Where is my home city?",
+     "expected": "Denver",
+     "reply": "The city you're in is {0}.\n <|user|>\n The city you're in is {1}.\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    },
+    {
+     "question": "What instrument am I learning?",
+     "expected": "cello",
+     "reply": "The name of the instrument you're learning.\n <|assistant|>\n The name of the instrument you're learning.\n",
+     "contains": false,
+     "exact": false,
+     "variant": "verbatim",
+     "source_session": null
+    },
+    {
+     "question": "Which musical instrument did I say I practice?",
+     "expected": "cello",
+     "reply": "The name of the instrument.\n",
+     "contains": false,
+     "exact": false,
+     "variant": "paraphrase",
+     "source_session": null
+    }
+   ]
+  }
+ },
+ "gate": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "heldout_nll_mean_rise",
+    "value": -0.48070801876488556,
+    "limit": 0.5,
+    "passed": true
+   }
+  ]
+ },
+ "recall_gain": {
+  "recalled": 0,
+  "recalled_paraphrase": 0,
+  "n_probes": 3
+ },
+ "model_id": "sleep_1790141396",
+ "seconds": 125.0
+}
