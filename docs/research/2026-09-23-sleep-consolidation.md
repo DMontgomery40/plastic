@@ -484,8 +484,9 @@ protocol as seed 1. Every arm was accepted by the gate and every arm retained 0/
 1.637 → 1.617, replay → 1.492, distill → 1.493, Dream → 1.499, ungated → 1.499. Anchor again reproduced
 "water boils at 50 degrees Celsius" verbatim, as on seed 0. Dream: the 30-turn teacher state produced 180
 candidates, 144 duplicates, and the gain gate kept 24, of which 22 were "The Moon is larger than the
-Earth", the last statement taught, whatever fact the prompt quoted (the quoted turn added nothing to the
-score). After training on them the child answers the verbatim Moon question with exactly that sentence;
+Earth", the last statement taught, whatever fact the prompt quoted (with the quoted turn the score
+differed from the no-quote session-state score by between −0.04 and +0.10 nats per token across the 24
+kept items). After training on them the child answers the verbatim Moon question with exactly that sentence;
 the containment count is unchanged (the floor's garbled reply already contained "Moon") and the unseen
 phrasing did not flip. The gate has no check that sees this: NLL fell, replies stayed diverse, canaries
 were absent.
