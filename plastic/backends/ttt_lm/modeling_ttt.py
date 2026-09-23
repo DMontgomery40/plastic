@@ -1,8 +1,8 @@
 """Vendored from the official PyTorch TTT implementation (test-time-training/ttt-lm-pytorch, MIT; see LICENSE
 in this directory), as shipped inside the RetentionLabs/TTT-MLP-*-Base-Pile-8k checkpoints. Modified for
 transformers >= 5: ``_tied_weights_keys`` is a mapping and the model is declared stateful for generation.
-Signal instrumentation for the plastic harness is added in ttt_backend.py, not here, so this file stays
-diffable against upstream."""
+The plastic instrumentation (freeze/scale control, signal collector, probe mode, multi-token cached conv,
+fp32 inner loop) is marked inline with 'plastic:' comments so the file stays diffable against upstream."""
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, Union
@@ -884,7 +884,6 @@ class TTTBase(nn.Module):
         B, L = hidden_states.shape[:2]
         reminder_len = L % self.mini_batch_size
         num_mini_batch = L // self.mini_batch_size
-        last_mini_batch_params_dict = None
 
         XQ, XK, XV = self.get_qkv_projections(hidden_states, cache_params=cache_params)
 
@@ -903,9 +902,24 @@ class TTTBase(nn.Module):
         # plastic: the inner loop's hand-written LayerNorm / l2 / gelu-backward math is not autocast-aware and
         # overflows in bf16 (NaN losses on CUDA), so it runs in fp32 with autocast disabled; the projections
         # around it keep the caller's precision. Inference paths are unaffected (already fp32).
-        XQ, XK, XV, hidden_states = XQ.float(), XK.float(), XV.float(), hidden_states.float()
+        inner_dtype = self.W1.dtype if self.W1.dtype in (torch.float32, torch.float64) else torch.float32
+        XQ, XK, XV, hidden_states = XQ.to(inner_dtype), XK.to(inner_dtype), XV.to(inner_dtype), hidden_states.to(inner_dtype)
         autocast_off = torch.autocast(device_type=hidden_states.device.type, enabled=False)
         autocast_off.__enter__()
+        try:
+            output_hidden_states = self._ttt_blocks(XQ, XK, XV, hidden_states, L, num_mini_batch, reminder_len, cache_params)
+        finally:
+            autocast_off.__exit__(None, None, None)
+        output_hidden_states = torch.cat(output_hidden_states, dim=1)
+        output_hidden_states = self.post_norm(output_hidden_states)
+        if self.use_gate:
+            output_hidden_states = self.apply_gate(hidden_states, output_hidden_states)
+        output_hidden_states = self.o_proj(output_hidden_states)
+
+        return output_hidden_states
+
+    def _ttt_blocks(self, XQ, XK, XV, hidden_states, L, num_mini_batch, reminder_len, cache_params):
+        last_mini_batch_params_dict = None
         output_hidden_states = []
         # when input sequence length is not a multiple of mini_batch_size
         # we need to compute them seperately, when computing the reminder,
@@ -938,14 +952,6 @@ class TTTBase(nn.Module):
                 cache_params=cache_params,
             )
             output_hidden_states.append(output_reminder)
-
-        autocast_off.__exit__(None, None, None)
-        output_hidden_states = torch.cat(output_hidden_states, dim=1)
-        output_hidden_states = self.post_norm(output_hidden_states)
-        if self.use_gate:
-            output_hidden_states = self.apply_gate(hidden_states, output_hidden_states)
-        output_hidden_states = self.o_proj(output_hidden_states)
-
         return output_hidden_states
 
 

@@ -43,6 +43,10 @@ def _valid_body(action, body):
     return False
 
 
+# what the shared demo lets a visitor do; the UI renders exactly this set
+PUBLIC_CAPABILITIES = {'create_session': False, 'fork': False, 'reset': True, 'delete': False, 'resume': True, 'calibrate': False}
+
+
 class PublicDemoGate:
     """Expose the fixed text playground without changing the local research API."""
     def __init__(self, app, store=None):
@@ -58,16 +62,14 @@ class PublicDemoGate:
         async def reject(status, message):
             await JSONResponse({'detail': message}, status_code=status)(scope, receive, send)
 
-        reads = ('/api/health', '/api/models', '/api/sessions', '/api/train/jobs', '/api/data', '/api/redteam')
+        reads = ('/api/health', '/api/models', '/api/sessions')
         session_read = re.fullmatch(r'/api/sessions/([^/]+)(?:/(state|transactions))?', path)
         session_read = session_read and session_read.group(1) in SESSIONS
-        model_read = re.fullmatch(r'/api/models/([^/]+)(?:/log)?', path)
+        model_read = re.fullmatch(r'/api/models/([^/]+)', path)
         model_read = model_read and model_read.group(1) in MODELS
         if method in ('GET', 'HEAD'):
             if path not in reads and not session_read and not model_read:
                 return await reject(404, 'Not available in this demo.')
-            if path in ('/api/train/jobs', '/api/data', '/api/redteam'):
-                return await JSONResponse([])(scope, receive, send)
             if self.store is not None and path in ('/api/health', '/api/models', '/api/sessions'):
                 from plastic.api.service import model_summary, sanitize
                 models = [rec for rec in self.store.list_models() if rec['model_id'] in MODELS]
@@ -78,7 +80,8 @@ class PublicDemoGate:
                     result = sessions
                 else:
                     result = {'ok': True, 'artifacts_root': self.store.root, 'device': 'cpu',
-                              'n_models': len(models), 'n_sessions': len(sessions)}
+                              'n_models': len(models), 'n_sessions': len(sessions),
+                              'capabilities': dict(PUBLIC_CAPABILITIES), 'public': True}
                 return await JSONResponse(sanitize(result))(scope, receive, send)
             return await self.app(scope, receive, send)
         action_match = re.fullmatch(r'/api/sessions/(demo_text)/(chat|reset|resume)', path)
@@ -131,7 +134,8 @@ Sessions are <strong>public and shared</strong>. Do not enter private informatio
 
 def create_demo(artifacts_root: str, dashboard_dist: str):
     from plastic.api.app import create_app
-    app = create_app(artifacts_root, device='cpu')
+    # the shared demo lets visitors chat and reset only; the UI renders exactly these capabilities
+    app = create_app(artifacts_root, device='cpu', public=True, capabilities=PUBLIC_CAPABILITIES)
     dist = Path(dashboard_dist)
     page, count = re.subn(r'(<body\b[^>]*>)', lambda match: match[0][:-1] + ' data-public-demo="true">' + NOTICE,
                          (dist / 'index.html').read_text(), count=1, flags=re.IGNORECASE)

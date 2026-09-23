@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Request
 
 from plastic.api.schemas import CalibrateRequest
 from plastic.api.service import (
@@ -30,13 +30,6 @@ def get_model(model_id: str, request: Request) -> dict[str, Any]:
     store = request.app.state.store
     require_model(store, model_id)
     return sanitize(model_detail(store, model_id))
-
-
-@router.get("/models/{model_id}/log")
-def get_model_log(model_id: str, request: Request, limit: int = Query(default=200, ge=1, le=10000)) -> list[dict[str, Any]]:
-    store = request.app.state.store
-    require_model(store, model_id)
-    return sanitize(store.read_log(model_id, limit=limit))
 
 
 @router.post("/models/{model_id}/calibrate")

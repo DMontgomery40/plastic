@@ -15,7 +15,7 @@ from fastapi import HTTPException
 
 from plastic.harness.calibrate import Calibration
 from plastic.harness.canary import CanarySuite
-from plastic.store import ArtifactStore, read_json
+from plastic.store import ArtifactStore
 
 # ---------------------------------------------------------------------- json safety
 
@@ -137,14 +137,6 @@ def model_detail(store: ArtifactStore, model_id: str) -> dict[str, Any]:
         "canary": canary_counts(store, model_id),
         "log": store.read_log(model_id, limit=200),
     }
-
-
-def latest_log_record(store: ArtifactStore, model_id: str) -> dict[str, Any] | None:
-    log = store.read_log(model_id, limit=200)
-    for rec in reversed(log):
-        if "loss" in rec:
-            return rec
-    return log[-1] if log else None
 
 
 # ---------------------------------------------------------------------- sessions
@@ -294,83 +286,7 @@ def state_payload(session: Any) -> dict[str, Any]:
 # ---------------------------------------------------------------------- red team
 
 
-def redteam_root(store: ArtifactStore) -> str:
-    return os.path.join(store.root, "redteam")
-
-
-def redteam_created_at(run_id: str, summary_path: str) -> int:
-    tail = run_id.rsplit("_", 1)[-1]  # run ids are rt_<model_id>_<unix>, and model ids contain underscores
-    if tail.isdigit():
-        return int(tail)
-    try:
-        return int(os.path.getmtime(summary_path))
-    except OSError:
-        return 0
-
-
-def redteam_summary(store: ArtifactStore, run_id: str) -> dict[str, Any]:
-    path = os.path.join(redteam_root(store), run_id, "summary.json")
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"red team run not found: {run_id}")
-    summary = read_json(path)
-    summary.setdefault("run_id", run_id)
-    summary["created_at_unix"] = redteam_created_at(run_id, path)
-    return summary
-
-
-def redteam_results(store: ArtifactStore, run_id: str) -> list[dict[str, Any]]:
-    path = os.path.join(redteam_root(store), run_id, "results.jsonl")
-    if not os.path.exists(path):
-        return []
-    from plastic.store import read_jsonl
-
-    return read_jsonl(path)
-
-
-def list_redteam(store: ArtifactStore) -> list[dict[str, Any]]:
-    base = redteam_root(store)
-    if not os.path.isdir(base):
-        return []
-    out: list[dict[str, Any]] = []
-    for name in os.listdir(base):
-        if not os.path.isdir(os.path.join(base, name)):
-            continue
-        try:
-            out.append(redteam_summary(store, name))
-        except Exception:  # noqa: BLE001 - a half-written run must not break the listing
-            continue
-    out.sort(key=lambda r: int(r.get("created_at_unix", 0)), reverse=True)
-    return out
-
-
 # ---------------------------------------------------------------------- data
-
-
-def data_sets(store: ArtifactStore) -> list[dict[str, Any]]:
-    from plastic.data.text import load_corpus_meta
-
-    base = os.path.join(store.root, "data")
-    if not os.path.isdir(base):
-        return []
-    out: list[dict[str, Any]] = []
-    for name in sorted(os.listdir(base)):
-        d = os.path.join(base, name)
-        if not os.path.exists(os.path.join(d, "meta.json")):
-            continue
-        try:
-            meta = load_corpus_meta(d)
-        except Exception:  # noqa: BLE001 - an unreadable corpus is skipped, not fatal
-            continue
-        out.append(
-            {
-                "name": name,
-                "dir": d,
-                "corpus": meta.corpus,
-                "vocab_size": int(meta.vocab_size),
-                "splits": dict(meta.splits),
-            }
-        )
-    return out
 
 
 # ---------------------------------------------------------------------- errors

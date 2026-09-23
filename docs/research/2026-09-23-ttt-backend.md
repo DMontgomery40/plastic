@@ -16,7 +16,7 @@ whose sequence layer IS a gradient-updated, meta-trained fast learner closes tha
 ## Sources checked (2026-09-23)
 
 - Sun et al., *Learning to (Learn at Test Time): RNNs with Expressive Hidden States*,
-  [arXiv:2407.04620](https://arxiv.org/abs/2407.04620) (v2 2025-08-31); official PyTorch code
+  [arXiv:2407.04620](https://arxiv.org/abs/2407.04620) (v2, 11 Aug 2024); official PyTorch code
   [test-time-training/ttt-lm-pytorch](https://github.com/test-time-training/ttt-lm-pytorch) (MIT).
   Read: the TTT-MLP inner loop (two-layer GELU MLP fast weights, reconstruction target `V − K`, LayerNorm
   inside the loss, learned per-token inner learning rate `η = base · σ(w·x)/d`, mini-batch 16 with the
@@ -42,7 +42,7 @@ whose sequence layer IS a gradient-updated, meta-trained fast learner closes tha
 | Fast variables | `W1, b1, W2, b2` of every layer (24 layers × 4 tensors = 96 memory units) |
 | Update rule | The model's own inner SGD step, mini-batched 16 tokens, learned per-token η; no decay |
 | Outer gradient path | None at inference; the pretrained `W0`, projections and η gates are frozen slow weights |
-| Carried state | Fast weights, pending mini-batch gradients, conv windows, position |
+| Carried state | Fast weights `W`, pending mini-batch gradient `G`, conv windows, position. Harness quantities use `W_eff = W − c15·G` (OPUS-001 F1): otherwise a chunk straddling a 16-token boundary sees the previous chunk's pending gradient committed during its own forward, even frozen |
 | Transaction boundary | The harness chunk (16 tokens, aligned with the mini-batch) |
 
 Signals, all computed inside the inner loop and reported per token, layer and head:

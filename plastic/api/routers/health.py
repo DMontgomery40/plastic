@@ -18,4 +18,6 @@ def health(request: Request) -> dict[str, Any]:
         "device": request.app.state.device,
         "n_models": len(store.list_models()),
         "n_sessions": len(store.list_sessions()),
+        "capabilities": dict(request.app.state.capabilities),
+        "public": bool(request.app.state.public),
     }

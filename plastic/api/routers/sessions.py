@@ -8,7 +8,7 @@ from typing import Any, Iterator
 from fastapi import APIRouter, Query, Request
 
 from plastic.api.registry import SignatureMismatch
-from plastic.api.schemas import ChatRequest, CreateSessionRequest, ForkRequest, PhysicsRequest
+from plastic.api.schemas import ChatRequest, CreateSessionRequest, ForkRequest
 from plastic.api.service import (
     bad_request,
     calibration_payload,
@@ -125,17 +125,6 @@ def chat(session_id: str, body: ChatRequest, request: Request) -> dict[str, Any]
             top_k=body.top_k,
             seed=body.seed,
         )
-    return sanitize(result.to_dict())
-
-
-@router.post("/sessions/{session_id}/physics")
-def physics(session_id: str, body: PhysicsRequest, request: Request) -> dict[str, Any]:
-    store = request.app.state.store
-    meta = require_session_meta(store, session_id)
-    if meta.get("domain") != "physics":
-        raise bad_request(f"session {session_id} is a {meta.get('domain')} session; episodes require a physics session")
-    with _open(request, session_id) as session:
-        result = session.physics_episode(steps=body.steps, mu=body.mu, seed=body.seed, nonlinear=body.nonlinear)
     return sanitize(result.to_dict())
 
 

@@ -14,6 +14,15 @@ Alignment: the reference implementation updates fast weights per 16-token mini-b
 either aligned blocks or single tokens inside a partial mini-batch. ``forward`` therefore feeds a chunk
 as single tokens until the position is aligned, then whole blocks, then a remainder block; the
 transaction chunk should be a multiple of 16 so most work runs in the parallel dual form.
+
+Effective coordinates (OPUS-001, F1): the reference cache carries ``W`` (the fast weights at the last
+aligned position) and ``G`` (the accumulated, learning-rate-weighted gradient of the partial mini-batch).
+``G`` is committed into ``W`` only when the mini-batch completes, so a harness chunk that straddles a
+boundary would otherwise see the PREVIOUS chunk's pending gradient land during its own forward, even
+frozen. Every harness-facing quantity therefore uses ``W_eff = W − c15·G`` per layer, where ``c15`` is
+the learned step scale of the last mini-batch position: a chunk's change in ``W_eff`` is exactly the sum of
+its own rank-one contributions, freeze holds ``W_eff`` exactly, scaling the inner learning rate scales it
+linearly, and projection writes ``W_eff`` targets while keeping ``G``.
 """
 
 from __future__ import annotations
@@ -36,6 +45,21 @@ _IDENTITY_FILES = ("config.json", "tokenizer.json", "tokenizer_config.json", "sp
 
 # a minimal chat rendering for the SFT'd model; the base tokenizer has no chat template of its own
 CHAT_USER, CHAT_ASSISTANT = "<|user|>\n", "\n<|assistant|>\n"
+
+
+def render_user_turn(tok, user_message: str, *, first_turn: bool, system: str = "") -> list[int]:
+    """THE chat rendering, shared by training (scripts/train/sft_ttt_chat.py) and the runtime.
+
+    The user segment and the assistant marker are tokenized as SEPARATE strings and concatenated: with a
+    SentencePiece tokenizer and no special chat tokens, a segment start gets its own leading-space piece,
+    so tokenizing the joined string would produce different ids than the segment-wise training render
+    (OPUS-001, F3). One function, one convention; ``test_render_matches_training`` pins the identity."""
+    ids: list[int] = []
+    if first_turn and tok.bos_token_id is not None:
+        ids.append(int(tok.bos_token_id))
+    ids += [int(t) for t in tok(CHAT_USER + system + user_message, add_special_tokens=False).input_ids]
+    ids += [int(t) for t in tok(CHAT_ASSISTANT, add_special_tokens=False).input_ids]
+    return ids
 
 
 def _checkpoint_digest(checkpoint_dir: str) -> str:
@@ -116,6 +140,16 @@ class TTTState:
     def conv_leaves(self) -> list[Tensor]:
         return [t for d in self.cache.conv_states_dic.values() for _, t in sorted(d.items())]
 
+    def effective_leaves(self, c15: list[Tensor]) -> list[Tensor]:
+        """``W − c15·G`` per (layer, name): the fast weights as they will stand once the pending mini-batch
+        gradient is committed; the coordinates every harness quantity is measured in (see module doc)."""
+        c = self.cache
+        out: list[Tensor] = []
+        for l in sorted(c.ttt_params_dict[f"{c.ttt_param_names[0]}_states"]):
+            for n in c.ttt_param_names:
+                out.append(c.ttt_params_dict[f"{n}_states"][l] - c15[l] * c.ttt_params_dict[f"{n}_grad"][l])
+        return out
+
 
 class TTTBackend:
     def __init__(self, model, tokenizer, config, *, device: torch.device, checkpoint_digest: str | None = None) -> None:
@@ -128,6 +162,9 @@ class TTTBackend:
         self.checkpoint_digest = checkpoint_digest
         self.mini_batch = int(config.mini_batch_size)
         self._lock = threading.Lock()
+        # the learned step scale of the LAST mini-batch position, per layer: the factor that commits G into W
+        self._c15 = [torch.clamp_min(layer.seq_modeling_block.token_idx + layer.seq_modeling_block.learnable_token_idx, 0.0)[-1].detach()
+                     for layer in model.model.layers]
 
     # ------------------------------------------------------------------ identity / signals
     def signal_names(self) -> tuple[str, ...]:
@@ -157,13 +194,8 @@ class TTTBackend:
         return [int(t) for t in self.tokenizer(text, add_special_tokens=False).input_ids]
 
     def encode_chat(self, user_message: str, *, first_turn: bool = True) -> list[int]:
-        """Render one user turn. The base model has no chat template; the SFT recipe in
-        scripts/train/sft_ttt_chat.py uses exactly this rendering, so the two must move together."""
-        text = CHAT_USER + user_message + CHAT_ASSISTANT
-        ids = self.encode(text)
-        if first_turn and self.tokenizer.bos_token_id is not None:
-            ids = [int(self.tokenizer.bos_token_id)] + ids
-        return ids
+        """Render one user turn exactly as training does (``render_user_turn``)."""
+        return render_user_turn(self.tokenizer, user_message, first_turn=first_turn)
 
     # ------------------------------------------------------------------ state lifecycle
     def init_state(self) -> TTTState:
@@ -178,8 +210,8 @@ class TTTBackend:
             return state.clone()
 
     def state_delta(self, a: TTTState, b: TTTState) -> list[Tensor]:
-        """Per-fast-weight change ``a − b`` over every layer's W1, b1, W2, b2 (the memory units)."""
-        return [la - lb for la, lb in zip(a.weight_leaves(), b.weight_leaves())]
+        """Per-fast-weight change ``a − b`` over every layer's W1, b1, W2, b2 in effective coordinates."""
+        return [la - lb for la, lb in zip(a.effective_leaves(self._c15), b.effective_leaves(self._c15))]
 
     def is_finite(self, state: TTTState) -> bool:
         for t in state.weight_leaves() + state.grad_leaves() + state.conv_leaves():
@@ -188,7 +220,7 @@ class TTTBackend:
         return True
 
     def state_norms(self, state: TTTState) -> dict[str, Any]:
-        per = [float(t.float().norm()) for t in state.weight_leaves()]
+        per = [float(t.float().norm()) for t in state.effective_leaves(self._c15)]
         return {"fast_weight_norm": per, "fast_weight_norm_total": float(sum(x * x for x in per) ** 0.5)}
 
     def _identity(self) -> dict[str, Any]:
@@ -309,8 +341,23 @@ class TTTBackend:
         return self.process(ids, self.init_state())[0]
 
     # ------------------------------------------------------------------ canaries (frozen)
+    def _folded_probe_cache(self, state: TTTState):
+        """A disposable cache with the pending gradient folded in (``W := W_eff``, ``G := 0``) so a frozen
+        probe reads one fixed function regardless of where the session sits in its mini-batch (OPUS-001, F2)."""
+        probe = copy.deepcopy(state.cache)
+        names = probe.ttt_param_names
+        for l in sorted(probe.ttt_params_dict[f"{names[0]}_states"]):
+            for n in names:
+                probe.ttt_params_dict[f"{n}_states"][l] = (probe.ttt_params_dict[f"{n}_states"][l]
+                                                            - self._c15[l] * probe.ttt_params_dict[f"{n}_grad"][l])
+                probe.ttt_params_dict[f"{n}_grad"][l] = torch.zeros_like(probe.ttt_params_dict[f"{n}_grad"][l])
+        probe.no_update = True
+        return probe
+
     def _probe_nll(self, ids: list[int], state: TTTState) -> float:
-        logits, _ = self.process(ids, self.clone(state), freeze=True)
+        with self._lock:
+            probe = self._folded_probe_cache(state)
+        logits, _ = self.process(ids, TTTState(probe), freeze=True)
         tgt = torch.tensor(ids[1:], dtype=torch.long, device=self.device)
         return float(torch.nn.functional.cross_entropy(logits[:-1], tgt))
 
@@ -326,8 +373,7 @@ class TTTBackend:
         """∂(frozen probe CE)/∂(fast weights) on a disposable copy: the probe is read with the inner
         step disabled, states are grad leaves, and the cache's in-place update is suppressed."""
         with self._lock:
-            probe = copy.deepcopy(state.cache)
-            probe.no_update = True
+            probe = self._folded_probe_cache(state)
             leaves: list[Tensor] = []
             names = probe.ttt_param_names
             for l in sorted(probe.ttt_params_dict[f"{names[0]}_states"]):
@@ -371,8 +417,11 @@ class TTTBackend:
         """Overwrite working's fast weights with committed + projected delta, leaf by leaf, in ``weight_leaves`` order."""
         it = iter(projected)
         c = working.cache
+        committed_eff = iter(committed.effective_leaves(self._c15))
         for l in sorted(c.ttt_params_dict[f"{c.ttt_param_names[0]}_states"]):
             for n in c.ttt_param_names:
                 d = next(it)
-                base = committed.cache.ttt_params_dict[f"{n}_states"][l]
-                c.ttt_params_dict[f"{n}_states"][l] = base + d.to(base.device, base.dtype)
+                target_eff = next(committed_eff) + d.to(self.device, torch.float32)
+                # keep working's pending gradient; choose W so that W − c15·G equals the projected target
+                c.ttt_params_dict[f"{n}_states"][l] = (target_eff + self._c15[l] * c.ttt_params_dict[f"{n}_grad"][l]).to(
+                    c.ttt_params_dict[f"{n}_states"][l].dtype)

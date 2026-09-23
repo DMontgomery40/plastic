@@ -27,7 +27,7 @@ def test_expensive_or_unbounded_mutations_are_closed(path):
         assert client.post(path, json={}).status_code == 403
 
 
-@pytest.mark.parametrize('path', ['/api/health', '/api/models', f'/api/models/{MODEL_ID}', f'/api/models/{MODEL_ID}/log', '/api/sessions', '/api/sessions/demo_text/state', '/api/train/jobs', '/api/data'])
+@pytest.mark.parametrize('path', ['/api/health', '/api/models', f'/api/models/{MODEL_ID}', '/api/sessions', '/api/sessions/demo_text/state'])
 def test_existing_dashboard_reads_work(path):
     with TestClient(fake_app()) as client:
         assert client.get(path).status_code == 200
@@ -191,8 +191,9 @@ def test_public_catalog_filters_without_removing_local_artifacts(tmp_path):
         assert [s['session_id'] for s in client.get('/api/sessions').json()] == ['demo_text']
         health = client.get('/api/health').json()
         assert health['n_models'] == 1 and health['n_sessions'] == 1
+        assert health['public'] is True and health['capabilities']['create_session'] is False and health['capabilities']['reset'] is True
         for path in ['/api/train/jobs', '/api/data', '/api/redteam']:
-            assert client.get(path).json() == []
+            assert client.get(path).status_code == 404
     with TestClient(app) as client:
         assert len(client.get('/api/models').json()) == 3
         assert len(client.get('/api/sessions').json()) == 3

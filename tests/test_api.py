@@ -78,16 +78,11 @@ def api(tmp_path_factory):
 # ---------------------------------------------------------------------- health and data
 def test_health(api):
     body = api.client.get("/api/health").json()
+    assert body["capabilities"] == {"create_session": True, "fork": True, "reset": True, "delete": True, "resume": True, "calibrate": True}
+    assert body["public"] is False
     assert body["ok"] is True
     assert body["artifacts_root"] == api.store.root and body["device"] == "cpu"
     assert body["n_models"] >= 2 and body["n_sessions"] >= 0
-
-
-def test_data_listing(api):
-    body = api.client.get("/api/data").json()
-    entry = next(d for d in body if d["name"] == "tiny")
-    assert entry["dir"] == api.data and entry["corpus"] == "tiny"
-    assert entry["vocab_size"] > 0 and entry["splits"]["train"] > 0
 
 
 # ---------------------------------------------------------------------- models
@@ -144,7 +139,7 @@ def test_models_listing_survives_non_finite_eval_and_sleep(api):
     assert rec["sleep"]["canary_after"]["coherence"] is None and rec["sleep"]["canary_after"]["poison"] is None
 
 
-def test_model_detail_and_log(api):
+def test_model_detail(api):
     body = api.client.get(f"/api/models/{api.text}").json()
     assert body["record"]["model_id"] == api.text
     assert body["config"]["d_model"] == 32 and body["config"]["chunk"] == 8
@@ -153,13 +148,10 @@ def test_model_detail_and_log(api):
     assert body["canary"] == {"n_coherence": 2, "n_poison": 3}
     assert body["log"] and any("loss" in rec for rec in body["log"])
 
-    log = api.client.get(f"/api/models/{api.text}/log", params={"limit": 2}).json()
-    assert len(log) <= 2 and log == body["log"][-len(log) :]
 
 
 def test_model_unknown_is_404(api):
     assert api.client.get("/api/models/nope").status_code == 404
-    assert api.client.get("/api/models/nope/log").status_code == 404
     assert api.client.post("/api/models/nope/calibrate", json={}).status_code == 404
 
 
@@ -244,25 +236,6 @@ def test_chat(api):
     assert ACCEPTED_KEYS <= set(accepted) and accepted["delta_norm"] >= 0.0
     assert "canary_delta_coherence" in accepted
     assert SUMMARY_KEYS <= set(body["summary"])
-
-
-def test_chat_on_a_physics_session_is_400(api):
-    r = api.client.post("/api/sessions/p1/chat", json={"prompt": "hello"})
-    assert r.status_code == 400 and "text session" in r.json()["detail"]
-
-
-def test_physics_episode(api):
-    body = api.client.post("/api/sessions/p1/physics", json={"steps": 16, "mu": 0.12, "seed": 0}).json()
-    assert body["mu"] == 0.12 and body["steps"] == 16
-    assert len(body["per_step"]) == 16 and set(body["per_step"][0]) == {"t", "base_mse", "frozen_mse", "adaptive_mse"}
-    assert set(body["means"]) == {"base_mse", "frozen_mse", "adaptive_mse"}
-    assert len(body["transactions"]) == 2  # 16 steps of chunk 8
-    assert SUMMARY_KEYS <= set(body["summary"])
-
-
-def test_physics_on_a_text_session_is_400(api):
-    r = api.client.post("/api/sessions/t1/physics", json={"steps": 8})
-    assert r.status_code == 400 and "physics session" in r.json()["detail"]
 
 
 def test_session_detail(api):
@@ -373,110 +346,12 @@ def test_session_unknown_is_404(api):
 
 
 # ---------------------------------------------------------------------- training jobs
-def test_train_job(api):
-    started = api.client.post(
-        "/api/train",
-        json={
-            "domain": "text", "data_dir": api.data, "steps": 2, "batch_size": 2, "seq_len": 96,
-            "d_model": 32, "layers": 1, "heads": 2, "chunk": 8, "eval_every": 0, "save_every": 0, "device": "cpu",
-        },
-    ).json()
-    model_id = started["model_id"]
-    assert model_id and started["pid"] > 0
-
-    jobs = api.client.get("/api/train/jobs").json()
-    assert model_id in {j["model_id"] for j in jobs}
-    assert {"model_id", "pid", "status", "exit_code", "started_at_unix"} == set(jobs[0])
-
-    deadline = time.time() + 300
-    status = api.client.get(f"/api/train/{model_id}").json()
-    while status["status"] == "running" and time.time() < deadline:
-        time.sleep(1.0)
-        status = api.client.get(f"/api/train/{model_id}").json()
-    assert status["status"] == "finished", status
-    assert status["exit_code"] == 0, status.get("error")
-    assert status["phase"] == "completed"
-    assert status["latest"]["step"] >= 1 and status["eval"]["heldout_loss"] > 0
-
-    cancelled = api.client.post(f"/api/train/{model_id}/cancel").json()
-    assert cancelled == {"model_id": model_id, "status": "finished"}
-    assert model_id in {m["model_id"] for m in api.client.get("/api/models").json()}
-
-
-def test_train_errors(api):
-    assert api.client.get("/api/train/nope").status_code == 404
-    assert api.client.post("/api/train/nope/cancel").status_code == 404
-    assert api.client.post("/api/train", json={"domain": "text", "steps": 1, "batch_size": 1, "seq_len": 32}).status_code == 400
-    duplicate = api.client.post(
-        "/api/train",
-        json={"domain": "text", "data_dir": api.data, "model_id": api.text, "steps": 1, "batch_size": 1, "seq_len": 32},
-    )
-    assert duplicate.status_code == 409
 
 
 # ---------------------------------------------------------------------- red team
-def test_redteam(api):
-    summary = api.client.post(
-        "/api/redteam",
-        json={"model_id": api.text, "data_dir": api.data, "prefixes": 1, "prefix_len": 16,
-              "suffix_len": 8, "steps": 2, "families": ["pgd", "random"]},
-    ).json()
-    run_id = summary["run_id"]
-    assert summary["model_id"] == api.text and summary["created_at_unix"] > 0
-    assert set(summary["families"]) == {"pgd", "random"}
-    family = summary["families"]["pgd"]
-    assert family["n"] == 1 and 0.0 <= family["gated_fraction"] <= 1.0
-    assert {"damage_mean", "damage_max", "provisional_damage_max", "constraint_violated_fraction",
-            "over_threshold_fraction"} <= set(family)
-
-    listing = api.client.get("/api/redteam").json()
-    assert run_id in {r["run_id"] for r in listing}
-
-    run = api.client.get(f"/api/redteam/{run_id}").json()
-    assert run["summary"]["run_id"] == run_id
-    assert len(run["results"]) == 2
-    result = run["results"][0]
-    assert result["family"] in ("pgd", "random") and len(result["payload_ids"]) == 8
-    assert result["decisions"] and result["nll_payload"] > 0
-
-    assert api.client.get("/api/redteam/nope").status_code == 404
-    assert api.client.post("/api/redteam", json={"model_id": "nope"}).status_code == 404
-    assert api.client.post("/api/redteam", json={"model_id": api.physics, "data_dir": api.data}).status_code == 400
-    bad = api.client.post("/api/redteam", json={"model_id": api.text, "data_dir": api.data, "families": ["nope"]})
-    assert bad.status_code == 400
 
 
 # ---------------------------------------------------------------------- sleep
-def test_sleep(api):
-    api.client.post("/api/sessions", json={"model_id": api.text, "session_id": "sleepy",
-                                           "harness": {"enable_projection": False}})
-    for seed in range(3):
-        assert api.client.post(
-            "/api/sessions/sleepy/chat", json={"prompt": PROMPT, "max_new_tokens": 6, "seed": seed}
-        ).status_code == 200
-
-    manifest = api.client.post(
-        "/api/sleep",
-        json={"model_id": api.text, "sessions": ["sleepy"], "core_data_dir": api.data, "steps": 2,
-              "seq_len": 16, "batch_size": 4, "tolerance": {"coherence": 10.0, "poison": 10.0}},
-    ).json()
-    assert manifest["accepted"] is True
-    assert manifest["model_id"].startswith("sleep_")
-    assert manifest["tolerance"]["coherence"] == 10.0
-
-    child = api.client.get(f"/api/models/{manifest['model_id']}").json()
-    assert child["record"]["parent_model_id"] == api.text
-    assert child["record"]["type"] == "sleep_consolidation"
-
-    rejected = api.client.post(
-        "/api/sleep",
-        json={"model_id": api.text, "sessions": ["sleepy"], "core_data_dir": api.data, "steps": 2,
-              "seq_len": 16, "batch_size": 4, "tolerance": {"coherence": -1.0, "poison": 10.0}},
-    ).json()
-    assert rejected["accepted"] is False and "model_id" not in rejected
-
-    assert api.client.post("/api/sleep", json={"model_id": "nope"}).status_code == 404
-    assert api.client.post("/api/sleep", json={"model_id": api.physics}).status_code == 400
 
 
 def test_model_summary_exposes_sleep_field():

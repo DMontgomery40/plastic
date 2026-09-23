@@ -1,7 +1,7 @@
 """The FastAPI application: one service over one artifact store.
 
-The API never inspects text for safety. It exposes what the harness, the
-training loop, and the red team already produced.
+The API never inspects text for safety. It exposes sessions over the transaction harness and the
+registered models; training, red team, sleep and physics are CLI research tools, not HTTP surfaces.
 """
 
 from __future__ import annotations
@@ -10,12 +10,14 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from plastic.api.jobs import JobManager
 from plastic.api.registry import SessionRegistry
-from plastic.api.routers import data, health, models, redteam, sessions, sleep, train
+from plastic.api.routers import health, models, sessions
 from plastic.store import ArtifactStore
 
-ROUTERS = (health.router, data.router, models.router, sessions.router, train.router, redteam.router, sleep.router)
+ROUTERS = (health.router, models.router, sessions.router)
+
+# what a client may do; a deployment passes a restricted set and the UI renders exactly that
+DEFAULT_CAPABILITIES = {"create_session": True, "fork": True, "reset": True, "delete": True, "resume": True, "calibrate": True}
 
 
 async def _not_found(request: Request, exc: Exception) -> JSONResponse:
@@ -26,7 +28,7 @@ async def _conflict(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse({"detail": str(exc)}, status_code=409)
 
 
-def create_app(artifacts_root: str, device: str = "cpu") -> FastAPI:
+def create_app(artifacts_root: str, device: str = "cpu", *, capabilities: dict[str, bool] | None = None, public: bool = False) -> FastAPI:
     store = ArtifactStore(artifacts_root)
     store.ensure()
     store.ensure_sessions()
@@ -46,7 +48,8 @@ def create_app(artifacts_root: str, device: str = "cpu") -> FastAPI:
     app.state.device = device
     app.state.artifacts_root = store.root
     app.state.registry = SessionRegistry(store.root, device=device)
-    app.state.jobs = JobManager(store, device=device)
+    app.state.capabilities = {**DEFAULT_CAPABILITIES, **(capabilities or {})}
+    app.state.public = bool(public)
 
     for router in ROUTERS:
         app.include_router(router, prefix="/api")

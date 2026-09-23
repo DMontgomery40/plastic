@@ -47,9 +47,11 @@ def test_chunked_logits_match_single_pass_and_snapshot_is_exact(backend):
     _, st = backend.process(ids[:7], st)          # unaligned split on purpose
     l2, st = backend.process(ids[7:], st)
     assert st.position == n
-    # dual-form (aligned block) and primal-form (single-token) paths agree up to float error
-    assert (full[7:] - l2).abs().max().item() < 5e-2
-    assert full[7:].argmax(-1).eq(l2.argmax(-1)).float().mean().item() > 0.9
+    # dual-form (aligned block) and primal-form (single-token) paths agree up to float error; MPS float error
+    # is larger than CPU's (OPUS-001 F4 measured 3.1e-5 on CPU)
+    tol = 5e-2 if backend.device.type == "mps" else 1e-3
+    assert (full[7:] - l2).abs().max().item() < tol
+    assert full[7:].argmax(-1).eq(l2.argmax(-1)).float().mean().item() > (0.9 if backend.device.type == "mps" else 0.999)
     # snapshot reproduces continuation exactly and does not alias
     st2 = backend.init_state()
     _, st2 = backend.process(ids[:7], st2)
@@ -59,38 +61,43 @@ def test_chunked_logits_match_single_pass_and_snapshot_is_exact(backend):
     assert torch.equal(la, lb) and snap.position == st2.position == n
 
 
-def test_freeze_is_a_genuine_no_write_and_activation_advances(backend):
+def test_freeze_is_a_genuine_no_write_in_effective_coordinates_from_a_pending_state(backend):
+    """Start at position 23 (a pending mini-batch gradient G exists) and freeze a chunk that crosses the
+    boundary at 32: the reference commits G into W at the boundary, so raw W changes, but W_eff = W − c15·G,
+    the coordinates the harness measures, must not move at all (OPUS-001 F1)."""
     ids = backend.encode(TEXT)
     st = backend.init_state()
-    _, st = backend.process(ids[:16], st)
-    w_pre = [t.clone() for t in st.weight_leaves()]
-    g_pre = [t.clone() for t in st.grad_leaves()]
+    _, st = backend.process(ids[:23], st)
+    assert st.position == 23 and sum(float(g.abs().sum()) for g in st.grad_leaves()) > 0.0   # G is pending
+    eff_pre = [t.clone() for t in st.effective_leaves(backend._c15)]
     c_pre = [t.clone() for t in st.conv_leaves()]
-    logits, st, sig = backend.forward(ids[16:30], st, freeze=True, beta_scale=1.0)
-    assert all(torch.equal(a, b) for a, b in zip(w_pre, st.weight_leaves()))
-    assert all(torch.equal(a, b) for a, b in zip(g_pre, st.grad_leaves()))   # pending gradients untouched too
-    assert max((a - b).abs().max().item() for a, b in zip(c_pre, st.conv_leaves())) > 0.0
-    assert st.position == 30 and logits.shape == (14, backend.vocab_size)
+    logits, st, sig = backend.forward(ids[23:38], st, freeze=True, beta_scale=1.0)
+    assert st.position == 38 and logits.shape == (15, backend.vocab_size)
+    delta = max((a - b).abs().max().item() for a, b in zip(eff_pre, st.effective_leaves(backend._c15)))
+    assert delta < 1e-4 * max(1.0, max(float(t.abs().max()) for t in eff_pre)), delta
+    assert max((a - b).abs().max().item() for a, b in zip(c_pre, st.conv_leaves())) > 0.0   # activation advanced
     # frozen tokens still report surprise but zero write
     assert all(float(s.write_norm.abs().max()) == 0.0 for s in sig)
-    assert all(float(s.err.min()) >= 0.0 and s.err.shape[-1] == 14 for s in sig)
+    assert all(float(s.err.min()) >= 0.0 and s.err.shape[-1] == 15 for s in sig)
 
 
-def test_beta_scale_zero_equals_freeze_and_half_scales_the_update(backend):
-    ids = backend.encode(TEXT)[:32]
+def test_beta_scale_zero_equals_freeze_and_half_scales_the_update_linearly(backend):
+    """From a pending state (position 23), a chunk crossing the boundary: beta_scale=0 equals freeze (no decay),
+    and beta_scale=0.5 halves the chunk's own change in effective coordinates (the inner step is linear in
+    the learning rate; the gradients are taken at the base point)."""
+    ids = backend.encode(TEXT)[:40]
     base = backend.init_state()
-    _, base = backend.process(ids[:16], base)
-    a, b, c = backend.clone(base), backend.clone(base), backend.clone(base)
-    _, a, _ = backend.forward(ids[16:32], a, freeze=True, beta_scale=1.0)
-    _, b, _ = backend.forward(ids[16:32], b, freeze=False, beta_scale=0.0)
-    _, c, _ = backend.forward(ids[16:32], c, freeze=False, beta_scale=1.0)
-    assert all(torch.equal(x, y) for x, y in zip(a.weight_leaves(), b.weight_leaves()))   # no decay: identical
+    _, base = backend.process(ids[:23], base)
+    a, b, c, h = (backend.clone(base) for _ in range(4))
+    _, a, _ = backend.forward(ids[23:40], a, freeze=True, beta_scale=1.0)
+    _, b, _ = backend.forward(ids[23:40], b, freeze=False, beta_scale=0.0)
+    _, c, _ = backend.forward(ids[23:40], c, freeze=False, beta_scale=1.0)
+    _, h, _ = backend.forward(ids[23:40], h, freeze=False, beta_scale=0.5)
+    assert all(torch.equal(x, y) for x, y in zip(a.weight_leaves(), b.weight_leaves()))
+    assert all(torch.equal(x, y) for x, y in zip(a.grad_leaves(), b.grad_leaves()))
     full = sum(float(t.norm()) ** 2 for t in backend.state_delta(c, base)) ** 0.5
-    assert full > 0.0
-    h = backend.clone(base)
-    _, h, _ = backend.forward(ids[16:32], h, freeze=False, beta_scale=0.5)
     half = sum(float(t.norm()) ** 2 for t in backend.state_delta(h, base)) ** 0.5
-    assert 0.2 * full < half < 0.8 * full
+    assert full > 0.0 and 0.45 * full < half < 0.55 * full, (full, half)
 
 
 def test_signals_have_full_shape_and_write_norm_matches_committed_delta_order(backend):
@@ -101,7 +108,7 @@ def test_signals_have_full_shape_and_write_norm_matches_committed_delta_order(ba
     for s in sig:
         assert s.err.shape == (1, backend.config.num_attention_heads, 32) == s.beta.shape == s.write_norm.shape
         assert torch.isfinite(s.err).all() and torch.isfinite(s.write_norm).all()
-        # the learned per-position step for the first token of a mini-batch is clamped at 0 in this checkpoint
+        # beta is display-only: the learned per-position scale varies ~2-3x across a mini-batch and a token's step can be 0
         assert float(s.beta.min()) >= 0.0 and float(s.beta.max()) > 0.0 and float(s.write_norm.min()) >= 0.0
     # each token's committed contribution is rank one, so per layer the committed change is bounded by the
     # sum of the per-token write norms (triangle inequality) and is nonzero after two full mini-batches
@@ -195,3 +202,47 @@ def test_calibration_on_real_chats_produces_installable_thresholds(tmp_path, bac
     assert "fisher_update" not in cal.reference
     cal.save(store.model_dir("ttt_test"))
     assert Calibration.exists(store.model_dir("ttt_test"))
+
+
+def test_render_matches_training(backend):
+    """The runtime render of a user turn is a token-for-token prefix of the training render (OPUS-001 F3)."""
+    from plastic.backends.ttt_lm.backend import CHAT_ASSISTANT, CHAT_USER
+    from scripts.train.sft_ttt_chat import encode_example
+
+    for msg in ("Name one primary color.", "What is 2+2?", "Explain LayerNorm briefly.", "hi"):
+        ids, labels = encode_example(backend.tokenizer, [{"role": "user", "content": msg}, {"role": "assistant", "content": "x"}],
+                                     CHAT_USER, CHAT_ASSISTANT)
+        rt = backend.encode_chat(msg, first_turn=True)
+        assert ids[:len(rt)] == rt, (msg, ids[:len(rt)], rt)
+        assert all(l == -100 for l in labels[:len(rt)])          # the rendered prefix is never supervised
+
+
+def test_canary_score_and_gradient_read_the_same_function_from_a_pending_state(backend):
+    """From a pending state, the frozen probe NLL and the differentiated probe agree (both fold G into W)."""
+    from plastic.harness.canary import CanarySuite
+
+    probe = backend.encode("Water boils at one hundred degrees Celsius at sea level.")
+    suite = CanarySuite(domain="text", coherence=[probe], poison=[])
+    st = backend.init_state()
+    _, st = backend.process(backend.encode(TEXT)[:23], st)
+    nll = backend.score_suite(st, suite)["coherence"]
+    with backend._lock:
+        folded = backend._folded_probe_cache(st)
+    import torch as _t
+    x = _t.tensor([probe[:-1]], dtype=_t.long, device=backend.device)
+    with _t.no_grad(), backend._lock:
+        prev = getattr(backend.__class__, "_unused", None)
+    from plastic.backends.ttt_lm import modeling_ttt as M
+    prev_scale = getattr(M._tls, "eta_scale", 1.0)
+    M._tls.eta_scale = 0.0
+    try:
+        with _t.no_grad():
+            logits = []
+            i = 0
+            for n in backend._segments(x.shape[1], folded.seqlen_offset):
+                logits.append(backend.model(x[:, i:i + n], cache_params=folded, use_cache=True).logits[0])
+                i += n
+    finally:
+        M._tls.eta_scale = prev_scale
+    direct = float(_t.nn.functional.cross_entropy(_t.cat(logits, 0), _t.tensor(probe[1:], device=backend.device)))
+    assert abs(direct - nll) < 1e-3, (direct, nll)
