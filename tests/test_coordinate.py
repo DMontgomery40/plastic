@@ -16,7 +16,6 @@ from plastic.model.coordinate import (
     CoordinateConfig,
     CoordinateDynamics,
     CoordinateState,
-    Proposal,
     decode,
     encode,
     transport,
@@ -373,7 +372,7 @@ def test_amplitude_bound_holds_under_repeated_accepted_changes():
             else:  # an arbitrary accepted change of large magnitude
                 _, st, rep = m(x[:, sl], st, target_delta=tg[:, sl], commit=False)
                 wild = [_random_W(3, cfg, 50.0, seed=100 + 10 * c + i) for i in range(cfg.n_layers)]
-                st, acc = m.commit_proposal(st, Proposal(rep.proposal.pos, wild, rep.proposal.signals))
+                st, acc = m.commit_proposal(st, rep.proposal.with_omega(wild))
                 assert acc.applied
             signals.extend(rep.chunks)
             dW.append(float(rep.chunks[0].dW_norm.max()))
@@ -441,6 +440,54 @@ def test_proposals_are_committed_only_explicitly_and_transport_keeps_the_carry()
         outs.append(p)
     assert torch.equal(torch.cat(outs, 1), p_auto)
     _assert_states_close(st, s_auto, atol=0.0)
+
+
+def test_proposal_is_bound_to_its_model_and_state_version():
+    """ASTRA-233 P2: a proposal must not be committable onto another session at the same
+    position, twice along one lineage, by another model instance, or with mismatched shapes."""
+    m = _model()
+    xa, tga = _stream(1, 16, seed=21)
+    xb, tgb = _stream(1, 16, seed=22)
+    init = m.init_state(1)
+    _, sa, ra = m(xa[:, :8], init.clone(), target_delta=tga[:, :8], commit=False)
+    _, sb, rb = m(xb[:, :8], init.clone(), target_delta=tgb[:, :8], commit=False)
+    pa, pb = ra.proposal, rb.proposal
+    assert sa.pos == sb.pos == pa.pos == pb.pos == 8 and sa.pending is None and sb.pending is None
+    assert not torch.equal(pa.omega[0]["f_out"], pb.omega[0]["f_out"])
+    with pytest.raises(ValueError):  # same position, different session
+        m.commit_proposal(sb, pa)
+    sa2, acc = m.commit_proposal(sa, pa)
+    assert acc.applied and sa2.token != sa.token
+    with pytest.raises(ValueError):  # duplicate commit along one lineage
+        m.commit_proposal(sa2, pa)
+    # a fork (clone/detach) at the boundary is the same version and commits identically;
+    # re-committing on the pre-commit snapshot is such a fork, not a second mutation
+    for fork in (sa.clone(), sa.detach(), sa):
+        sf, accf = m.commit_proposal(fork, pa)
+        assert accf.applied and all(torch.equal(a, b) for a, b in zip(sf.r, sa2.r))
+        assert all(torch.equal(sf.omega[i][k], sa2.omega[i][k]) for i in range(2) for k in sa2.omega[i])
+    # a rejected proposal goes stale as soon as the stream moves on
+    _, sa_next, _ = m(xa[:, 8:16], sa, target_delta=tga[:, 8:16], commit=False)
+    with pytest.raises(ValueError):
+        m.commit_proposal(sa_next, pa)
+    # another model instance, even with identical weights, cannot commit it
+    other = _model()
+    other.load_state_dict(m.state_dict())
+    with pytest.raises(ValueError):
+        other.commit_proposal(sa, pa)
+    # replaced (e.g. projected) weights keep the binding; mismatched shapes are refused
+    projected = [{k: v * 0.5 for k, v in om.items()} for om in pa.omega]
+    sp, accp = m.commit_proposal(sa, pa.with_omega(projected))
+    assert accp.applied and all(sp.omega[i][k] is projected[i][k] for i in range(2) for k in projected[i])
+    assert all(torch.equal(a, b) for a, b in zip(sp.r, sa.r))
+    wide = [{k: torch.cat([v, v], 0) for k, v in om.items()} for om in pa.omega]
+    with pytest.raises(ValueError):
+        m.commit_proposal(sa, pa.with_omega(wide))
+    # a no-step proposal (beta_scale=0) commits as a no-op but still advances the version
+    _, s0, r0 = m(xa[:, :8], init.clone(), target_delta=tga[:, :8], beta_scale=0.0, commit=False)
+    s0c, acc0 = m.commit_proposal(s0, r0.proposal)
+    assert not acc0.applied and s0c.token != s0.token
+    assert all(s0c.omega[i][k] is s0.omega[i][k] for i in range(2) for k in s0.omega[i])
 
 
 def test_fixed_z_commit_is_the_discontinuous_diagnostic():

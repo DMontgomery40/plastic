@@ -33,8 +33,10 @@ under the committed chart, so an accepted proposal realizes ``z_next = E_W'(E_W^
 exactly and ``r_end`` is retained unchanged; a rejected proposal keeps ``omega_c`` and the
 same ``r_end``. Proposal and commit are separate: ``commit=True`` accepts every proposal
 (the unguarded learner used for meta-training); ``commit=False`` returns the proposal and
-leaves ``omega_c`` in the state until ``commit_proposal``. ``ChunkSignals`` describe the
-proposal; ``AcceptedChange`` describes what was retained.
+leaves ``omega_c`` in the state until ``commit_proposal``. A proposal is bound to the model
+instance and the exact state version (token) that produced it, so it cannot be committed onto
+another session or twice along one lineage. ``ChunkSignals`` describe the proposal;
+``AcceptedChange`` describes what was retained.
 
 Resolved ambiguities (all switchable in ``CoordinateConfig``):
 
@@ -59,7 +61,8 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import asdict, dataclass, fields
+import uuid
+from dataclasses import asdict, dataclass, field, fields, replace
 from typing import Any, Callable, Literal
 
 import torch
@@ -252,15 +255,24 @@ class PendingChunk:
         return PendingChunk([fn(t) for t in self.r_start], fn(self.x), fn(self.targets), fn(self.mask))
 
 
+def _new_token() -> str:
+    return uuid.uuid4().hex
+
+
 @dataclass
 class CoordinateState:
     """Per-session carried state: canonical carry r and committed omega for every layer,
-    the pending chunk, and the stream position. ``pos % chunk`` equals the pending length."""
+    the pending chunk, and the stream position. ``pos % chunk`` equals the pending length.
+
+    ``token`` identifies this state version. Every forward call and every commit returns a
+    state with a fresh token; ``clone``/``detach``/``to`` keep it, so a fork taken at a
+    boundary is the same version and may commit that boundary's proposal."""
 
     r: list[Tensor]  # per layer (B, D)
     omega: list[FastParams]  # per layer committed fast parameters, batch-leading
     pending: PendingChunk | None = None
     pos: int = 0
+    token: str = field(default_factory=_new_token)
 
     def _map(self, fn) -> "CoordinateState":
         return CoordinateState(
@@ -268,6 +280,7 @@ class CoordinateState:
             [{k: fn(v) for k, v in om.items()} for om in self.omega],
             None if self.pending is None else self.pending._map(fn),
             self.pos,
+            self.token,
         )
 
     def clone(self) -> "CoordinateState":
@@ -321,9 +334,18 @@ class AcceptedChange:
 
 @dataclass
 class Proposal:
+    """A boundary's candidate omega, bound to the state version (``origin_token``) and the
+    model instance (``model_uid``) that produced it. ``signals`` describe the raw proposal;
+    ``with_omega`` replaces the weights (e.g. after projection) and keeps the binding."""
+
     pos: int
     omega: list[FastParams]
     signals: ChunkSignals
+    origin_token: str = ""
+    model_uid: str = ""
+
+    def with_omega(self, omega: list[FastParams]) -> "Proposal":
+        return replace(self, omega=list(omega))
 
 
 @dataclass
@@ -431,6 +453,7 @@ class CoordinateCore(nn.Module):
         self.cfg = cfg
         self.blocks = nn.ModuleList([CoordinateBlock(cfg) for _ in range(cfg.n_layers)])
         self.norm_f = RMSNorm(cfg.d_model)
+        self.uid = uuid.uuid4().hex  # binds proposals to this instance; not part of state_dict
 
     def init_state(self, batch: int) -> CoordinateState:
         p = self.norm_f.weight
@@ -537,16 +560,15 @@ class CoordinateCore(nn.Module):
                 bound_end=chunk_bound(r_start_inf, cfg, n),
                 bound_peak=chunk_bound(r_start_inf, cfg, 1),
             )
-        return Proposal(pos=pos, omega=new_omega, signals=signals)
+        return Proposal(pos=pos, omega=new_omega, signals=signals, model_uid=self.uid)
 
     def _retain(
         self, omega: list[FastParams], r: list[Tensor], proposal: Proposal
     ) -> tuple[list[FastParams], list[Tensor], AcceptedChange]:
-        sig = proposal.signals
-        if not sig.stepped:
-            zeros = torch.zeros_like(sig.dW_norm)
-            return omega, r, AcceptedChange(proposal.pos, False, zeros, zeros.clone())
         new = proposal.omega
+        if all(new[i][k] is omega[i][k] for i in range(len(omega)) for k in omega[i]):
+            zeros = torch.zeros_like(proposal.signals.dW_norm)
+            return omega, r, AcceptedChange(proposal.pos, False, zeros, zeros.clone())
         if self.cfg.commit_rule == "fixed_z":
             eps, H = self.cfg.epsilon, self.cfg.n_heads
             r = [decode(nw, encode(old, ri, eps=eps, n_heads=H), eps=eps, n_heads=H) for old, nw, ri in zip(omega, new, r)]
@@ -560,9 +582,20 @@ class CoordinateCore(nn.Module):
 
     def commit_proposal(self, state: CoordinateState, proposal: Proposal) -> tuple[CoordinateState, AcceptedChange]:
         """Retain a proposal returned by a ``commit=False`` call. With the default transport rule
-        the canonical carry is kept exactly and only omega changes."""
-        if state.pos != proposal.pos or state.pending is not None:
-            raise ValueError("a proposal can only be committed at the boundary that produced it")
+        the canonical carry is kept exactly and only omega changes.
+
+        The proposal must come from this model instance and from exactly this state version
+        (or a clone of it). The returned state has a fresh token, so the same proposal cannot
+        be committed twice along one lineage; a rejected proposal simply goes stale."""
+        if proposal.model_uid != self.uid:
+            raise ValueError("proposal was produced by a different model instance")
+        if proposal.origin_token != state.token or state.pos != proposal.pos or state.pending is not None:
+            raise ValueError("proposal does not belong to this state version (foreign, stale or already committed)")
+        if len(proposal.omega) != len(state.omega) or any(
+            a.keys() != b.keys() or any(a[k].shape != b[k].shape for k in a)
+            for a, b in zip(proposal.omega, state.omega)
+        ):
+            raise ValueError("proposal omega does not match the state's layers, keys or shapes")
         omega, r, acc = self._retain(state.omega, state.r, proposal)
         return CoordinateState(r=list(r), omega=list(omega), pending=None, pos=state.pos), acc
 
@@ -643,6 +676,8 @@ class CoordinateCore(nn.Module):
                 elif not freeze:
                     report.proposal = proposal
         new_state = CoordinateState(r=r, omega=omega, pending=pend, pos=pos)
+        if report.proposal is not None:
+            report.proposal = replace(report.proposal, origin_token=new_state.token)
         return torch.cat(outs, dim=1), new_state, report
 
 
