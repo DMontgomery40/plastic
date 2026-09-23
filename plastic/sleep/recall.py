@@ -51,6 +51,22 @@ def normalize(text: str) -> str:
     return _WS.sub(" ", text).strip()
 
 
+def repetition_share(text: str, n: int = 4) -> float:
+    """Share of the reply's n-grams that repeat an earlier n-gram in the same reply: 0 for fresh text, high when a
+    reply loops on itself. A within-reply counterpart to the across-reply cluster share."""
+    words = normalize(text).split()
+    grams = [tuple(words[i:i + n]) for i in range(len(words) - n + 1)]
+    if not grams:
+        return 0.0
+    seen: set[tuple[str, ...]] = set()
+    repeats = 0
+    for g in grams:
+        if g in seen:
+            repeats += 1
+        seen.add(g)
+    return repeats / len(grams)
+
+
 def score_reply(expected: str, reply: str) -> dict[str, bool]:
     e, r = normalize(expected), normalize(reply)
     return {"contains": bool(e) and e in r, "exact": bool(e) and e == r}

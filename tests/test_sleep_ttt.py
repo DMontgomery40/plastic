@@ -500,3 +500,12 @@ def test_dreams_that_do_not_fit_the_window_are_rejected_and_accounted_never_trai
     assert [len(x.ids) for x in fit] == [32, 10] and [(len(x.ids), len(x.teacher_ids)) for x in rest] == [(33, 20), (20, 33)]
     fit, rest = split_by_length([d(30, 45)], 32)                       # teacher longer than student
     assert fit == [] and len(rest) == 1
+
+
+def test_repetition_share_measures_within_reply_looping():
+    from plastic.sleep.recall import repetition_share
+
+    assert repetition_share("My cat is called Marlowe and I live in Denver near the mountains.") == 0.0
+    looped = "I'm sorry to hear that you missed her birthday call. I'm sorry to hear that you missed her birthday call. I'm sorry to hear that you missed her call."
+    assert repetition_share(looped) > 0.5
+    assert repetition_share("short") == 0.0
