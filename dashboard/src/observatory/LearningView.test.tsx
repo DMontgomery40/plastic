@@ -140,6 +140,49 @@ describe('Learning view', () => {
     expect(within(restored).getByText('2.960, 4.761, 5.136')).toBeTruthy();
   });
 
+  it('preserves independent report and ablation selections across changes and reloads', async () => {
+    const index = committed();
+    stub({ ...index, sets: [...index.sets, { ...phys(index), id: 'second-report' }] });
+    render(<ObservatoryScreen />);
+    const ablations = await screen.findByRole('navigation', { name: 'Ablation sets' });
+    fireEvent.click(within(ablations).getByRole('button', { name: 'coordinate-ablation-eta10' }));
+    const reports = screen.getByRole('navigation', { name: 'Report sets' });
+    for (const id of ['second-report', 'phys_mps_3k', 'second-report']) {
+      fireEvent.click(within(reports).getByRole('button', { name: id }));
+      expect(parseRoute(window.location.hash)).toEqual({ view: 'learning', run: id, arm: 'coordinate-ablation-eta10' });
+      expect(screen.getByText('2.960, 4.761, 5.136')).toBeTruthy();
+    }
+    fireEvent.click(within(ablations).getByRole('button', { name: 'coordinate-ablation-post' }));
+    expect(parseRoute(window.location.hash).run).toBe('second-report');
+    cleanup();
+    render(<ObservatoryScreen />);
+    const restoredReports = await screen.findByRole('navigation', { name: 'Report sets' });
+    expect(within(restoredReports).getByRole('button', { name: 'second-report' }).getAttribute('aria-current')).toBe('page');
+    const restored = await screen.findByRole('navigation', { name: 'Ablation sets' });
+    expect(within(restored).getByRole('button', { name: 'coordinate-ablation-post' }).getAttribute('aria-current')).toBe('page');
+  });
+
+  it.each(['dream', 'removed-archive', null])('resolves the displayed comparison when changing reports from %s', async (arm) => {
+    const index = committed();
+    stub({ ...index, sets: [...index.sets, { ...phys(index), id: 'second-report' }] });
+    window.history.replaceState(null, '', formatRoute({ view: 'runs', run: 'sleep-run', arm }));
+    render(<ObservatoryScreen />);
+    fireEvent.click(screen.getByRole('button', { name: 'Learning' }));
+    const reports = await screen.findByRole('navigation', { name: 'Report sets' });
+    fireEvent.click(within(reports).getByRole('button', { name: 'second-report' }));
+    expect(parseRoute(window.location.hash)).toEqual({ view: 'learning', run: 'second-report', arm: 'coordinate-ablation-all' });
+  });
+
+  it('clears a foreign comparison when no ablation exists', async () => {
+    const index = reportsOnly();
+    stub({ ...index, sets: [...index.sets, { ...phys(index), id: 'second-report' }] });
+    window.history.replaceState(null, '', '/#sleep/learning/phys_mps_3k/dream');
+    render(<ObservatoryScreen />);
+    const reports = await screen.findByRole('navigation', { name: 'Report sets' });
+    fireEvent.click(within(reports).getByRole('button', { name: 'second-report' }));
+    expect(parseRoute(window.location.hash).arm).toBeNull();
+  });
+
   it('switches between current, stale and empty ablations without leaking prior rows', async () => {
     const base = withAblation([variant('full')], ['no_fast']);
     const first = base.sets.find((s): s is AblationSet => s.kind === 'ablation')!;

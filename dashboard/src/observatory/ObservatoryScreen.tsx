@@ -103,7 +103,7 @@ export function ObservatoryScreen() {
         </nav>
         ) : null}
       </div>
-      {learning ? <LearningView setId={route.run} ablationId={route.arm} onSelect={(id) => go({ run: id, arm: null })} onSelectAblation={(run, arm) => go({ run, arm })} /> : sleepBody}
+      {learning ? <LearningView setId={route.run} ablationId={route.arm} onSelect={(run, arm) => go({ run, arm })} onSelectAblation={(run, arm) => go({ run, arm })} /> : sleepBody}
     </div>
   );
 }
