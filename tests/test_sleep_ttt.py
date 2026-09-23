@@ -250,9 +250,22 @@ def test_gate_rejects_the_saved_step100_collapsed_runs_and_passes_their_baseline
         assert base["passed"] is True
 
 
+def test_session_labels_supervise_user_tokens_by_default_and_keep_sft_masks_otherwise():
+    from plastic.sleep.ttt import session_labels
+
+    ids = [1, 30, 31, 32, 40, 41, 2]            # BOS, user tokens, assistant tag+reply, EOS
+    sft = [-100, -100, -100, -100, 41, 41, 2]   # what the SFT encoder produces: prompt masked
+    assert session_labels(ids, sft, "all") == [-100, 30, 31, 32, 40, 41, 2]
+    assert session_labels(ids, sft, "assistant") == sft
+    assert session_labels([], [], "all") == []
+
+
 def test_sleep_config_validation():
     SleepConfig().validate()
     SleepConfig(provenance="all").validate()
+    SleepConfig(session_loss="assistant").validate()
+    with pytest.raises(ValueError):
+        SleepConfig(session_loss="user").validate()
     for bad in ({"method": "dream"}, {"target": "lora"}, {"steps": 0}, {"replay_ratio": 1.5}, {"anchor_lambda": -0.1}, {"lr": 0.0}, {"seq_len": 8}, {"provenance": "some"}):
         with pytest.raises(ValueError):
             SleepConfig(**bad).validate()

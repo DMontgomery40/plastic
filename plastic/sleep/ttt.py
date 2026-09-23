@@ -70,6 +70,9 @@ class SleepConfig:
     # behavioral locality: after sleep, no single reply may be given to more than this share of the probes (unless it
     # already was before). A run that lowers held-out NLL while many questions get the same sentence has collapsed.
     tolerance_collapse: float = 0.25
+    # which tokens of a SESSION turn carry the loss: "all" (the user's statements are the content to consolidate;
+    # default) or "assistant" (SFT-style, which can only teach the model to reproduce its own replies).
+    session_loss: Literal["all", "assistant"] = "all"
     recall_max_new_tokens: int = 48
     seed: int = 0
     device: str = "cpu"
@@ -94,6 +97,8 @@ class SleepConfig:
             raise ValueError("lr and distill_temperature must be positive")
         if self.provenance not in ("accepted", "all"):
             raise ValueError(f"unknown provenance rule {self.provenance!r}")
+        if self.session_loss not in ("all", "assistant"):
+            raise ValueError(f"unknown session_loss {self.session_loss!r}")
 
 
 @dataclass
@@ -196,6 +201,22 @@ def harvest_summary(harvests: list[SessionHarvest]) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------------------------------- data
+
+
+def session_labels(ids: list[int], labels: list[int], session_loss: str) -> list[int]:
+    """Labels for one accepted turn. ``"all"``: every token after BOS is supervised, so the user's statement is
+    learned, not only the assistant's reply; ``"assistant"``: the SFT labels (user tokens masked), which on the
+    step-100 checkpoint only taught the model to repeat its own replies and collapsed."""
+    if session_loss == "all" and ids:
+        return [-100] + ids[1:]  # BOS has no target; everything else is supervised
+    return labels
+
+
+def session_example(tok, prompt: str, completion: str, session_loss: str) -> tuple[list[int], list[int]]:
+    from plastic.backends.ttt_lm.backend import encode_conversation
+
+    ids, labels = encode_conversation(tok, [{"role": "user", "content": prompt}, {"role": "assistant", "content": completion}])
+    return ids, session_labels(ids, labels, session_loss)
 
 
 def pack_examples(examples: list[tuple[list[int], list[int]]], seq_len: int, pad_id: int) -> list[tuple[list[int], list[int]]]:
@@ -441,8 +462,7 @@ def sleep_ttt(
         log(f"[sleep] anchor: {len(leaves)} session states folded with lambda {cfg.anchor_lambda}")
     else:
         pad_id = int(tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id)
-        session_examples = [encode_conversation(tok, [{"role": "user", "content": t.prompt}, {"role": "assistant", "content": t.completion}])
-                            for t in accepted]
+        session_examples = [session_example(tok, t.prompt, t.completion, cfg.session_loss) for t in accepted]
         session_packed = pack_examples(session_examples, cfg.seq_len, pad_id)
         replay_packed = pack_examples([encode_conversation(tok, m) for m in replay], cfg.seq_len, pad_id) if replay else []
         report["packed"] = {"session": len(session_packed), "replay": len(replay_packed)}
