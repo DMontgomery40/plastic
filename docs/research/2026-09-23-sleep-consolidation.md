@@ -339,3 +339,28 @@ That run motivates the current conditioned method but does not evaluate it. The
 current method also fixes teacher isolation for all-parameter updates, aligns
 teacher/student reply tokens and explicitly rejects over-length items. New results
 belong with the exact method version and outputs in the results archive.
+
+### 2026-09-23, step-100 checkpoint: fact-conditioned Dream (current method)
+
+[Outputs](results/sleep-2026-09-23/dream_step100_w0_conditioned/sleep_controls.json) and the
+[sleep report](results/sleep-2026-09-23/dream_step100_w0_conditioned/sleep_dream_report.json);
+source recorded as `08e726a+dirty` (the working-tree patch at launch was not captured). Six taught
+facts, W0 target, 20 steps, lr 3e-5, dream temperature 0.7, uniform token weights. The teacher was
+shown each accepted turn; it still produced the same greeting in 47 of 48 dreams, which the
+duplicate filter removed. The one kept dream had a gain of +2.21 over the reset model, but its
+fast-weight-only gain (teacher state without the quoted turn) was −0.60: the whole gain came from
+the quoted turn in the prompt, so what the student distilled was context, not consolidated fast
+weights. Taught recall 0/6 before and after; held-out NLL 1.683 → 1.574; cluster share 0.03; gate
+passed. The single new verbatim hit was the general-knowledge probe (capital of France), not a
+taught fact. Reading: at step 100 the model cannot articulate a taught fact even with the fact in
+front of it, so Dream has nothing to consolidate; the gain split now distinguishes context
+distillation from fast-to-slow transfer per dream and is the number to watch on the final checkpoint.
+
+### 2026-09-23, step-100 checkpoint: inner surprise versus output entropy (sampling question)
+
+Recorded in the [importance-weighting proposal, section 3](2026-09-23-importance-weighting-proposal.md)
+with [outputs](results/sleep-2026-09-23/surprise_vs_entropy_step100/surprise_vs_entropy.json). The
+fast learner's per-token surprise adds about 0.002 R² and 0.004 AUC to output entropy as a predictor
+of the next token's error on 60 held-out conversations, and neither signal separates looping tokens
+from fresh ones in free generation. Entropy-adaptive sampling is the baseline; no surprise-driven
+sampler is built. To be repeated once on the final checkpoint.
