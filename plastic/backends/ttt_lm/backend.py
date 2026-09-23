@@ -114,7 +114,20 @@ class TTTBackend:
         p = Path(checkpoint_dir)
         raw = json.loads((p / "config.json").read_text())
         cfg = M.TTTConfig(**{k: v for k, v in raw.items() if k not in ("architectures", "auto_map", "transformers_version", "dtype", "model_type")})
-        model = M.TTTForCausalLM.from_pretrained(str(p), config=cfg, dtype=dtype)
+        # build from the vendored class and load the safetensors directly: no remote-code prompt, no
+        # auto-class type warning, and exactly the weights the digest covers
+        from safetensors.torch import load_file
+
+        model = M.TTTForCausalLM(cfg).to(dtype)
+        state: dict[str, torch.Tensor] = {}
+        for f in sorted(p.glob("*.safetensors")):
+            state.update(load_file(str(f)))
+        missing, unexpected = model.load_state_dict(state, strict=False)
+        missing = [k for k in missing if k != "lm_head.weight" or not cfg.tie_word_embeddings]
+        if missing or unexpected:
+            raise RuntimeError(f"TTT checkpoint mismatch: missing {missing[:5]} unexpected {unexpected[:5]}")
+        if cfg.tie_word_embeddings:
+            model.lm_head.weight = model.model.embed_tokens.weight
         model.eval()
         model.requires_grad_(False)
         dev = torch.device(device)
