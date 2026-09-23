@@ -157,6 +157,20 @@ def group_counts(results: list[dict[str, Any]], probes: dict[str, list]) -> dict
     return out
 
 
+def ceiling_statements(taught_facts: list, probe, mode: str) -> list:
+    """What the ceiling session is taught before one probe. ``all`` (the protocol): every fact, so the probe measures
+    in-context recall under the load of the whole teaching session. ``single``: only the probed fact, so the probe
+    measures whether the model can use one taught fact at all. The gap between the two is the session-load cost."""
+    if mode == "all":
+        return list(taught_facts)
+    if mode != "single":
+        raise ValueError(f"unknown ceiling mode {mode!r}")
+    own = [f for f in taught_facts if f[1] == probe.question]
+    if not own:
+        raise ValueError(f"no taught statement for probe {probe.question!r}")
+    return own
+
+
 def arm_config(arm: str, args: argparse.Namespace) -> "SleepConfig":
     """One sleep arm's configuration. The gated arms consume accepted turns and exclude flagged ones (the product
     rule); ``ungated`` is the no-gate control: every turn, rolled-back and flagged alike (ASTRA-182 addendum)."""
@@ -196,6 +210,8 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--replay-revision", default=SMOLTALK_REVISION, help="HuggingFaceTB/smoltalk revision for replay and held-out rows (empty follows main)")
     ap.add_argument("--facts", type=int, default=24, help="how many of the taught facts to use (first N)")
+    ap.add_argument("--ceiling-mode", default="all", choices=["all", "single"],
+                    help="ceiling arm: teach every fact before each probe (all, the protocol) or only the probed fact (single)")
     ap.add_argument("--poison", action="store_true", help="also teach the planted world-knowledge contradictions (uptake is measured)")
     args = ap.parse_args()
     global FACTS_TAUGHT
@@ -267,7 +283,7 @@ def main() -> None:
 
     results: dict[str, Any] = {"checkpoint": os.path.abspath(args.checkpoint), "checkpoint_digest": digest, "device": args.device,
                                "code_commit": _git_head(), "started_at_unix": int(t0),
-                               "steps": args.steps, "target": args.target, "lr": args.lr, "replay_ratio": args.replay_ratio, "batch_size": args.batch_size, "session_loss": args.session_loss, "prompt_loss_weight": args.prompt_loss_weight, "augment": args.augment, "teach_temperature": args.teach_temperature, "dream_temperature": args.dream_temperature, "replay_revision": (args.replay_revision or None), "facts": len(FACTS_TAUGHT), "poison": bool(args.poison), "arms": {}}
+                               "steps": args.steps, "target": args.target, "lr": args.lr, "replay_ratio": args.replay_ratio, "batch_size": args.batch_size, "session_loss": args.session_loss, "prompt_loss_weight": args.prompt_loss_weight, "augment": args.augment, "teach_temperature": args.teach_temperature, "dream_temperature": args.dream_temperature, "replay_revision": (args.replay_revision or None), "ceiling_mode": args.ceiling_mode, "facts": len(FACTS_TAUGHT), "poison": bool(args.poison), "arms": {}}
     arms = [a.strip() for a in args.arms.split(",") if a.strip()]
 
     # 2) floor: the parent from a fresh session (greedy recall and the expected-answer log-probability, like every sleep "before")
@@ -296,7 +312,7 @@ def main() -> None:
                     if not q:
                         continue
                     s.reset()
-                    for i, (stmt, *_r) in enumerate(taught_facts):
+                    for i, (stmt, *_r) in enumerate(ceiling_statements(taught_facts, p, args.ceiling_mode)):
                         s.chat(stmt, max_new_tokens=8, temperature=args.teach_temperature, top_k=40, seed=args.seed + i)
                     r = s.chat(q, max_new_tokens=args.max_new_tokens, temperature=1e-3, top_k=1, seed=0)
                     sc = score_reply(p.answer, r.completion)

@@ -1,3 +1,4 @@
+import pytest
 """The matched-controls experiment's pure pieces: probe construction and per-group recall counting."""
 
 from scripts.experiments.sleep_controls import FACTS_BOUNDARY, FACTS_POISON, FACTS_ROLLED, FACTS_TAUGHT, GENERAL, build_probes, group_counts, study_set
@@ -81,3 +82,21 @@ def test_arm_configs_gate_the_gated_arms_and_open_the_ungated_control():
     cfg.validate()
     assert (cfg.method, cfg.provenance, cfg.flagged_policy) == ("replay", "all", "include")
     assert arm_config("replay", argparse.Namespace(**{**base, "replay_revision": ""})).replay_revision is None
+
+
+def test_ceiling_statements_teach_everything_or_only_the_probed_fact():
+    """The ceiling arm's two modes: the protocol teaches every fact before each probe (in-context recall under session
+    load); single mode teaches only the probed fact (can the model use one taught fact at all). Unknown probes fail loudly."""
+    from plastic.sleep.recall import RecallProbe
+    from scripts.experiments.sleep_controls import FACTS_BOUNDARY, FACTS_TAUGHT, ceiling_statements
+
+    facts = FACTS_TAUGHT[:3] + FACTS_BOUNDARY[:1]
+    probe = RecallProbe(FACTS_TAUGHT[1][1], FACTS_TAUGHT[1][2], FACTS_TAUGHT[1][4])
+    assert ceiling_statements(facts, probe, "all") == facts
+    assert ceiling_statements(facts, probe, "single") == [FACTS_TAUGHT[1]]
+    boundary_probe = RecallProbe(FACTS_BOUNDARY[0][1], FACTS_BOUNDARY[0][2], FACTS_BOUNDARY[0][4])
+    assert ceiling_statements(facts, boundary_probe, "single") == [FACTS_BOUNDARY[0]]
+    with pytest.raises(ValueError, match="no taught statement"):
+        ceiling_statements(facts, RecallProbe("Who?", "nobody"), "single")
+    with pytest.raises(ValueError, match="unknown ceiling mode"):
+        ceiling_statements(facts, probe, "some")
