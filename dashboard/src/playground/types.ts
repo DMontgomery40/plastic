@@ -43,7 +43,7 @@ export interface ModelSummary {
 }
 
 // ---- sleep: consolidation of accepted session learning into a child model (plastic/sleep/ttt.py)
-export type SleepMethod = 'replay' | 'distill' | 'anchor';
+export type SleepMethod = 'replay' | 'distill' | 'anchor' | 'dream';
 export type SleepTarget = 'w0' | 'all';
 export type SleepStatus = 'running' | 'accepted' | 'accepted_unmeasured' | 'rejected' | 'failed' | 'unknown';
 

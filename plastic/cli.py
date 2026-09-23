@@ -446,7 +446,7 @@ def build_parser() -> argparse.ArgumentParser:
     sl.add_argument("--device", default="cpu")
     sl.add_argument("--seed", type=int, default=0)
     # TTT backend (chat models)
-    sl.add_argument("--method", default="replay", choices=["replay", "distill", "anchor"], help="ttt: consolidation method")
+    sl.add_argument("--method", default="replay", choices=["replay", "distill", "anchor", "dream"], help="ttt: consolidation method")
     sl.add_argument("--target", default="w0", choices=["w0", "all"], help="ttt: which slow parameters change")
     sl.add_argument("--replay-ratio", type=float, default=0.5, help="ttt: share of each batch from the SFT replay corpus")
     sl.add_argument("--replay-rows", type=int, default=64)

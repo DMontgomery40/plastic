@@ -341,3 +341,9 @@ learning rate, steps or replay share at which fine-tuning on the accepted turns 
 fact retrievable in a fresh session without damage. That is the outcome the community evidence
 predicted for bare statements. The next measurement uses the study-set augmentation and the
 storage probe, so "stored but not retrievable" and "not stored" can be told apart.
+
+**Bounds on the sweep reading (after ASTRA-173).** "There is no setting of learning rate, steps or
+replay share" above overstates a five-point sweep: the supported statement is that none of the
+tested settings retained a fact, on this checkpoint, with raw turns. Likewise the answer
+log-probability is a likelihood measurement; a rise without recall is consistent with a readout
+problem but does not by itself prove storage, and its absence does not prove capacity failure.

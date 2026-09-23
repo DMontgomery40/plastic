@@ -9,6 +9,7 @@ const METHOD_LABEL: Record<SleepMethod, string> = {
   replay: 'Replay: fine-tune on accepted turns + SFT replay',
   distill: 'Distill: fast weights teach the reset model',
   anchor: 'Anchor: move W0 toward session fast weights',
+  dream: 'Dream: the session fast weights generate study items; only informative ones are kept',
 };
 const TARGET_LABEL: Record<SleepTarget, string> = { w0: 'initial fast weights (W0)', all: 'all parameters' };
 
@@ -172,6 +173,7 @@ export function SleepPanel({ models }: { models: ModelSummary[] }) {
             <option value="anchor">anchor</option>
             <option value="replay">replay</option>
             {isPublic ? null : <option value="distill">distill</option>}
+            {isPublic ? null : <option value="dream">dream</option>}
           </Select>
         </Field>
         <Field label="Changes" htmlFor="sleep-target" hint={TARGET_LABEL[target]}>

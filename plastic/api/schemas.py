@@ -48,7 +48,7 @@ class RecallProbeIn(BaseModel):
 class SleepRequest(BaseModel):
     """Options for one sleep run on a TTT chat model (see docs/research/2026-09-23-sleep-consolidation.md)."""
 
-    method: Literal["replay", "distill", "anchor"] = "replay"
+    method: Literal["replay", "distill", "anchor", "dream"] = "replay"
     target: Literal["w0", "all"] = "w0"
     steps: int = Field(default=40, ge=1, le=2000)
     lr: float = Field(default=1e-4, gt=0.0, le=1e-2)

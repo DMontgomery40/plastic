@@ -298,7 +298,7 @@ def test_sleep_config_validation():
     SleepConfig(session_loss="assistant").validate()
     with pytest.raises(ValueError):
         SleepConfig(session_loss="user").validate()
-    for bad in ({"method": "dream"}, {"target": "lora"}, {"steps": 0}, {"replay_ratio": 1.5}, {"anchor_lambda": -0.1}, {"lr": 0.0}, {"seq_len": 8}, {"provenance": "some"}, {"prompt_loss_weight": 1.5}):
+    for bad in ({"method": "nap"}, {"target": "lora"}, {"steps": 0}, {"replay_ratio": 1.5}, {"anchor_lambda": -0.1}, {"lr": 0.0}, {"seq_len": 8}, {"provenance": "some"}, {"prompt_loss_weight": 1.5}):
         with pytest.raises(ValueError):
             SleepConfig(**bad).validate()
 
@@ -362,3 +362,32 @@ def test_sleep_end_to_end_on_the_base_model(tmp_path):
     assert rep2["status"] == "accepted_unmeasured" and len(rep2["losses"]) == 2 and all(l == l for l in rep2["losses"])
     assert rep2["gate"]["measured"] is False and rep2["gate"]["passed"] is None and "exploratory" in rep2["gate"]["note"]
     assert rep["gate"]["measured"] is True and rep["gate"]["passed"] is True
+
+
+def test_dream_selection_drops_degenerate_and_duplicate_dreams_and_keeps_high_gain():
+    from plastic.sleep.dream import Dream, DreamReport, is_degenerate, select_dreams
+
+    assert is_degenerate("yes")
+    assert is_degenerate("the the the the the the cat")
+    assert is_degenerate("meet you meet you meet you meet you")
+    assert not is_degenerate("My cat is called Marlowe and I live in Denver.")
+
+    def d(text, t_lp, s_lp):
+        return Dream("p", text, [1, 5, 6], [-100, 5, 6], t_lp, s_lp, "s")
+
+    cands = [d("My cat is called Marlowe.", -1.0, -3.0), d("My cat is called Marlowe!", -1.1, -3.1), d("I hope you find what you are looking for.", -1.0, -1.05),
+             d("hi", -0.1, -5.0), d("I live in Denver, Colorado, near the mountains.", -1.5, -2.5)]
+    rep = DreamReport(generated=len(cands))
+    kept = select_dreams(cands, min_gain=0.5, max_keep=10, report=rep)
+    assert [k.text for k in kept] == ["My cat is called Marlowe.", "I live in Denver, Colorado, near the mountains."]  # sorted by gain
+    assert (rep.degenerate, rep.duplicate, rep.low_gain) == (1, 1, 1)
+    assert select_dreams(cands, min_gain=0.5, max_keep=1, report=DreamReport()) == kept[:1]
+    assert rep.to_dict()["kept"][0]["gain"] == 2.0
+
+
+def test_sleep_config_accepts_dream_and_bounds_its_knobs():
+    SleepConfig(method="dream").validate()
+    with pytest.raises(ValueError):
+        SleepConfig(method="dream", dream_per_prompt=0).validate()
+    with pytest.raises(ValueError):
+        SleepConfig(method="dream", dream_max_new_tokens=2).validate()

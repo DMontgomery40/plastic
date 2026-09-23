@@ -211,7 +211,7 @@ def test_sleep_routes_start_a_process_and_report_its_outcome(api, tmp_path, monk
     assert api.client.post(f"/api/models/{api.text}/sleep", json={}).status_code == 400
     assert api.client.post("/api/models/nope/sleep", json={}).status_code == 404
     # request-shape family
-    for bad in ({"method": "dream"}, {"steps": 0}, {"replay_ratio": 2}, {"sessions": []}, {"probes": [{"question": "", "answer": "x"}]}):
+    for bad in ({"method": "nap"}, {"steps": 0}, {"replay_ratio": 2}, {"sessions": []}, {"probes": [{"question": "", "answer": "x"}]}):
         assert api.client.post("/api/models/chat_sleep/sleep", json=bad).status_code == 422, bad
     assert api.client.post("/api/models/chat_sleep/sleep", json={"sessions": ["missing"]}).status_code == 400
     r = api.client.post("/api/models/chat_sleep/sleep", json={"method": "distill", "steps": 3, "sessions": ["teach"],

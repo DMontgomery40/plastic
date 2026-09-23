@@ -48,7 +48,7 @@ from plastic.store import ArtifactStore
 
 ACCEPTED_KINDS = frozenset({"commit", "scale", "project"})
 FAST_WEIGHT_NAMES = ("W1", "b1", "W2", "b2")
-Method = Literal["replay", "distill", "anchor"]
+Method = Literal["replay", "distill", "anchor", "dream"]
 Target = Literal["w0", "all"]
 
 
@@ -85,8 +85,15 @@ class SleepConfig:
     # so an experiment can measure what the provenance rule buys; the API and UI never offer it.
     provenance: Literal["accepted", "all"] = "accepted"
 
+    # dream: the session's fast weights (teacher) generate study items; only dreams the teacher finds at least
+    # ``dream_min_gain`` nats/token more likely than the reset model are kept (they carry session information)
+    dream_per_prompt: int = 3
+    dream_min_gain: float = 0.2
+    dream_max_keep: int = 24
+    dream_max_new_tokens: int = 48
+
     def validate(self) -> None:
-        if self.method not in ("replay", "distill", "anchor"):
+        if self.method not in ("replay", "distill", "anchor", "dream"):
             raise ValueError(f"unknown sleep method {self.method!r}")
         if self.target not in ("w0", "all"):
             raise ValueError(f"unknown sleep target {self.target!r}")
@@ -104,6 +111,8 @@ class SleepConfig:
             raise ValueError(f"unknown session_loss {self.session_loss!r}")
         if not 0.0 <= self.prompt_loss_weight <= 1.0:
             raise ValueError("prompt_loss_weight must be within [0, 1]")
+        if self.dream_per_prompt < 1 or self.dream_max_keep < 1 or self.dream_max_new_tokens < 4:
+            raise ValueError("dream_per_prompt and dream_max_keep must be >= 1 and dream_max_new_tokens >= 4")
 
 
 @dataclass
@@ -515,14 +524,43 @@ def sleep_ttt(
         session_packed = pack_examples(session_examples, cfg.seq_len, pad_id)
         replay_packed = pack_examples([encode_conversation(tok, m) for m in replay], cfg.seq_len, pad_id) if replay else []
         report["packed"] = {"session": len(session_packed), "replay": len(replay_packed)}
+        teachers: list[Any] = []
         teachers = None
-        if cfg.method == "distill":
+        dream_rows: list[tuple[list[int], int, int]] = []  # (student ids, reply start, teacher index) for the dream method
+        if cfg.method in ("distill", "dream"):
             teachers = _teacher_states(store, be, harvests, report, log)
             if not teachers:
                 report["status"] = "rejected"
-                report["reason"] = "distill needs committed session states"
+                report["reason"] = f"{cfg.method} needs committed session states"
                 save_report()
                 return report
+        if cfg.method == "dream":
+            from plastic.sleep.dream import DreamReport, generate_dreams, select_dreams
+
+            with_state = [h for h in harvests if h.accepted_turns and store.load_runner_state(h.session_id).get("committed") is not None]
+            dream_report = DreamReport()
+            candidates = []
+            for ti, h in enumerate(with_state[:len(teachers)]):
+                ds = generate_dreams(be, teachers[ti], session_id=h.session_id, per_prompt=cfg.dream_per_prompt,
+                                     max_new_tokens=cfg.dream_max_new_tokens, seed=cfg.seed + ti, log=log)
+                for d in ds:
+                    d.teacher_index = ti  # type: ignore[attr-defined]
+                candidates.extend(ds)
+            dream_report.generated = len(candidates)
+            kept = select_dreams(candidates, min_gain=cfg.dream_min_gain, max_keep=cfg.dream_max_keep, report=dream_report)
+            report["dreams"] = dream_report.to_dict()
+            log(f"[sleep] dreams: {dream_report.generated} generated, {len(kept)} kept (gain >= {cfg.dream_min_gain}), "
+                f"{dream_report.degenerate} degenerate, {dream_report.duplicate} duplicate, {dream_report.low_gain} low gain")
+            if not kept:
+                report["status"] = "rejected"
+                report["reason"] = "no dream carried session information above the gain threshold"
+                save_report()
+                return report
+            for d in kept:
+                n_prefix = len(be.encode_chat(d.prompt, first_turn=True))
+                dream_rows.append((d.ids[:cfg.seq_len], n_prefix, d.teacher_index))  # type: ignore[attr-defined]
+            session_packed = [(r[0], [-100] + r[0][1:], [1.0] * len(r[0])) for r in dream_rows]  # rows are not packed: one dream per row
+            report["packed"]["session"] = len(session_packed)
         params = select_target(model, cfg.target)
         opt = torch.optim.AdamW(params, lr=cfg.lr, betas=(0.9, 0.95), weight_decay=0.0)
         n_session, n_replay = batch_mix(cfg.batch_size, cfg.replay_ratio, bool(replay_packed))
@@ -552,6 +590,27 @@ def sleep_ttt(
                     logits = model(x, use_cache=False).logits[:, :-1].float()
                     per_tok = F.cross_entropy(logits.reshape(-1, logits.shape[-1]), y[:, 1:].reshape(-1), ignore_index=-100, reduction="none").view(w.shape)
                     loss = (per_tok * w).sum() / w.sum().clamp_min(1.0)
+                elif cfg.method == "dream":
+                    picks = [rng.randrange(len(dream_rows)) for _ in range(n_session)]
+                    rows = [dream_rows[i] for i in picks]
+                    L = max(len(r[0]) for r in rows)
+                    x = torch.tensor([r[0] + [pad_id] * (L - len(r[0])) for r in rows], dtype=torch.long, device=dev)
+                    T = cfg.distill_temperature
+                    with torch.no_grad():
+                        # teacher: the dream continues the session (no BOS, session position); student: the dream as a fresh
+                        # first turn. Token-for-token they agree from the reply onward, so the KL is taken on reply positions.
+                        t_rows = []
+                        for r in rows:
+                            ids, n_prefix, ti = r
+                            t_rows.append(_teacher_logits(be, teachers[ti], ids))  # same rendering, read from the session state
+                    t_logits = torch.stack([torch.nn.functional.pad(t, (0, 0, 0, L - t.shape[0])) for t in t_rows])
+                    s_logits = model(x, use_cache=False).logits.float()
+                    reply_mask = torch.zeros(x.shape, dtype=torch.float32, device=dev)
+                    for i, r in enumerate(rows):
+                        reply_mask[i, r[1]:len(r[0])] = 1.0  # predictions at positions >= reply start (logits at t predict t+1)
+                    reply_mask = reply_mask[:, 1:]
+                    kl = F.kl_div(F.log_softmax(s_logits[:, :-1] / T, -1), F.log_softmax(t_logits[:, :-1] / T, -1), log_target=True, reduction="none").sum(-1)
+                    loss = (kl * reply_mask).sum() / reply_mask.sum().clamp_min(1.0) * (T * T)
                 else:
                     x = torch.tensor([b[0] for b in sess], dtype=torch.long, device=dev)
                     with torch.no_grad():
@@ -561,11 +620,11 @@ def sleep_ttt(
                     pad_mask = (x != pad_id).float()
                     kl = F.kl_div(F.log_softmax(s_logits / T, -1), F.log_softmax(t_logits / T, -1), log_target=True, reduction="none").sum(-1)
                     loss = (kl * pad_mask).sum() / pad_mask.sum().clamp_min(1.0) * (T * T)
-                    if rep:
-                        xr = torch.tensor([b[0] for b in rep], dtype=torch.long, device=dev)
-                        yr = torch.tensor([b[1] for b in rep], dtype=torch.long, device=dev)
-                        lr_logits = model(xr, use_cache=False).logits[:, :-1].float()
-                        loss = loss + F.cross_entropy(lr_logits.reshape(-1, lr_logits.shape[-1]), yr[:, 1:].reshape(-1), ignore_index=-100)
+                if cfg.method in ("distill", "dream") and rep:
+                    xr = torch.tensor([b[0] for b in rep], dtype=torch.long, device=dev)
+                    yr = torch.tensor([b[1] for b in rep], dtype=torch.long, device=dev)
+                    lr_logits = model(xr, use_cache=False).logits[:, :-1].float()
+                    loss = loss + F.cross_entropy(lr_logits.reshape(-1, lr_logits.shape[-1]), yr[:, 1:].reshape(-1), ignore_index=-100)
                 if not torch.isfinite(loss):
                     raise RuntimeError(f"non-finite sleep loss at step {step}")
                 opt.zero_grad(set_to_none=True)

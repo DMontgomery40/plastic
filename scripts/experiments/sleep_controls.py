@@ -11,6 +11,7 @@ Arms
   replay     sleep, method replay, accepted turns only
   distill    sleep, method distill, accepted turns only
   anchor     sleep, method anchor, accepted turns only
+  dream      sleep, method dream: the session fast weights generate study items, gain-gated, KL to the frozen teacher
   ungated    sleep, method replay, provenance "all" (rolled-back turns consumed too): what the gate buys
 Probe groups
   taught     facts stated in the accepted teaching session
@@ -229,7 +230,7 @@ def main() -> None:
         log(f"[ceiling] {json.dumps(results['arms']['ceiling']['by_group'])}")
 
     # 4) sleep arms, each from the parent
-    for arm in ("anchor", "replay", "distill", "ungated"):
+    for arm in ("anchor", "replay", "distill", "dream", "ungated"):
         if arm not in arms:
             continue
         method = "replay" if arm == "ungated" else arm
@@ -240,6 +241,7 @@ def main() -> None:
         sessions = ["teach", "rolled"]
         rep = sleep_ttt(store, "parent", cfg, session_ids=sessions, probes=all_probes, run_dir=os.path.join(args.out, f"sleep_{arm}"), log=log)
         entry: dict[str, Any] = {"status": rep["status"], "model_id": rep.get("model_id"), "gate": rep.get("gate"), "batch": rep.get("batch"),
+                                 "dreams": rep.get("dreams"), "reason": rep.get("reason"),
                                  "heldout_nll_before": (rep.get("before") or {}).get("heldout_nll"), "heldout_nll_after": (rep.get("after") or {}).get("heldout_nll"),
                                  "harvest": rep.get("harvest"), "seconds": rep.get("seconds")}
         if rep.get("after") and rep["after"].get("recall"):
