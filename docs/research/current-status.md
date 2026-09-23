@@ -34,9 +34,10 @@ protection or useful retention. Source identity is recorded in each host's
 consolidation attempts across three seeds passed the gate 13 times and retained none of 24 taught
 facts; the only transfers were verbatim planted sentences, and selection by surprise chose a
 planted falsehood. The probes measured phrase recall and each fact was taught once as one sentence.
-The queued comparisons were stopped; the next step is a written reassessment (concept-level
-measurement, a recurrence-and-consistency criterion) before any new run. Details in the
-[Sleep note](2026-09-23-sleep-consolidation.md).
+The queued comparisons were stopped. The [reassessment memo](2026-09-23-reassessment-concepts-not-phrases.md)
+(draft, source-checked) sets out the concept-level measurement battery and the recurrence-and-consistency
+criterion to test, and the smallest experiment that could falsify it; no new run before it is agreed.
+Details in the [Sleep note](2026-09-23-sleep-consolidation.md).
 
 In parallel, **Sleep** tests whether accepted session learning can become a durable
 checkpoint change. Replay, fast-state distillation, anchoring and generated Dream

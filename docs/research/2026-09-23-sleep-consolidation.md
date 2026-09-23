@@ -510,6 +510,8 @@ falsehood, is why the study is paused for reassessment (23 September 2026, 18:10
 owner's direction): the probes test memorization of phrases, the methods optimize sentence likelihoods,
 and each fact was taught once as one sentence, the regime that the evidence in the
 [community-research note](2026-09-23-sleep-community-research.md) associates with string memorization
-rather than retrievable knowledge. The candidate replacement, to be written up before any new run, is
-a concept-level measurement battery (unseen phrasings, entailments, locality) and a consolidation
-criterion of recurrence and consistency rather than surprise.
+rather than retrievable knowledge. The candidate replacement, a concept-level measurement battery
+(paraphrases, reverse direction, entailments, locality) and a consolidation criterion of recurrence and
+consistency rather than surprise, is laid out with its sources in the
+[reassessment memo](2026-09-23-reassessment-concepts-not-phrases.md) (draft); no new run before it is
+agreed.
