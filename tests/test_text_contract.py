@@ -79,3 +79,19 @@ def test_contract_records_an_accepted_poison_as_refused_bad_zero():
     r = run_text_contract(FakeLearner(accept_poison=True), spec, seed=1)
     assert r["acceptance"]["refused_bad"] == 0.0 and r["acceptance"]["accepted_good"] == 1.0 and r["acceptance"]["n_bad"] == 2
     assert set(r["split"]["heldout"][0]) <= set(OPERATORS)
+
+
+def test_transfer_reports_the_first_situation_separately_from_the_rest():
+    """FABLE-202's measurement prior: the first situation has no example before it, so its score is what the slow
+    parameters carry; averaging it with the later situations blends adaptation into 'transfer'."""
+    from plastic.eval.text_contract import _summarize
+
+    scores = [[{"exact": 0.0, "nll": 4.0, "tokens": 3}, {"exact": 1.0, "nll": 0.5, "tokens": 3}, {"exact": 1.0, "nll": 0.4, "tokens": 3}],
+              [{"exact": 0.0, "nll": 3.0, "tokens": 3}, {"exact": 0.0, "nll": 1.0, "tokens": 3}, {"exact": 1.0, "nll": 0.2, "tokens": 3}]]
+    m = _summarize(scores)
+    assert m["exact"] == 0.5 and m["exact_first"] == 0.0 and m["exact_after_first"] == 0.75
+    assert [round(b["exact"], 2) for b in m["by_situation"]] == [0.0, 0.5, 1.0] and m["by_situation"][0]["n"] == 2
+    assert m["nll_after_first"] == (0.5 + 0.4 + 1.0 + 0.2) / 4
+    spec = TextContractSpec(n_heldout=8, eval_episodes_per_composition=1, stream_episodes=4)
+    r = run_text_contract(FakeLearner(accept_poison=False), spec, seed=0)
+    assert "delta_exact_first" in r["transfer"] and "delta_exact_after_first" in r["transfer"]

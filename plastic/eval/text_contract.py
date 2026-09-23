@@ -59,11 +59,25 @@ def _seed(seed: int, tag: str, index: int = 0) -> int:
     return int(seed) * 10_000 + _OFFSETS[tag] + index
 
 
-def _summarize(scores: list[list[dict[str, float]]]) -> dict[str, float | int]:
+def _summarize(scores: list[list[dict[str, float]]]) -> dict[str, Any]:
+    """Means over every situation, plus the per-situation-index curve: the first situation of an episode has no worked
+    example before it, so a fast learner cannot answer it from the episode; what the slow parameters carry shows there
+    and in ``no_adapt``, what the fast path does shows from the second situation on. Averaging over the whole episode
+    would blend the two (the objective/measurement prior named in FABLE-202)."""
     flat = [s for ep in scores for s in ep]
     n = len(flat)
+    n_pos = max((len(ep) for ep in scores), default=0)
+    by_situation = []
+    for i in range(n_pos):
+        col = [ep[i] for ep in scores if len(ep) > i]
+        by_situation.append({"exact": sum(c["exact"] for c in col) / len(col), "nll": sum(c["nll"] for c in col) / len(col), "n": len(col)})
+    later = [s for ep in scores for s in ep[1:]]
     return {"exact": (sum(s["exact"] for s in flat) / n) if n else float("nan"),
             "nll": (sum(s["nll"] for s in flat) / n) if n else float("nan"),
+            "exact_first": by_situation[0]["exact"] if by_situation else float("nan"),
+            "exact_after_first": (sum(s["exact"] for s in later) / len(later)) if later else float("nan"),
+            "nll_after_first": (sum(s["nll"] for s in later) / len(later)) if later else float("nan"),
+            "by_situation": by_situation,
             "situations": n, "answer_tokens": int(sum(s.get("tokens", 0) for s in flat))}
 
 
@@ -160,6 +174,8 @@ def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int
             "delta_exact": tm(after, "exact") - tm(before, "exact"),
             "delta_nll": tm(after, "nll") - tm(before, "nll"),
             "delta_nll_no_adapt": float(after["transfer_mean"]["no_adapt"]["nll"]) - float(before["transfer_mean"]["no_adapt"]["nll"]),
+            "delta_exact_first": float(after["transfer_mean"]["adapt"]["exact_first"]) - float(before["transfer_mean"]["adapt"]["exact_first"]),
+            "delta_exact_after_first": float(after["transfer_mean"]["adapt"]["exact_after_first"]) - float(before["transfer_mean"]["adapt"]["exact_after_first"]),
             "per_composition_before": before["transfer"], "per_composition_after": after["transfer"],
         },
         "speed": {"before": before["speed"], "after": after["speed"]},

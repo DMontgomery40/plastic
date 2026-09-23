@@ -10,7 +10,9 @@
 - ``consume(stream)`` is the lasting update, by mode:
   ``frozen``: nothing (with ``adapt=True`` at scoring time this is the TTT-only baseline);
   ``continued``: cross-entropy on the stream's assistant spans, no verification, accepts everything;
-  ``in_context``: nothing lasting; the stream's situations are prepended at scoring time (counted);
+  ``in_context``: nothing lasting; the stream's lessons are read into the fast weights immediately before each scored
+  episode without a reset, and counted. On this model "context" is the fast-weight state (plus a short convolution
+  state), not an attention window, so this arm measures what one pass over the lessons leaves in the fast weights;
   ``replay_verify``: propose = the same cross-entropy update; verify on training-distribution material only
   (exact and nll on fresh training compositions must not fall by more than a tolerance; held-out chat NLL, when a
   corpus is given, must not rise by more than a tolerance); accept installs, refuse restores the snapshot.
@@ -177,7 +179,8 @@ class TextRuleLearner:
             return rec
         if self.mode == "in_context":
             self.context = list(stream.episodes)
-            rec.update(accepted=None, note="stream kept as context at scoring time; nothing lasting")
+            rec.update(accepted=None, note="the lessons are read into the fast weights immediately before each scored episode, without a reset "
+                                            "(this model has no attention window: 'context' is the fast-weight state plus a short convolution state); nothing lasting")
             return rec
         if self.mode == "continued":
             rec.update(self._train_on(stream), accepted=True, note="continued training, no verification")
