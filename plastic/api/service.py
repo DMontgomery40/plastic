@@ -232,7 +232,10 @@ def _native_state_payload(session: Any) -> dict[str, Any]:
     runner = session.runner
     backend = runner.backend
     norms = backend.state_norms(runner.committed)
-    per = norms.get("recurrent_norm")
+    # Qwen reports its gated-delta recurrent memory; the TTT backend reports its fast weights (W1/b1/W2/b2
+    # per layer). Both are "the memory units the harness measures"; the kind tells the client which.
+    unit_key = "recurrent_norm" if "recurrent_norm" in norms else "fast_weight_norm"
+    per = norms.get(unit_key)
     per = list(per) if isinstance(per, list) else []
     # drift is a separate measurement that can raise or come back short; an unmatched or failed unit
     # is UNKNOWN (null), not zero drift
@@ -244,17 +247,17 @@ def _native_state_payload(session: Any) -> dict[str, Any]:
     units = [
         {
             "index": i,
-            "recurrent_norm": _finite_or_none(per[i]),
+            "recurrent_norm": _finite_or_none(per[i]),  # the unit's norm, whichever memory kind it is
             "drift_from_anchor": _finite_or_none(drift[i]) if (isinstance(drift, list) and i < len(drift)) else None,
         }
         for i in range(len(per))
     ]
     return {
-        "kind": "recurrent",
+        "kind": "recurrent" if unit_key == "recurrent_norm" else "fast_weight",
         "backend": getattr(session, "backend_kind", "qwen"),
         "pos": int(runner.pos),
         "units": units,
-        "recurrent_norm_total": _finite_or_none(norms.get("recurrent_norm_total")),
+        "recurrent_norm_total": _finite_or_none(norms.get(unit_key + "_total")),
     }
 
 
