@@ -8,10 +8,15 @@ from pydantic import BaseModel, Field
 
 
 class CalibrateRequest(BaseModel):
+    # toy (plastic) models: a corpus calibration
     data_dir: str | None = None
     chunks: int = Field(default=128, ge=1)
     fisher_chunks: int = Field(default=16, ge=0)
     fpr: float = Field(default=0.01, gt=0.0, lt=1.0)
+    # pretrained chat backends (qwen, ttt): a real-chat calibration; prompts default to the bundled benign set
+    prompts: list[str] | None = Field(default=None, min_length=1, max_length=512)
+    cusum_prompts: list[str] | None = Field(default=None, min_length=1, max_length=512)
+    max_new_tokens: int = Field(default=32, ge=1, le=256)
 
 
 class CreateSessionRequest(BaseModel):

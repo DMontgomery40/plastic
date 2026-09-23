@@ -156,7 +156,8 @@ def _read_prompts(path: str) -> list[str]:
 
 
 def cmd_calibrate(args: argparse.Namespace) -> int:
-    from plastic.harness.calibrate import calibrate_model, calibrate_qwen
+    from plastic.harness import calibrate as calibrate_mod
+    from plastic.harness.calibration_prompts import DEFAULT_CALIBRATION_PROMPTS
     from plastic.store import ArtifactStore
 
     store = ArtifactStore(args.artifacts_root)
@@ -164,17 +165,18 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
     if record.get("backend") in ("qwen", "ttt"):
         # a pretrained chat backend is calibrated on real chats: the model generates each response
         # through the transaction path; thresholds come from those records (log-only)
-        if not args.prompts:
-            print("a pretrained chat model is calibrated on real chats: pass --prompts FILE", file=sys.stderr)
-            return 2
-        prompts = _read_prompts(args.prompts)
+        if args.prompts:
+            prompts = _read_prompts(args.prompts)
+        else:
+            prompts = list(DEFAULT_CALIBRATION_PROMPTS)
+            print(f"[calibrate] no --prompts given; using the {len(prompts)} bundled benign prompts", file=sys.stderr)
         cusum = _read_prompts(args.cusum_prompts) if args.cusum_prompts else None
-        cal = calibrate_qwen(
+        cal = calibrate_mod.calibrate_qwen(
             store, args.model_id, prompts, cusum_prompts=cusum, target_fpr=args.fpr, max_new_tokens=args.max_new_tokens,
             seed=args.seed, device=args.device,
         )
     else:
-        cal = calibrate_model(
+        cal = calibrate_mod.calibrate_model(
             store, args.model_id, data_dir=args.data, n_chunks=args.chunks, fisher_chunks=args.fisher_chunks,
             target_fpr=args.fpr, device=args.device, seed=args.seed,
         )
@@ -336,7 +338,7 @@ def build_parser() -> argparse.ArgumentParser:
     cal.add_argument("--data", default=None, help="text corpus dir with validation.bin")
     cal.add_argument("--chunks", type=int, default=512)
     cal.add_argument("--fisher-chunks", type=int, default=64)
-    cal.add_argument("--prompts", default=None, help="pretrained chat backends: file of calibration prompts (one per line or a JSON list)")
+    cal.add_argument("--prompts", default=None, help="pretrained chat backends: file of calibration prompts (one per line or a JSON list); default: the bundled benign set")
     cal.add_argument("--cusum-prompts", default=None, help="pretrained chat backends: prompts for the continuous CUSUM reference (default: --prompts)")
     cal.add_argument("--max-new-tokens", type=int, default=64, help="pretrained chat backends: generated tokens per calibration chat")
     cal.add_argument("--fpr", type=float, default=0.01)

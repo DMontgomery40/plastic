@@ -12,14 +12,43 @@ def test_help_lists_commands(capsys):
         assert cmd in out
 
 
-def test_calibrate_pretrained_chat_model_requires_prompts(tmp_path, capsys):
+def test_calibrate_dispatches_pretrained_chat_models_to_the_real_chat_calibration(tmp_path, capsys, monkeypatch):
+    from plastic.harness import calibrate as calibrate_mod
+    from plastic.harness.calibration_prompts import DEFAULT_CALIBRATION_PROMPTS
+
     root = str(tmp_path / "artifacts")
-    store = ArtifactStore(root)
-    store.register_model("chat_m", {"backend": "ttt", "domain": "text"})
-    assert main(["calibrate", "chat_m", "--artifacts-root", root]) == 2
-    assert "--prompts" in capsys.readouterr().err
-    args = build_parser().parse_args(["calibrate", "chat_m", "--prompts", "p.txt", "--cusum-prompts", "c.txt", "--max-new-tokens", "8"])
-    assert (args.prompts, args.cusum_prompts, args.max_new_tokens) == ("p.txt", "c.txt", 8)
+    ArtifactStore(root).register_model("chat_m", {"backend": "ttt", "domain": "text"})
+    calls = []
+
+    class FakeCal:
+        n_chunks = 3
+        thresholds = {"chunk_loss": 1.0}
+
+    def fake_qwen(store, model_id, prompts, **kw):
+        calls.append((model_id, list(prompts), kw))
+        return FakeCal()
+
+    monkeypatch.setattr(calibrate_mod, "calibrate_qwen", fake_qwen)
+    monkeypatch.setattr(calibrate_mod, "calibrate_model", lambda *a, **k: pytest.fail("toy path used for a pretrained record"))
+    # no --prompts: the bundled benign set
+    assert main(["calibrate", "chat_m", "--artifacts-root", root, "--fpr", "0.2", "--max-new-tokens", "8"]) == 0
+    out = capsys.readouterr()
+    assert "bundled" in out.err and '"chunk_loss"' in out.out
+    assert calls[-1][0] == "chat_m" and calls[-1][1] == list(DEFAULT_CALIBRATION_PROMPTS)
+    assert calls[-1][2]["target_fpr"] == 0.2 and calls[-1][2]["max_new_tokens"] == 8 and calls[-1][2]["cusum_prompts"] is None
+    # explicit prompt files
+    (tmp_path / "p.txt").write_text("alpha\nbeta\n", encoding="utf-8")
+    (tmp_path / "c.json").write_text('["gamma"]', encoding="utf-8")
+    assert main(["calibrate", "chat_m", "--artifacts-root", root, "--prompts", str(tmp_path / "p.txt"), "--cusum-prompts", str(tmp_path / "c.json")]) == 0
+    assert calls[-1][1] == ["alpha", "beta"] and calls[-1][2]["cusum_prompts"] == ["gamma"]
+
+
+def test_default_calibration_prompts_are_distinct_nonempty_strings():
+    from plastic.harness.calibration_prompts import DEFAULT_CALIBRATION_PROMPTS
+
+    assert len(DEFAULT_CALIBRATION_PROMPTS) >= 32
+    assert len(set(DEFAULT_CALIBRATION_PROMPTS)) == len(DEFAULT_CALIBRATION_PROMPTS)
+    assert all(isinstance(p, str) and p.strip() == p and len(p) > 10 for p in DEFAULT_CALIBRATION_PROMPTS)
 
 
 def test_read_prompts_accepts_lines_or_json_list(tmp_path):

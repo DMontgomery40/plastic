@@ -150,6 +150,37 @@ def test_model_detail(api):
 
 
 
+def test_calibrate_dispatches_pretrained_records_to_the_real_chat_calibration(api, tmp_path, monkeypatch):
+    from plastic.harness import calibrate as calibrate_mod
+    from plastic.harness.calibration_prompts import DEFAULT_CALIBRATION_PROMPTS
+
+    ckpt = tmp_path / "ckpt"
+    ckpt.mkdir()
+    api.store.register_model("chat_pre", {"backend": "ttt", "domain": "text", "checkpoint_dir": str(ckpt), "params": 1})
+    calls = []
+
+    def fake_qwen(store, model_id, prompts, **kw):
+        calls.append((model_id, list(prompts), kw))
+        return calibrate_mod.Calibration(thresholds={"chunk_loss": 2.0}, achievable_fpr={"chunk_loss": 0.1},
+                                         reference={"chunk_loss": [1.0, 2.0]}, n_chunks=2, target_fpr=kw["target_fpr"])
+
+    monkeypatch.setattr(calibrate_mod, "calibrate_qwen", fake_qwen)
+    monkeypatch.setattr(calibrate_mod, "calibrate_model", lambda *a, **k: pytest.fail("toy path used for a pretrained record"))
+    r = api.client.post("/api/models/chat_pre/calibrate", json={})
+    assert r.status_code == 200, r.text
+    assert r.json()["thresholds"] == {"chunk_loss": 2.0} and r.json()["n_chunks"] == 2
+    assert calls[-1][1] == list(DEFAULT_CALIBRATION_PROMPTS) and calls[-1][2]["max_new_tokens"] == 32
+    r = api.client.post("/api/models/chat_pre/calibrate", json={"prompts": ["hi there"], "cusum_prompts": ["again"], "max_new_tokens": 4, "fpr": 0.2})
+    assert r.status_code == 200 and calls[-1][1] == ["hi there"]
+    assert calls[-1][2]["cusum_prompts"] == ["again"] and calls[-1][2]["max_new_tokens"] == 4 and calls[-1][2]["target_fpr"] == 0.2
+    # request-shape family: empty prompt list and an out-of-range generation cap are rejected before any work
+    assert api.client.post("/api/models/chat_pre/calibrate", json={"prompts": []}).status_code == 422
+    assert api.client.post("/api/models/chat_pre/calibrate", json={"max_new_tokens": 0}).status_code == 422
+    # a pretrained record whose checkpoint directory is gone is "no checkpoint yet"
+    api.store.register_model("chat_gone", {"backend": "ttt", "domain": "text", "checkpoint_dir": str(tmp_path / "missing")})
+    assert api.client.post("/api/models/chat_gone/calibrate", json={}).status_code == 400
+
+
 def test_model_unknown_is_404(api):
     assert api.client.get("/api/models/nope").status_code == 404
     assert api.client.post("/api/models/nope/calibrate", json={}).status_code == 404
