@@ -244,6 +244,30 @@ def test_dynamics_learner_modes_run_the_contract_on_cpu(mode):
         assert report["compute"]["tokens_measured"] > report["compute"]["tokens_measured_without_context"]
 
 
+def test_retrieval_learner_is_a_model_free_lookup_that_reverts_exactly():
+    from plastic.eval.contract import RetrievalLearner
+
+    learner = RetrievalLearner(k=4)
+    from plastic.data.mechanisms import mechanism_batch, split_combinations
+
+    train, heldout = split_combinations(k=2, n_heldout=5, seed=0)
+    g = torch.Generator().manual_seed(0)
+    b = mechanism_batch(2, seq_len=32, episodes_per_seq=1, combos=train, policy="gaussian", rng=g)
+    # nothing stored: the prediction is zero, and adapt has no effect
+    zero = b.target_delta.pow(2).mean(-1)
+    assert torch.allclose(learner.step_mse(b, adapt=True), zero) and torch.allclose(learner.step_mse(b, adapt=False), zero)
+    report = run_contract(learner, _spec(), seed=9)
+    assert report["compute"]["parameters"] == 0
+    assert report["adaptation_window"]["checked"] is False
+    # a lookup table of training-world transitions predicts the training distribution better than zero
+    assert report["forgetting"]["delta_mse"] < 0
+    for row in report["transfer"].values():
+        assert row["before"]["adapt"] == row["before"]["no_adapt"]
+    assert report["revert"]["gap"] == 0.0 and report["revert"]["ok"] is True
+    assert report["acceptance"] == {"accepted_good": 1.0, "refused_bad": 0.0, "n_good": 2, "n_bad": 1}
+    assert learner.stored_transitions() == 0  # restored to the pre-stream snapshot at the end
+
+
 def test_dynamics_learner_no_adapt_disables_writes_only():
     model = _tiny_model()
     learner = DynamicsLearner(model, mode="frozen")

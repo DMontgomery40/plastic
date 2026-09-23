@@ -173,6 +173,18 @@ Three rules added after review (contract version 2026-09-23.2):
 in the report) and `in_context` (the stream is prepended as context at measurement time; the
 everything-in-context baseline, with its extra tokens counted).
 
+Two cautions on the baselines, both corrections of a transformer prior. "Everything in
+context" prepends the stream to the model's own recurrent carry, which is bounded by its
+learned forget gate and its decay horizon; it is not a context window, and a null result on
+it says what the model was trained to keep, not what a longer prompt would do. The honest
+model-free lookup is a separate arm, `RetrievalLearner`: each step's delta is predicted as the
+mean delta of the nearest stored stream transitions, with no model and no notion of which
+world a row came from. And the meta-training objective for a candidate learner must be the
+loss that adaptation could have improved (steps after the first fast-update boundary), not
+the whole-episode mean, which is a pretraining objective under which the first chunk can
+never benefit from a fast update; `scripts/experiments/coordinate_ablation.py` exposes both
+as `--outer-loss` and reports which one a row used.
+
 The correction arm starts from the reverted pre-stream snapshot, so the report gives two
 readings of harm: poison minus the clean arm (`harm`, which includes the clean gain the
 poisoned learner forwent) and poison minus its own start (`harm_vs_before`, the damage

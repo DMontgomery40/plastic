@@ -21,10 +21,10 @@ from typing import Any, Callable
 
 import torch
 
-from plastic.eval.contract import ContractSpec, DynamicsLearner, run_contract
+from plastic.eval.contract import ContractSpec, DynamicsLearner, RetrievalLearner, run_contract
 from plastic.store import ArtifactStore
 
-MODES = ("frozen", "continued", "in_context")
+MODES = ("frozen", "continued", "in_context", "retrieval")
 
 
 def execution_commit(root: str) -> str | None:
@@ -53,15 +53,22 @@ def run_modes(
     lr: float,
     steps: int,
     device: torch.device,
+    knn: int = 8,
 ) -> dict[str, dict[str, Any]]:
-    """A fresh model per mode, so no mode's lasting update leaks into another."""
+    """A fresh model per mode, so no mode's lasting update leaks into another. The retrieval
+    mode uses no model at all."""
     reports: dict[str, dict[str, Any]] = {}
     for mode in modes:
-        model = model_factory().to(device)
-        learner = DynamicsLearner(model, mode=mode, lr=lr, steps=steps, device=device)
-        reports[mode] = run_contract(learner, spec, seed=seed)
+        if mode == "retrieval":
+            learner: Any = RetrievalLearner(k=knn)
+            reports[mode] = run_contract(learner, spec, seed=seed)
+            reports[mode]["learner"] = {"k": knn, "stored_transitions": learner.stored_transitions()}
+        else:
+            model = model_factory().to(device)
+            learner = DynamicsLearner(model, mode=mode, lr=lr, steps=steps, device=device)
+            reports[mode] = run_contract(learner, spec, seed=seed)
+            reports[mode]["learner"] = {"lr": lr, "steps": steps}
         reports[mode]["mode"] = mode
-        reports[mode]["learner"] = {"lr": lr, "steps": steps}
     return reports
 
 
@@ -135,7 +142,9 @@ def write_outputs(out: str, reports: dict[str, dict[str, Any]], manifest: dict[s
         "`poison harm (vs clean)` is transfer MSE after the poisoned stream minus after the clean stream "
         "(damage plus the forgone clean gain); `poison harm (vs start)` is minus the poison arm's own "
         "pre-stream start (damage alone); `corr. residual` is after the corrective stream minus after clean. "
-        "Continued training uses Adam. Acceptance is a pair of rates; "
+        "Continued training uses Adam. Everything-in-context prepends the stream to the model's own recurrent carry, "
+        "which is bounded by its forget gate and decay horizon, unlike a transformer's context window; the retrieval "
+        "mode is the model-free lookup baseline (mean delta of the nearest stored transitions). Acceptance is a pair of rates; "
         "n/a means no decision was recorded, not zero.",
         "",
         summary_table(reports),
@@ -159,6 +168,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--steps", type=int, default=10)
+    ap.add_argument("--knn", type=int, default=8, help="neighbours for the retrieval baseline")
     ap.add_argument("--seq-len", type=int, default=64, help="length of the one episode each scored row holds")
     ap.add_argument("--probe-steps", type=int, default=None, help="steps of the adaptation curve to report (default: the whole episode)")
     ap.add_argument("--eval-batch", type=int, default=8)
@@ -185,7 +195,7 @@ def main(argv: list[str] | None = None) -> int:
 
     t0 = time.time()
     torch.manual_seed(args.seed)
-    reports = run_modes(factory, modes=tuple(args.modes), spec=spec, seed=args.seed, lr=args.lr, steps=args.steps, device=device)
+    reports = run_modes(factory, modes=tuple(args.modes), spec=spec, seed=args.seed, lr=args.lr, steps=args.steps, device=device, knn=args.knn)
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     manifest = {
         "model_id": args.model_id,

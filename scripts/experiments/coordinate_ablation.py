@@ -89,6 +89,34 @@ def _etas(model: torch.nn.Module) -> list[float] | None:
     return out
 
 
+OUTER_LOSSES = ("all", "post_boundary")
+
+
+def outer_loss_value(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor, *, outer_loss: str, chunk: int) -> torch.Tensor:
+    """The meta-training objective.
+
+    ``all``: the mean next-observation MSE over every step, the sequence-model reflex. The
+    first ``chunk`` steps of an episode can never benefit from a fast update (the first
+    boundary is at step ``chunk``), so the gradient reaching the fast path is diluted by
+    steps only the slow weights can serve.
+    ``post_boundary``: the mean over steps after the first boundary only, the MAML-style
+    query loss: the outer objective is the prediction quality that adaptation could have
+    improved. Applied with the same cutoff to every variant, so the comparison stays matched.
+    """
+    if isinstance(model, CoordinateDynamics):
+        pred, _, _ = model(x, target_delta=y)
+    else:
+        pred, _, _ = model(x)
+    per_step = (pred - y).pow(2).mean(-1)  # (B, T)
+    if outer_loss == "all":
+        return per_step.mean()
+    if outer_loss == "post_boundary":
+        if per_step.shape[1] <= chunk:
+            raise ValueError("post_boundary needs episodes longer than one chunk")
+        return per_step[:, chunk:].mean()
+    raise ValueError(f"unknown outer_loss {outer_loss!r}")
+
+
 def train(
     model: torch.nn.Module,
     *,
@@ -102,6 +130,8 @@ def train(
     log_every: int,
     device: torch.device,
     clip: float = 1.0,
+    outer_loss: str = "all",
+    chunk: int = 16,
 ) -> list[dict[str, Any]]:
     g = torch.Generator().manual_seed(seed)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
@@ -112,7 +142,7 @@ def train(
         b = mechanism_batch(batch, seq_len=seq_len, episodes_per_seq=episodes, combos=combos, policy="gaussian", rng=g)
         x, y = b.inputs.to(device), b.target_delta.to(device)
         opt.zero_grad(set_to_none=True)
-        loss = model.loss(x, y)
+        loss = outer_loss_value(model, x, y, outer_loss=outer_loss, chunk=chunk)
         loss.backward()
         gn = float(torch.nn.utils.clip_grad_norm_(model.parameters(), clip))
         opt.step()
@@ -128,9 +158,10 @@ def run_variant(variant: str, args: argparse.Namespace, out: str, *, spec: Contr
     model = build(variant, d_model=args.d_model, n_heads=args.n_heads, n_layers=args.n_layers, chunk=args.chunk, seed=args.seed).to(device)
     params = sum(p.numel() for p in model.parameters())
     t0 = time.time()
+    outer = getattr(args, "outer_loss", "all")
     log = train(
         model, steps=args.steps, batch=args.batch, seq_len=args.seq_len, episodes=args.episodes, combos=train_combos,
-        lr=args.lr, seed=args.seed + 1, log_every=args.log_every, device=device,
+        lr=args.lr, seed=args.seed + 1, log_every=args.log_every, device=device, outer_loss=outer, chunk=args.chunk,
     )
     train_s = time.time() - t0
     os.makedirs(out, exist_ok=True)
@@ -148,7 +179,7 @@ def run_variant(variant: str, args: argparse.Namespace, out: str, *, spec: Contr
         "variant": variant,
         "config": VARIANTS[variant] if VARIANTS[variant] is not None else "PlasticDynamics",
         "size": {"d_model": args.d_model, "n_heads": args.n_heads, "n_layers": args.n_layers, "chunk": args.chunk, "parameters": params},
-        "train": {"steps": args.steps, "batch": args.batch, "seq_len": args.seq_len, "episodes": args.episodes, "lr": args.lr, "seed": args.seed, "wall_s": train_s, "s_per_step": train_s / max(1, args.steps), "log": log},
+        "train": {"steps": args.steps, "batch": args.batch, "seq_len": args.seq_len, "episodes": args.episodes, "lr": args.lr, "seed": args.seed, "outer_loss": outer, "wall_s": train_s, "s_per_step": train_s / max(1, args.steps), "log": log},
         "no_adapt_label": no_adapt_label,
         "fast_signals": fast_signals,
         "checkpoint": f"{variant}.pt",
@@ -174,12 +205,12 @@ def collect(out: str) -> str:
         raise SystemExit(f"no variant results in {out}")
     any_r = next(iter(results.values()))
     policies = list(any_r["contract"]["transfer"].keys())
-    head = ["variant", "params", "train loss (last)", "s/step"] + [f"{p}: adapt / no-adapt" for p in policies] + ["train dist: adapt / no-adapt", "speed mean", "half at step", "η per layer", "inner loss before → after", "‖ΔW‖, ‖Δθ‖ per layer"]
+    head = ["variant", "outer loss", "params", "train loss (last)", "s/step"] + [f"{p}: adapt / no-adapt" for p in policies] + ["train dist: adapt / no-adapt", "speed mean", "half at step", "η per layer", "inner loss before → after", "‖ΔW‖, ‖Δθ‖ per layer"]
     lines = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
     for name, r in results.items():
         c = r["contract"]
         last = r["train"]["log"][-1]
-        row = [name, str(r["size"]["parameters"]), _fmt(last["loss"]), f"{r['train']['s_per_step']:.2f}"]
+        row = [name, r["train"].get("outer_loss", "all"), str(r["size"]["parameters"]), _fmt(last["loss"]), f"{r['train']['s_per_step']:.2f}"]
         for p in policies:
             b = c["transfer"][p]["before"]
             row.append(f"{_fmt(b['adapt'])} / {_fmt(b['no_adapt'])}")
@@ -211,6 +242,11 @@ def collect(out: str) -> str:
         "",
         table,
         "",
+        "`outer loss` names the meta-training objective: `all` is the mean over every step of the episode (a sequence-model "
+        "objective under which the first chunk can never benefit from a fast update); `post_boundary` is the mean over steps "
+        "after the first boundary only, the query loss adaptation could have improved. Read `all` rows as a lower bound on "
+        "what the fast path was asked to do.",
+        "",
         "Reading guide (from the memo's falsification table): if `decay_only` matches `full`, timescale adaptation "
         "explains the gain and the nonlinear coordinates are not earning their place. If `no_meta` matches `full`, "
         "meta-training is not necessary. If `delta_baseline` matches `full` at matched compute, coupling learning to "
@@ -234,6 +270,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--seq-len", type=int, default=64)
     ap.add_argument("--episodes", type=int, default=1, help="episodes per training row; 1 keeps every fast-update boundary inside an episode")
     ap.add_argument("--lr", type=float, default=1e-3)
+    ap.add_argument("--outer-loss", default="post_boundary", choices=OUTER_LOSSES, help="meta-training objective; 'all' is the whole-episode mean")
     ap.add_argument("--log-every", type=int, default=50)
     ap.add_argument("--d-model", type=int, default=128)
     ap.add_argument("--n-heads", type=int, default=4)

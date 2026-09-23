@@ -389,7 +389,15 @@ class DynamicsLearner:
                     policy=stream.policy,
                     poisoned=self.context.poisoned or stream.poisoned,
                 )
-            return {"accepted": True, "mode": self.mode, "context_tokens": self.context.tokens}
+            return {
+                "accepted": True,
+                "mode": self.mode,
+                "context_tokens": self.context.tokens,
+                # the stream is carried by the model's own recurrence, not by an attention window:
+                # what survives is bounded by its learned forget gate (opens on the reset flag)
+                # and its decay horizon, so "in context" here is not a transformer's context
+                "carry": "recurrent carry across the prepended stream; bounded by the forget gate and decay horizon",
+            }
         x = stream.inputs.to(self.device)
         y = stream.target_delta.to(self.device)
         opt = torch.optim.Adam(self.model.parameters(), lr=self.lr)
@@ -420,3 +428,50 @@ class DynamicsLearner:
         pred, _, _ = self.model(x, mode="chunk", beta_scale=1.0 if adapt else 0.0)
         pred = pred[:, prefix:]
         return (pred - y).pow(2).mean(-1).cpu()
+
+
+# ------------------------------------------------------------------ the model-free lookup baseline
+
+
+class RetrievalLearner:
+    """Retrieval over stored stream transitions: each step's delta is predicted as the mean
+    delta of the ``k`` nearest stored (observation, action) rows. No model, no context
+    mechanism, no notion of which world a row came from. This is the honest "look it up"
+    baseline: what the stream predicts as a lookup table. Its fast path does not exist, so
+    ``adapt`` has no effect and it declares no update period."""
+
+    def __init__(self, k: int = 8) -> None:
+        self.k = int(k)
+        self.keys: Tensor | None = None
+        self.vals: Tensor | None = None
+
+    def parameter_count(self) -> int:
+        return 0
+
+    def stored_transitions(self) -> int:
+        return 0 if self.keys is None else int(self.keys.shape[0])
+
+    def snapshot_slow(self) -> Any:
+        return (None if self.keys is None else self.keys.clone(), None if self.vals is None else self.vals.clone())
+
+    def restore_slow(self, snapshot: Any) -> None:
+        self.keys, self.vals = snapshot
+
+    def consume(self, stream: MechanismBatch) -> dict[str, Any]:
+        keys = stream.inputs[..., :6].reshape(-1, 6).float()
+        vals = stream.target_delta.reshape(-1, 4).float()
+        self.keys = keys if self.keys is None else torch.cat([self.keys, keys])
+        self.vals = vals if self.vals is None else torch.cat([self.vals, vals])
+        return {"accepted": True, "mode": "retrieval", "k": self.k, "stored_transitions": self.stored_transitions()}
+
+    @torch.no_grad()
+    def step_mse(self, batch: MechanismBatch, *, adapt: bool) -> Tensor:
+        y = batch.target_delta.float()
+        if self.keys is None:
+            pred = torch.zeros_like(y)
+        else:
+            q = batch.inputs[..., :6].reshape(-1, 6).float()
+            d = torch.cdist(q, self.keys)
+            idx = d.topk(min(self.k, int(self.keys.shape[0])), largest=False).indices
+            pred = self.vals[idx].mean(1).reshape(y.shape)
+        return (pred - y).pow(2).mean(-1)
