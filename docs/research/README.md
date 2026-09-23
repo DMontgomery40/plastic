@@ -21,7 +21,7 @@ a selective activation recurrence, with an external non-differentiable transacti
 harness. The target is one shared block stack for text and hidden-friction physics,
 originally roughly 1–10M parameters, plain PyTorch usable on MPS, and a one-hour
 L4/A10G training target. These describe the original architecture study, not a
-restriction on current pretrained-Qwen experiments or authorized compute.
+restriction on the current pretrained TTT chat work or authorized compute.
 
 The implemented linear delta-memory stack is the baseline. The nonlinear coordinate
 proposal is an unintegrated experimental candidate. Do not confuse delivering a useful

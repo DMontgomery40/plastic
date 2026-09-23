@@ -1,71 +1,62 @@
 # Current research status
 
-Updated 22 September 2026. This page gives the current direction. Dated notes are
-experiment and design history; update this page when decisions or evidence change.
+Updated 23 September 2026. This page describes active work. Dated reports preserve
+experiment history and do not override this direction.
 
 ## Active investigation
 
-Explore the refusal-ablated Qwen3.5-0.8B checkpoint under the transactional harness.
-Compare observational and experimental guarded behavior early with matched prompts,
-seeds and starting state. Keep the detector unchanged for the first comparison.
-An uncalibrated guard is an experiment, not validated protection; calibration and
-prior signal separation are not prerequisites for trying it. Original Qwen is a
-selective reference where it adds information, including benign signal comparisons.
+Build useful chat on a pretrained, gradient-updated TTT-MLP model, with its own
+inner-learning signals available to the transactional harness. The 760M base model
+is undergoing chat fine-tuning. Evaluation will compare held-out assistant loss
+and sampled answers through the transaction path. The backend implementation and
+recorded checks are described in the [TTT backend note](2026-09-23-ttt-backend.md).
 
-Record loss, proposed and accepted recurrent-state changes, both CUSUM sides,
-actual versus hypothetical decisions, outputs and later-turn behavior. Compare
-retained turns with omission and complete snapshot/restore controls. Frozen replay
-and complete turn restoration are different interventions; neither retracts emitted
-answers. The co-leads can narrow a run for a concrete experimental reason, without
-turning an exploratory comparison into another prerequisite process.
+The backend can process and persist base-model sessions. That is distinct from a
+verified chat-tuned checkpoint. Switching the public model awaits verification of
+the fine-tuned checkpoint and its affected user flow. The new playground is deployed
+with Qwen in observational mode; its source identity is recorded in
+each host's `source_snapshot.json`. Qwen is a comparison backend, not the active
+TTT chat target.
 
-Gradient instrumentation is an open implementation question. The native backend
-currently reports loss and state changes, not measured gradient differences. A
-local gated-delta objective gradient and a task-loss derivative with respect to
-recurrent state are different quantities. Any gradient metric must identify its
-objective, differentiation variable, base point and comparison. Do not rename a
-state-change norm to a gradient or assume no gradient interpretation exists.
+Compare retained learning, frozen processing, and complete snapshot restoration
+on matched inputs and starting states. Try guarded comparisons early; calibration
+and prior signal separation are not prerequisites for exploratory runs. Claims of
+useful adaptation or protection require measured outcomes. Freezing memory and
+restoring an entire turn remain different interventions.
 
-The current small model can produce fluent factual errors. Baseline competence
-limits semantic interpretations: an incorrect output alone cannot establish
-poisoning, guard damage, or protection. This does not block alpha-stage state and
-weight research, nor require a model replacement before testing update, retention,
-gradient, and transaction mechanics.
+## Measurements and interpretation
 
-The public native backend does not yet report inner-memory prediction-error norms,
-write rates, or retention rates. Its loss and state-change measurements remain
-usable; the missing inner-memory signals are not zero. Native residual
-instrumentation is separate work from the current observational/guarded comparison.
+The TTT backend reports inner reconstruction-error norms, effective inner step
+sizes, per-token update-contribution norms, prediction loss, and fast-weight
+changes. `surprise` is an error norm, not the squared reconstruction loss itself.
+Canary alignment uses a probe-loss gradient with respect to fast weights. A
+state-change norm is not a gradient difference; a gradient comparison must identify
+both gradients and their base points. Fisher measurements remain unavailable here.
 
-Publish methods, useful examples and reproducible results openly. Basic safety
-and alignment probes are sufficient; publication does not require dangerous
-procedural outputs. Keep private coordination and incidental session data out of
-public source. Put scientific and implementation detail in documentation, not UI
-banners. The interface needs concise controls, results and actionable status.
+The currently published Qwen adapter lacks the inner-memory surprise, write-rate,
+and write-norm measurements. Missing measurements stay missing. Its earlier
+loss/state experiments do not establish inner-learning detection or protection.
+Keep proposed measurements separate from the changes accepted by the harness.
 
-## Implemented and measured
+Weak baseline competence limits conclusions drawn from output meaning. It does
+not stop alpha-stage state, weight, gradient, retention, or transaction research.
+The separate requirement for useful chat is now being addressed through TTT-model
+fine-tuning.
 
-- The public demo uses `qwen3_5_0_8b_abliterated` in observational mode.
-  Each host's `source_snapshot.json` identifies its published source revision.
-- T0's four recorded chains passed full-cache restoration/omission comparisons.
-  This supports restoration mechanics, not detector efficacy.
-- T1 at `979a542` completed with a negative fit result: no declared CUSUM threshold
-  from 3 to 20 met the benign-turn criterion. DEV was not run. Keep this useful
-  negative result; it does not block other exploratory comparisons.
-- PlasticCore remains linear delta memory. The nonlinear, end-to-end meta-trained
-  coordinate proposal is unintegrated and is not native Qwen's mechanism. Its
-  original research question remains open.
-- Physics remains an internal benchmark available in the local dashboard; the
-  public interface is scoped to text chat and session measurements.
+## Research scope and interface
 
-## Continuation
+The original PlasticCore experiments and nonlinear coordinate proposal remain
+separate research tracks; adding the pretrained backend does not establish their
+architectural equivalence or resolve the proposed coupling. Physics stays as an
+internal benchmark and CLI workflow, outside the public playground.
 
-Fable and Astra co-lead; reuse the existing Sol session for dashboard implementation
-and connected-browser validation. File ownership and active session identities belong in the private
-brief and scratchpad. Use the canonical checkout on main. Review each new artifact
-set once; reopen only for new evidence or a material change.
+The playground has Chat, Signals, and Sessions screens. Fast-weight signals are
+available with the TTT backend; the hosted Qwen model exposes its own supported
+measurements. Desktop browser checks cover the local TTT and hosted Qwen paths;
+responsive and failure-recovery checks remain specific to each release. Keep concise controls, measurements, and actionable status in the UI;
+put implementation and experiment detail in research documentation.
 
-Keep compact evidence supporting reported findings, including useful negative
-results. Archive useful inactive bulk artifacts privately on HF, verify them before
-local removal, and retain a retrieval manifest. Disposable attempts and obsolete
-copies need not accumulate. Keep active checkpoint/runtime inputs available.
+Publish methods, useful evidence, and reproducible findings openly. Preserve
+compact evidence, including useful negative results. Private coordination, session
+data, and incidental artifacts stay out of public source. Keep active training and
+checkpoint inputs available; archive useful inactive bulk artifacts separately.
