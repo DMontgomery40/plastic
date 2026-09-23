@@ -847,6 +847,7 @@ def select_sleep_turns(harvests: list[SessionHarvest], cfg: SleepConfig, summary
     summary["flagged_policy"] = cfg.flagged_policy
     eligible = {t.session_id for t in accepted}
     summary["source_sessions"] = sorted(eligible)
+    summary["selected_turns"] = len(accepted)  # the authoritative post-selection count: what replay rows and dream quotes come from
     return accepted, eligible
 
 

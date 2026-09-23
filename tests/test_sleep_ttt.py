@@ -593,10 +593,13 @@ def test_one_selection_governs_direct_turns_source_states_and_dream_quotes(tmp_p
     accepted, eligible = select_sleep_turns(harvests, SleepConfig(flagged_policy="exclude"), summary)
     assert sorted((t.session_id, t.prompt) for t in accepted) == [("clean", "fine"), ("mixed", "clean q")]
     assert eligible == {"mixed", "clean"} and summary["flagged_excluded"] == 2 and summary["source_sessions"] == ["clean", "mixed"]
+    assert summary["selected_turns"] == 2 == len(accepted)                     # the authoritative post-selection count (ASTRA-197)
     pairs = _teacher_states(store, FakeBackend(), harvests, {}, lambda s: None, eligible=eligible)
     assert sorted(sid for sid, _ in pairs) == ["clean", "mixed"]      # "hot" has a state but no selected turn
 
-    accepted, eligible = select_sleep_turns(harvests, SleepConfig(flagged_policy="include"), {})
+    summary_all = {}
+    accepted, eligible = select_sleep_turns(harvests, SleepConfig(flagged_policy="include"), summary_all)
+    assert summary_all["selected_turns"] == 4 and summary_all["flagged_policy"] == "include" and "flagged_excluded" not in summary_all
     assert sorted(t.prompt for t in accepted) == ["clean q", "fine", "hot   q  ", "only hot"] and eligible == {"mixed", "hot", "clean"}
     assert sorted(sid for sid, _ in _teacher_states(store, FakeBackend(), harvests, {}, lambda s: None, eligible=eligible)) == ["clean", "hot", "mixed"]
     # default (no selection given) keeps the earlier behavior: every session with accepted turns

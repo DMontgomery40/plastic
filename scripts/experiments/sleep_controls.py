@@ -185,13 +185,15 @@ def ceiling_statements(taught_facts: list, probe, mode: str) -> list:
 
 
 def turns_cell(harvest: dict | None) -> str:
-    """How many turns an arm actually trained on: harness-accepted turns, how many of those the observational policy
-    flagged, and how many the arm's flagged policy excluded. In an uncalibrated observational session the exclude rule
-    removes most new-fact turns (FABLE-158), so a table without this column can misreport a null result."""
-    if not harvest:
+    """How many turns the arm's text selection kept (the pool for replay rows and Dream quotes), against the online
+    acceptance and flag counts. This is text selection only: anchor, distill and Dream still load the source session's
+    full committed state once it has one selected turn (ASTRA-197). In an uncalibrated observational session the
+    exclude rule removes most new-fact turns (FABLE-158), so a table without this column can misreport a null result."""
+    if not harvest or harvest.get("selected_turns") is None:  # older summaries did not record the selection: do not invent it
         return "n/a"
     accepted = sum(int(s.get("accepted_turns") or 0) for s in harvest.get("sessions", []))
-    return f"{accepted - int(harvest.get('flagged_excluded') or 0)} of {accepted} accepted ({harvest.get('accepted_turns_flagged', 0)} flagged, {harvest.get('flagged_excluded', 0)} excluded)"
+    return (f"{harvest['selected_turns']} selected ({accepted} accepted online, {harvest.get('accepted_turns_flagged', 0)} flagged, "
+            f"{harvest.get('flagged_excluded', 0)} excluded)")
 
 
 def arm_config(arm: str, args: argparse.Namespace) -> "SleepConfig":

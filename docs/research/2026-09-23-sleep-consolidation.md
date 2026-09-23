@@ -62,17 +62,23 @@ checkpoint, seed 0).** The experiment's teaching session runs log-only without a
 calibration, so the policy's `would_rollback` reasons come from the runner's own
 running statistics. Of 30 teaching turns, 29 were flagged: one chunk per turn, the
 chunk in which the new fact arrives, crossed the chunk-loss and surprise z-thresholds.
-Under `exclude` the gated arms therefore trained on one turn, and their null result
-measured the consolidation of one turn, not of the taught facts. This is the tension
-the [importance proposal](2026-09-23-importance-weighting-proposal.md) names: importance by
-surprise is highest for new facts, so a rule that excludes surprising turns excludes
-the facts. The experiment script now takes `--flagged-policy` (default `include`, so
-every harness-accepted turn is consolidated and the product rule is a comparison arm)
-and every result table states how many turns each arm consumed. The hosted demo runs
-in the same observational mode, so under the shipped default a chat that teaches new
-facts contributes little to Sleep; whether the hosted default should stay `exclude`
-or become `include` with the post-sleep gate as the only guard is an open decision,
-recorded here and not changed in the interface.
+Under `exclude` the selected text was therefore one turn: the replay rows and the
+Dream quote pool came from one teaching statement. State is a separate channel:
+anchor, distill and Dream load the teach session's full committed state once that
+session has one selected turn, so the seed-0 anchor null is a test of the whole
+session's state, while the replay and Dream nulls are one-turn results. This is the
+tension the [importance proposal](2026-09-23-importance-weighting-proposal.md) names:
+importance by surprise is highest for new facts, so a rule that excludes surprising
+turns excludes the facts from the text pool. The experiment script now takes
+`--flagged-policy` (default `include`, so every harness-accepted turn is selected and
+the product rule is a comparison arm) and every result table states the selected-turn
+count from the selection itself. The hosted Qwen Space does not offer Sleep and has no
+inner surprise, so this finding applies to the future hosted TTT configuration: under
+the shipped default, a chat that teaches new facts would supply little selected text
+to Sleep. Whether that hosted default should stay `exclude` or become `include` is an
+open decision, recorded here and not changed in the interface. Rollback exclusion
+(provenance), the advisory `would_*` flags (this rule) and the post-sleep locality
+checks (the gate) are three distinct controls; changing this rule leaves the other two.
 
 This does not remove every influence of rejected content. Frozen replay still
 advances activation and convolution state, which can affect subsequent accepted

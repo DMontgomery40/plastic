@@ -155,7 +155,50 @@ def test_turns_cell_reports_what_an_arm_actually_trained_on():
     from scripts.experiments.sleep_controls import turns_cell
 
     harvest = {"sessions": [{"session_id": "teach", "accepted_turns": 30}, {"session_id": "rolled", "accepted_turns": 0}],
-               "accepted_turns_flagged": 29, "flagged_excluded": 29}
-    assert turns_cell(harvest) == "1 of 30 accepted (29 flagged, 29 excluded)"
-    assert turns_cell({**harvest, "flagged_excluded": 0}) == "30 of 30 accepted (29 flagged, 0 excluded)"
+               "accepted_turns_flagged": 29, "flagged_excluded": 29, "selected_turns": 1}
+    assert turns_cell(harvest) == "1 selected (30 accepted online, 29 flagged, 29 excluded)"
+    # the all-turn control also selects the two completed rolled-back turns: the count comes from the selection, not from arithmetic
+    assert turns_cell({**harvest, "flagged_excluded": 0, "selected_turns": 32}) == "32 selected (30 accepted online, 29 flagged, 0 excluded)"
     assert turns_cell(None) == "n/a"
+
+
+@pytest.mark.parametrize(("provenance", "flagged_policy", "all_flagged", "expected"), [
+    ("accepted", "exclude", False, 1),
+    ("accepted", "include", False, 30),
+    ("accepted", "downweight", False, 30),
+    ("all", "exclude", False, 1),
+    ("all", "include", False, 32),
+    ("all", "downweight", False, 32),
+    ("accepted", "exclude", True, 0),
+    ("all", "exclude", True, 0),
+])
+def test_selected_turn_count_survives_provenance_filtering_and_reaches_the_table(
+    provenance, flagged_policy, all_flagged, expected,
+):
+    """Catch counting online-accepted turns instead of the actual selected pool.
+
+    The all control adds two usable rejected turns, but neither an empty reply
+    nor a turn without chunks. Excluding flags can also leave no selected data.
+    """
+    import re
+
+    from plastic.sleep.ttt import SleepConfig, SessionHarvest, TurnRecord, harvest_summary, select_sleep_turns
+    from scripts.experiments.sleep_controls import turns_cell
+
+    taught = [TurnRecord("teach", f"fact {i}", "reply", 1, 10, True, "accepted", all_flagged or i > 0)
+              for i in range(30)]
+    rejected = [TurnRecord("rolled", f"rejected {i}", "reply", 1, 10, False, "rolled_back", True)
+                for i in range(2)]
+    rejected.extend([
+        TurnRecord("rolled", "empty", "", 1, 10, False, "empty_completion"),
+        TurnRecord("rolled", "unobserved", "reply", 0, 0, False, "no_chunks"),
+    ])
+    harvests = [SessionHarvest("teach", True, taught, True), SessionHarvest("rolled", False, rejected, True)]
+    summary = harvest_summary(harvests)
+    selected, _ = select_sleep_turns(
+        harvests, SleepConfig(method="replay", provenance=provenance, flagged_policy=flagged_policy), summary,
+    )
+    assert len(selected) == expected
+    assert summary.get("selected_turns") == expected
+    assert re.match(rf"{expected}\b", turns_cell(summary))
+    assert turns_cell({k: v for k, v in harvest.items() if k != "selected_turns"}) == "n/a"   # older summaries: never invented
