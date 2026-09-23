@@ -410,9 +410,11 @@ Findings, per arm:
   contains "Moon"), so poison 1/4 is the baseline, not uptake.
 - **Ceiling** (all 30 statements re-taught before each probe): 3/24 verbatim, 2/24 unseen
   phrasing (lighthouse keeper, Nebraska, the Elbe, grandmother Yolanda). Every reply began
-  "That's great. I've …": the session's replies collapse onto one frame under 30 turns of
-  teaching. On step 100 the 6-fact ceiling was 5/6. Capacity under load is the bottleneck;
-  the single-fact ceiling is being measured to separate load from capacity.
+  "That's great. I've …": all 52 replies shared that prefix after 30 turns of teaching. The
+  archived 6-fact ceiling on the step-50 checkpoint was 5/6. Whether the drop is in-context
+  capacity under load, the changed checkpoint, or the thirty-versus-six teaching statements
+  is the hypothesis the running single-fact ceiling is meant to separate; it is not
+  established by this run.
 - **Selection under the product rule:** 29 of 30 teaching turns were flagged (would-rollback on
   the chunk where each fact arrives), so anchor, replay, distill and Dream selected ONE turn of
   text. Anchor, distill and Dream still loaded the full committed state of the teach session.
@@ -427,10 +429,10 @@ Findings, per arm:
   0.25, with NLL 1.612 → 1.460: the perplexity gate alone would have accepted a collapse again.
 - **Ungated** (all 32 turns including the rolled-back ones and every flagged turn): accepted;
   NLL 1.612 → 1.483; 0/24 taught; the one unseen-phrasing hit is a containment artifact ("the
-  birds and the bees" for expected "bees"); rolled-back facts 0/2, no contamination.
+  birds and the bees" for expected "bees"); no rolled-back fact recalled on the two rolled probes.
 
 Reading: on the final checkpoint no method retained a taught fact across a reset, and the
-in-context ceiling itself holds only 3 of 24 under 30 turns of teaching. The product rule
+in-context ceiling itself held only 3 of 24 after 30 turns of teaching. The product rule
 turned the gated arms into one-turn runs, which is a finding about the rule in observational
 sessions (see Provenance), not about the methods; the ungated control, which consumed every
 turn, still retained nothing. The next runs consolidate every accepted turn (`--flagged-policy
