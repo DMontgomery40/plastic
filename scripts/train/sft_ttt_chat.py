@@ -115,6 +115,7 @@ def main() -> None:
     ap.add_argument("--save-every", type=int, default=500)
     ap.add_argument("--grad-checkpoint-groups", type=int, default=0, help="scan checkpoint groups per layer (0 = off)")
     ap.add_argument("--layer-checkpoint", action="store_true", help="checkpoint every decoder layer (standard activation checkpointing)")
+    ap.add_argument("--diagnose", action="store_true", help="bisect non-finite losses: eval/train, checkpointing, autocast; then exit")
     args = ap.parse_args()
 
     import torch
@@ -147,6 +148,33 @@ def main() -> None:
     packed = list(pack(encoded, args.seq_len, pad_id))
     n_tokens = sum(sum(1 for l in lab if l != -100) for _, lab in packed)
     print(f"[sft] {len(rows)} conversations -> {len(packed)} packed sequences of {args.seq_len}; {n_tokens} supervised tokens", flush=True)
+
+    if args.diagnose:
+        x = torch.tensor([packed[0][0]], dtype=torch.long, device=dev)
+        y = torch.tensor([packed[0][1]], dtype=torch.long, device=dev)
+
+        def probe(label, train, groups, ac, n=None):
+            model.train(train)
+            for layer in model.model.layers:
+                layer.seq_modeling_block.config.scan_checkpoint_group_size = groups
+            xx, yy = (x, y) if n is None else (x[:, :n], y[:, :n])
+            with torch.no_grad() if not train else torch.enable_grad():
+                with torch.autocast(dev.type, dtype=torch.bfloat16, enabled=ac):
+                    out = model(xx, use_cache=False)
+                lg = out.logits.float()
+                loss = torch.nn.functional.cross_entropy(lg[:, :-1].reshape(-1, lg.shape[-1]), yy[:, 1:].reshape(-1), ignore_index=-100)
+            bad = int((~torch.isfinite(lg)).sum())
+            print(f"[diag] {label:40s} loss={float(loss):.4f} nonfinite_logits={bad} max|logit|={float(lg.abs().max()):.1f}", flush=True)
+            return float(loss)
+
+        probe("eval fp32 no-ckpt 256 tok", False, 0, False, 256)
+        probe("eval fp32 no-ckpt full", False, 0, False)
+        probe("train fp32 no-ckpt full", True, 0, False)
+        probe("train fp32 groups4 full", True, 4, False)
+        probe("train autocast no-ckpt full", True, 0, True)
+        probe("train autocast groups4 full", True, 4, True)
+        probe("eval autocast 256 tok", False, 0, True, 256)
+        return
 
     decay, no_decay = [], []
     for n, p in model.named_parameters():

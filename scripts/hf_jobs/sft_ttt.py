@@ -56,6 +56,8 @@ def main() -> None:
         args += ["--max-rows", os.environ["MAX_ROWS"]]
     if measure:
         args += ["--measure", str(measure)]
+    if os.environ.get("DIAGNOSE"):
+        args += ["--measure", "1", "--diagnose"]
     extra = os.environ.get("EXTRA_ARGS", "")
     # the reference scan keeps every mini-batch's carried fast weights for backward; checkpoint groups (see
     # --grad-checkpoint-groups) and the expandable allocator keep a 760M/1.3B run inside 80 GB
