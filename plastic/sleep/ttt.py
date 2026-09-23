@@ -72,6 +72,9 @@ class SleepConfig:
     device: str = "cpu"
     scan_checkpoint_groups: int = 4
     replay_subset: str = "everyday-conversations"
+    # "accepted" (the product rule) or "all": consume every turn including rolled-back ones. "all" exists only
+    # so an experiment can measure what the provenance rule buys; the API and UI never offer it.
+    provenance: Literal["accepted", "all"] = "accepted"
 
     def validate(self) -> None:
         if self.method not in ("replay", "distill", "anchor"):
@@ -86,6 +89,8 @@ class SleepConfig:
             raise ValueError("anchor_lambda must be within [0, 1]")
         if self.lr <= 0 or self.distill_temperature <= 0:
             raise ValueError("lr and distill_temperature must be positive")
+        if self.provenance not in ("accepted", "all"):
+            raise ValueError(f"unknown provenance rule {self.provenance!r}")
 
 
 @dataclass
@@ -378,7 +383,12 @@ def sleep_ttt(
     # 1) provenance: what sleep may learn from
     harvests = harvest_sessions(store, model_id, session_ids)
     report["harvest"] = harvest_summary(harvests)
-    accepted = [t for h in harvests for t in h.accepted_turns]
+    if cfg.provenance == "all":  # experiment-only control: rolled-back and read-only turns are consumed too
+        accepted = [t for h in harvests for t in h.turns if t.completion.strip() and t.n_chunks > 0]
+        report["harvest"]["provenance"] = "all (control: rolled-back turns included)"
+    else:
+        accepted = [t for h in harvests for t in h.accepted_turns]
+        report["harvest"]["provenance"] = "accepted"
     log(f"[sleep] {model_id}: {len(harvests)} sessions, {len(accepted)} accepted turns, "
         f"{report['harvest']['accepted_tokens']} accepted tokens, {report['harvest']['excluded_tokens']} excluded")
     if not accepted:

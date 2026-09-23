@@ -287,7 +287,7 @@ def cmd_sleep(args: argparse.Namespace) -> int:
             method=args.method, target=args.target, steps=args.steps, lr=args.lr, batch_size=args.batch_size, seq_len=args.seq_len,
             replay_ratio=args.replay_ratio, replay_rows=args.replay_rows, heldout_rows=args.heldout_rows, anchor_lambda=args.anchor_lambda,
             distill_temperature=args.distill_temperature, tolerance_nll=args.tolerance_nll, seed=args.seed, device=args.device,
-            scan_checkpoint_groups=args.scan_checkpoint_groups,
+            scan_checkpoint_groups=args.scan_checkpoint_groups, provenance=args.provenance,
         )
         probes = load_probes(args.recall) if args.recall else None
         report = sleep_mod.sleep_ttt(store, args.model_id, cfg, session_ids=(args.sessions or None), probes=probes, run_dir=args.out)
@@ -455,6 +455,8 @@ def build_parser() -> argparse.ArgumentParser:
     sl.add_argument("--tolerance-nll", type=float, default=0.05, help="ttt: allowed rise in mean held-out assistant NLL")
     sl.add_argument("--scan-checkpoint-groups", type=int, default=4)
     sl.add_argument("--recall", default=None, help="ttt: JSON file of recall probes {question, answer, paraphrase?}")
+    sl.add_argument("--provenance", default="accepted", choices=["accepted", "all"],
+                    help="ttt: 'all' consumes rolled-back turns too (experiment control only; never the product rule)")
     sl.add_argument("--out", default=None, help="ttt: run directory for the report and log (default: <artifacts>/sleep/<run>)")
     # toy plastic models
     sl.add_argument("--core", default="artifacts/data/wikitext", help="plastic: core corpus dir")

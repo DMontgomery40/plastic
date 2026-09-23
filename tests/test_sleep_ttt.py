@@ -210,7 +210,8 @@ def test_gate_treats_nonfinite_measurements_as_failures():
 
 def test_sleep_config_validation():
     SleepConfig().validate()
-    for bad in ({"method": "dream"}, {"target": "lora"}, {"steps": 0}, {"replay_ratio": 1.5}, {"anchor_lambda": -0.1}, {"lr": 0.0}, {"seq_len": 8}):
+    SleepConfig(provenance="all").validate()
+    for bad in ({"method": "dream"}, {"target": "lora"}, {"steps": 0}, {"replay_ratio": 1.5}, {"anchor_lambda": -0.1}, {"lr": 0.0}, {"seq_len": 8}, {"provenance": "some"}):
         with pytest.raises(ValueError):
             SleepConfig(**bad).validate()
 
@@ -226,10 +227,11 @@ def test_cli_sleep_dispatches_ttt_records(tmp_path, monkeypatch, capsys):
     probes = tmp_path / "p.json"
     probes.write_text('[{"question": "q", "answer": "a"}]', encoding="utf-8")
     rc = cli.main(["sleep", "chat_m", "--artifacts-root", root, "--method", "distill", "--target", "all", "--steps", "3",
-                   "--sessions", "s1", "s2", "--recall", str(probes), "--device", "cpu"])
+                   "--sessions", "s1", "s2", "--recall", str(probes), "--device", "cpu", "--provenance", "all"])
     assert rc == 0
     mid, cfg, kw = calls[-1]
     assert mid == "chat_m" and cfg.method == "distill" and cfg.target == "all" and cfg.steps == 3 and cfg.device == "cpu"
+    assert cfg.provenance == "all"
     assert kw["session_ids"] == ["s1", "s2"] and [p.question for p in kw["probes"]] == ["q"]
     assert json.loads(capsys.readouterr().out)["model_id"] == "sleep_1"
 
