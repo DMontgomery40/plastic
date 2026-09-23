@@ -439,7 +439,7 @@ export function RunsView({ index, runId, arm, onSelect }: Props) {
   const committed = sleepArms.filter((a) => a.status !== 'rejected').length;
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <div className="rounded-lg border border-edge bg-surface-raised px-4 py-3">
           <Label>Archived runs</Label>
           <Big>{index.runs.length}</Big>
