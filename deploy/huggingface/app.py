@@ -10,7 +10,7 @@ import re
 
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from deploy.huggingface.pretrained import MODEL_ID
+from deploy.huggingface.pretrained import ACTIVE, MODEL_ID
 
 MAX_BODY = 8192
 DEMO_SESSION = 'demo_text'
@@ -238,7 +238,7 @@ class PublicDemoGate:
 
 
 NOTICE = '''<aside class="bg-surface-overlay text-ink-primary border-b border-edge text-sm px-5 py-3">
-<strong>Huihui Qwen3.5-0.8B · abliterated · observational mode</strong>
+<strong>''' + ACTIVE.label + '''</strong>
 <span class="ml-2">No automatic rollback.</span><br>
 Sessions are <strong>public and shared</strong>. Do not enter private information.
 <a class="ml-2 text-accent" href="https://github.com/DMontgomery40/plastic" target="_blank" rel="noreferrer">Project documentation</a>
@@ -278,7 +278,7 @@ def main():
     print(f'[demo] device {device}, torch {torch.__version__}, threads {torch.get_num_threads()}', flush=True)
     root = os.environ.get('ARTIFACTS_ROOT', '/tmp/plastic-demo')
     store = prepare_store(Path('.'), Path(root), seed_sessions=False)
-    prepare_pretrained_sessions(store, Path(os.environ.get('QWEN_CHECKPOINT', '/opt/qwen')))
+    prepare_pretrained_sessions(store, Path(os.environ.get('PUBLIC_CHECKPOINT', os.environ.get('QWEN_CHECKPOINT', '/opt/public-model'))))
     app = create_demo(root, os.environ.get('DASHBOARD_DIST', 'dashboard/dist'), device)
     uvicorn.run(app, host='0.0.0.0', port=int(os.environ.get('PORT', '7860')), access_log=False)
 

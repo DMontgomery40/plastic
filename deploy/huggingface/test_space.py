@@ -339,3 +339,31 @@ def test_public_sleep_refuses_a_second_concurrent_run(tmp_path, monkeypatch):
     with TestClient(PublicDemoGate(app, store, 'cpu', model_id='ttt_pub')) as client:
         assert client.post('/api/models/ttt_pub/sleep', json={'method': 'anchor'}).status_code == 200
         assert client.post('/api/models/ttt_pub/sleep', json={'method': 'anchor'}).status_code == 409
+
+
+def test_public_model_specs_register_the_right_backend_and_refuse_an_unpinned_release(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from plastic.store import ArtifactStore
+    from deploy.huggingface import pretrained
+    monkeypatch.setenv('PUBLIC_MODEL', 'ttt')
+    with pytest.raises(ValueError, match='not pinned'):
+        pretrained.active_spec()
+    monkeypatch.setenv('PUBLIC_MODEL', 'qwen')
+    assert pretrained.active_spec().kind == 'qwen'
+    pinned = replace(pretrained.TTT_CHAT, revision='abc', checkpoint_digest='d1')
+    monkeypatch.setattr(pretrained.PublicModelSpec, 'digest_of', lambda self, folder: 'd1')
+    store = ArtifactStore(str(tmp_path / 'store'))
+    (tmp_path / 'ckpt' / 'text-chat').mkdir(parents=True)
+    pretrained.prepare_pretrained_sessions(store, tmp_path / 'ckpt', spec=pinned)
+    rec = store.load_model_record('ttt_mlp_760m_chat_v1')
+    assert (rec['backend'], rec['chunk'], rec['chat_tuned'], rec['checkpoint_digest']) == ('ttt', 16, True, 'd1')
+    assert rec['checkpoint_dir'].endswith('text-chat')
+    assert store.load_session_meta('demo_text')['model_id'] == 'ttt_mlp_760m_chat_v1'
+    # with the TTT record public, the gate turns sleep on by itself
+    from plastic.api.app import create_app
+    app = create_app(str(tmp_path / 'store'), device='cpu')
+    with TestClient(PublicDemoGate(app, store, 'cpu', model_id='ttt_mlp_760m_chat_v1')) as client:
+        assert client.get('/api/health').json()['capabilities']['sleep'] is True
+    monkeypatch.setattr(pretrained.PublicModelSpec, 'digest_of', lambda self, folder: 'other')
+    with pytest.raises(ValueError, match='does not match'):
+        pretrained.prepare_pretrained_sessions(ArtifactStore(str(tmp_path / 'b')), tmp_path / 'ckpt', spec=pinned)

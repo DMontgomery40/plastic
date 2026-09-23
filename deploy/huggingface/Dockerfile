@@ -13,11 +13,13 @@ COPY pyproject.toml README.md LICENSE ./
 COPY plastic/ ./plastic/
 RUN pip install --no-cache-dir '.[pretrained]'
 COPY deploy/ ./deploy/
-RUN python -m deploy.huggingface.pretrained --download /opt/qwen
+ARG PUBLIC_MODEL=qwen
+ENV PUBLIC_MODEL=${PUBLIC_MODEL}
+RUN python -m deploy.huggingface.pretrained --download /opt/public-model
 COPY text/ ./text/
 COPY --from=frontend /build/dist ./dashboard/dist
 RUN useradd --uid 1000 --create-home demo
 USER demo
-ENV PYTHONUNBUFFERED=1 PORT=7860 QWEN_CHECKPOINT=/opt/qwen
+ENV PYTHONUNBUFFERED=1 PORT=7860 PUBLIC_CHECKPOINT=/opt/public-model
 EXPOSE 7860
 CMD ["python", "-m", "deploy.huggingface.app"]
