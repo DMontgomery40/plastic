@@ -56,6 +56,15 @@ export function dreamRemovalSummary(reasons: Record<string, number>): string[] {
   ].filter(Boolean);
 }
 
+/** What the Sleep gate checks. Named for its scope (formerly the locality gate): it guards against damage only. */
+export const DAMAGE_GATE_SCOPE = 'held-out NLL, reply collapse, and locality when a canary suite exists; no retention or contamination check';
+
+/** A recorded reason, shown with the gate's current name. Display only: the exported reason text is unchanged. */
+export function reasonLabel(reason: string | null | undefined): string | null {
+  if (!reason) return null;
+  return reason.replace(/\blocality gate\b/g, 'damage gate').replace(/\bLocality gate\b/g, 'Damage gate');
+}
+
 export function isSleep(arm: Arm): arm is SleepArm {
   return arm.kind === 'sleep';
 }

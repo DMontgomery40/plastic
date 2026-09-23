@@ -4,6 +4,7 @@ import { loadRun } from './data';
 import {
   ARM_LABEL,
   ARM_ROLE,
+  DAMAGE_GATE_SCOPE,
   GROUP_LABEL,
   GROUP_ORDER,
   dateLabel,
@@ -15,6 +16,7 @@ import {
   outcome,
   pct,
   ratio,
+  reasonLabel,
   signed,
 } from './format';
 import { Big, Chip, GateCheckRow, Label, OutcomeBadge, OutcomeGlyph, TurnsBar, useAsync } from './parts';
@@ -142,7 +144,7 @@ function ArmMatrix({ run, active, onSelect }: { run: Run; active: string | null;
     <div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] border-collapse text-sm">
-          <caption className="sr-only">Recall after a reset, locality and outcome per arm</caption>
+          <caption className="sr-only">Recall after a reset, damage checks and outcome per arm</caption>
           <thead>
             <tr className="border-b border-edge text-left">
               <th scope="col" className="px-2 py-2 text-label font-semibold uppercase tracking-wide text-ink-muted">Arm</th>
@@ -329,7 +331,7 @@ function SleepArmDetail({ run, arm }: { run: Run; arm: SleepArm }) {
       <div className="flex flex-wrap items-center gap-3">
         <h3 className="text-lg font-semibold text-ink-primary">{ARM_LABEL[arm.arm]}</h3>
         <OutcomeBadge outcome={outcome(arm)} />
-        {arm.reason ? <span className="text-sm text-ink-secondary">{arm.reason}</span> : null}
+        {arm.reason ? <span className="text-sm text-ink-secondary">{reasonLabel(arm.reason)}</span> : null}
       </div>
       <Lineage run={run} arm={arm} />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -364,7 +366,8 @@ function SleepArmDetail({ run, arm }: { run: Run; arm: SleepArm }) {
       </div>
       {arm.gate ? (
         <div>
-          <Label>Locality gate</Label>
+          <Label>Damage gate</Label>
+          <div className="mt-0.5 text-xs text-ink-secondary">{DAMAGE_GATE_SCOPE}</div>
           <ul className="mt-2 space-y-2">
             {arm.gate.checks.map((c) => (
               <GateCheckRow key={c.name} check={c} />

@@ -82,7 +82,10 @@ describe('Sleep observatory: runs', () => {
     window.history.replaceState(null, '', '/#sleep/runs/final_step250_seed0_exclude/dream');
     render(<ObservatoryScreen />);
     await screen.findByRole('heading', { name: 'final_step250_seed0_exclude' });
-    const armPanel = (await screen.findByText('locality gate failed')).closest('section')!;
+    const armPanel = (await screen.findByText('damage gate failed')).closest('section')!;
+    expect(within(armPanel).getByText('Damage gate')).toBeTruthy();
+    expect(within(armPanel).getByText(/no retention or contamination check/)).toBeTruthy();
+    expect(screen.queryByText(/locality gate/i)).toBeNull(); // the recorded reason text is shown under the current name
     expect(within(armPanel).getByText('no child')).toBeTruthy();
     expect(within(armPanel).getByText(/Pulled back: the child was discarded/)).toBeTruthy();
     expect(within(armPanel).getByRole('img', { name: /largest identical-reply share: value 0\.308, limit 0\.250, failed/ })).toBeTruthy();
@@ -92,7 +95,7 @@ describe('Sleep observatory: runs', () => {
 
   it.each([
     { run: 'final_step250_seed1_include', arm: 'dream', reason: 'no dream carried session information above the gain threshold' },
-    { run: 'final_step250_seed0_exclude', arm: 'dream', reason: 'locality gate failed' },
+    { run: 'final_step250_seed0_exclude', arm: 'dream', reason: 'damage gate failed' },
     { run: 'final_step250_seed1_include', arm: 'anchor', reason: null },
     { run: 'final_step250_seed1_include', arm: 'replay', reason: null },
   ])('keeps selection separate from training and rejection cause for $run / $arm', async ({ run, arm, reason }) => {
@@ -104,11 +107,12 @@ describe('Sleep observatory: runs', () => {
     expect(screen.queryByText('Turns this arm trained on')).toBeNull();
     const rejections = screen.getByText('Rejected attempts').parentElement!;
     expect(within(rejections).getByText('no child retained')).toBeTruthy();
-    expect(screen.queryByText('a locality check failed')).toBeNull();
+    expect(screen.queryByText('a damage-gate check failed')).toBeNull();
+    expect(screen.queryByText(/locality gate/i)).toBeNull();
     if (reason) expect(screen.getByText(reason)).toBeTruthy();
     if (run === 'final_step250_seed1_include' && arm === 'dream') {
       const detail = selection.closest('section')!;
-      expect(within(detail).queryByText('Locality gate')).toBeNull();
+      expect(within(detail).queryByText('Damage gate')).toBeNull(); // this arm recorded no gate
       expect(within(detail).getByText('No replies match.')).toBeTruthy();
       expect(within(detail).getAllByText('n/a').length).toBeGreaterThan(0);
     }

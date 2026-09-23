@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearObservatoryCache, isRun, loadIndex, loadRun, loadTrajectory, ObservatoryDataError } from './data';
-import { checkState, ratio } from './format';
+import { checkState, DAMAGE_GATE_SCOPE, ratio, reasonLabel } from './format';
 import { formatRoute, parseRoute } from './ObservatoryScreen';
 import { exportFetch, readExport } from './testData';
 import type { ObservatoryIndex, Run } from './types';
@@ -57,6 +57,17 @@ describe('observatory data', () => {
     const share = replay.gate?.checks.find((c) => c.name === 'reply_cluster_share');
     expect(share && checkState(share)).toBe('not in force');
     expect(replay.status).toBe('accepted');
+  });
+
+  it('names the Sleep gate for its scope and shows recorded reasons under that name', () => {
+    expect(reasonLabel('locality gate failed')).toBe('damage gate failed');
+    expect(reasonLabel('Locality gate failed: reply collapse')).toBe('Damage gate failed: reply collapse');
+    expect(reasonLabel('no dream carried session information above the gain threshold')).toBe('no dream carried session information above the gain threshold');
+    expect(reasonLabel(null)).toBeNull();
+    expect(DAMAGE_GATE_SCOPE).toMatch(/held-out NLL/);
+    expect(DAMAGE_GATE_SCOPE).toMatch(/no retention or contamination check/);
+    const seed0 = readExport<Run>('runs/final_step250_seed0_exclude.json');
+    expect(seed0.arms.find((a) => a.arm === 'dream' && a.kind === 'sleep')).toMatchObject({ reason: 'locality gate failed' }); // the export is unchanged
   });
 
   it('round-trips shareable routes', () => {

@@ -40,6 +40,8 @@ describe('anatomy of a sleep', () => {
     render(<ObservatoryScreen />);
     await screen.findByText('Pull back: no child');
     expect(screen.queryAllByText('Illustrative, not measured')).toHaveLength(0);
+    expect(screen.getByText('Damage gate: check the candidate child')).toBeTruthy();
+    expect(screen.getByText(/no retention or contamination check\. Any failed check rejects it\./)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Illustrative: if consolidation worked' }));
     await screen.findByText('Commit: a child model');
     expect(screen.getAllByText('Illustrative, not measured')).toHaveLength(5);

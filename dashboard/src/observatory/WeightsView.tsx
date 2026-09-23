@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Panel } from '../components/panels/Panel';
 import { OBS } from '../components/charts/theme';
 import { loadRun, loadTrajectory } from './data';
-import { ARM_LABEL, isSleep, num, pct, ratio, signed } from './format';
+import { ARM_LABEL, isSleep, num, pct, ratio, reasonLabel, signed } from './format';
 import { LayerMap, SessionPicker, useWidth } from './LayerMap';
 import { Label, OutcomeGlyph, useAsync } from './parts';
 import { defaultRunId } from './RunsView';
@@ -233,7 +233,7 @@ function AcrossRuns({ index, onPick }: { index: ObservatoryIndex; onPick: (run: 
   const dNll = (a: SleepArm) => (a.heldout_nll.before?.mean != null && a.heldout_nll.after?.mean != null ? a.heldout_nll.after.mean - a.heldout_nll.before.mean : null);
   return (
     <div className="space-y-4">
-      <Panel title="Every consolidation attempt" subtitle="held-out loss and reply collapse after sleep, with the gate’s outcome">
+      <Panel title="Every consolidation attempt" subtitle="held-out loss and reply collapse after sleep, with the damage gate’s outcome">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] border-collapse text-sm">
             <thead>
@@ -284,7 +284,7 @@ function AcrossRuns({ index, onPick }: { index: ObservatoryIndex; onPick: (run: 
                         {out}
                       </span>
                       {out === 'pulled back' ? (
-                        <span className="block text-micro text-ink-muted">{arm.gate?.checks.filter((c) => c.in_force && c.passed === false).map((c) => c.label).join(', ') || arm.reason}</span>
+                        <span className="block text-micro text-ink-muted">{arm.gate?.checks.filter((c) => c.in_force && c.passed === false).map((c) => c.label).join(', ') || reasonLabel(arm.reason)}</span>
                       ) : null}
                     </td>
                   </tr>

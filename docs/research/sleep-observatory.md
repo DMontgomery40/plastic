@@ -11,7 +11,7 @@ The measurements and their interpretation are in the
 [results archive](results/sleep-2026-09-23/README.md). This page describes what the
 interface shows and where each number comes from.
 
-## The three views
+## The views
 
 **Runs.** Runs are grouped by checkpoint. For each run:
 
@@ -21,7 +21,7 @@ interface shows and where each number comes from.
   unseen wording, held-out NLL before and after, the largest identical-reply share, and the
   outcome.
 - **Arm detail:** lineage from parent to child, or "no child" when the arm was pulled back;
-  every locality check as a value against its limit; the turns the arm trained on; kept
+  every damage-gate check as a value against its limit; the turns the arm trained on; kept
   Dream items; every reply, filterable by group.
 
 **Anatomy of a sleep.** One run and arm, in five stages:
@@ -31,7 +31,7 @@ interface shows and where each number comes from.
 2. Harvest: turns accepted online, rolled back, flagged, and the selected text turns. It
    also names the sessions whose full committed state the method loads.
 3. Consolidate: the method, its loss over steps, the W0 change when recorded, and dreams.
-4. Gate: each check against its limit.
+4. Damage gate: each check against its limit.
 5. Outcome: the child is committed, or pulled back with the parent unchanged. Fresh-session
    recall follows.
 
@@ -55,8 +55,9 @@ tag and a separate color.
 
 | Label | Meaning |
 | --- | --- |
-| Committed | The gate accepted the child and registered it in the run's disposable experiment store. It is not published as a model. |
-| Pulled back | A locality check failed. No child was registered, and the parent is unchanged. |
+| Damage gate | The Sleep gate, formerly called the locality gate (`gate_from_measurements` reports `kind: "damage gate"`). It checks for damage only: held-out chat NLL, reply collapse, and canary locality when a canary suite exists. It has no retention or contamination check, so passing it is not evidence that anything was learned or that the child stayed clean. Recorded reasons that say "locality gate failed" are shown as "damage gate failed"; the exported text is unchanged. |
+| Committed | The damage gate accepted the child and registered it in the run's disposable experiment store. It is not published as a model. |
+| Pulled back | A damage-gate check failed. No child was registered, and the parent is unchanged. |
 | not in force | The run executed before this check existed. The value shown is rescored from the saved replies with the current rule, and the run's recorded outcome stands. |
 | selected / derived | The selected-turn count is recorded by newer reports. For seed 0 it is derived from recorded harvest counts. Older runs show it as not recorded. |
 | intervention flagged | The harness requested an intervention. In an observational session the chunk still commits, so the flag is advisory. |
@@ -91,6 +92,83 @@ Refresh after adding a run folder, which needs `sleep_controls.json` and a READM
 
 Commit both `docs/research/results/sleep-observatory/` and
 `dashboard/public/assets/observatory/`. A test fails if the two copies differ.
+
+## The Learning view
+
+**Learning** (`#sleep/learning/<set>`) shows the learning-contract reports
+([spec](../superpowers/specs/2026-09-23-mechanism-testbed-and-contract.md),
+[results](results/contract-2026-09-23/README.md)). The contract separates two kinds of change:
+
+- **Temporary adaptation** happens within one episode, in the fast weights, and is cleared
+  at reset. The before-stream table measures it. The contract does not count it as learning.
+- **Lasting change** is what remains in the slow weights after the experience stream,
+  measured from a fresh state with the stream removed. The after-stream table measures it.
+
+For each report set the view shows:
+
+- **Identity:** checkpoint digest prefix and training step, execution commit, contract
+  version, split id and size, the adaptation window (the learner's declared update period and
+  the number of update boundaries inside one scored episode), and the experience stream.
+- **Before any stream:** held-out-pairing MSE per held-out intervention policy and on the
+  training distribution, with adaptation and without it, plus adaptation speed. Speed is the
+  adapting error as a fraction of the error without adaptation, averaged over the episode,
+  and the first step where it drops below one half.
+- **After the stream, per mode** (frozen, continued training, everything in context):
+  transfer delta per policy, forgetting delta, poison harm against the clean stream and
+  against the start, correction residual, the revert ablation, the acceptance pair with its
+  counts, tokens consumed and measured, and parameters. Deltas are after minus before on
+  identical inputs, so negative is improvement.
+- **Coordinate ablation:** per variant, parameters, seconds per training step, within-episode
+  MSE with and without adaptation per policy, speed, the learned inner step size per layer,
+  and what "without" means for that variant.
+
+The "without" measurement is each learner's own off-intervention, and the view never merges
+them under one label. `DynamicsLearner` (the delta-rule model, including `phys_mps_3k` and the
+ablation's `delta_baseline`) disables writes with `beta_scale=0`, and decay stays active.
+Coordinate learners freeze fast parameters with `freeze=True`, which stops both writes and
+decay. These are different interventions, so the two "without" columns do not compare
+directly.
+
+Reading the ablation (from the coordinate memo's falsification table): if `decay_only`
+matches `full`, timescale adaptation explains the gain and the nonlinear coordinates are not
+earning their place. If `no_meta` matches `full`, meta-training is not necessary. If
+`delta_baseline` matches `full` at matched compute, coupling learning to the dynamics is not
+useful. Every ablation score is taken before any stream, so none of it is a lasting-learning
+result.
+
+| Label | Meaning |
+| --- | --- |
+| n/a (n=0) | The acceptance rate has an empty denominator: no decision was recorded on that side. A measured rate of zero reads `0.00 (n=…)`. |
+| unchecked | The learner declared no update period, so the contract could not confirm that an update boundary falls inside a scored episode. |
+| not below one half within N steps | The adapting error never dropped below half the error without adaptation within the scored horizon. The contract's raw field reports the horizon in this case; the export records it as no step. |
+| stale | The set was measured under a contract version other than the current one (`plastic.eval.contract.CONTRACT_VERSION`). Its numbers stay visible. |
+| not yet archived | The coordinate ablation has no results in the archive yet. This differs from a load failure, which shows an error and a retry. |
+| not archived (a variant or mode) | That variant or mode has no result file in the set. |
+
+**Data.** `scripts/export_contract_observatory.py` reads the JSON and Markdown under
+`docs/research/results/contract-2026-09-23/` and recognizes each set by its content. A
+report set has `manifest.json` plus `frozen.json`, `continued.json` and `in_context.json`. An
+ablation set has one JSON per variant, each carrying `variant`, `contract` and
+`no_adapt_label`. The exporter refuses a report set whose modes disagree on the contract
+version, split, adaptation window or the before-stream measurement. It writes
+[`results/learning-observatory/index.json`](results/learning-observatory/index.json) and
+mirrors it to `dashboard/public/assets/learning/`. That directory sits beside
+`assets/observatory/` because the Sleep exporter replaces its own directory on every run. The
+Learning view loads its index separately, so the Sleep views and the Learning view can fail
+independently.
+
+Refresh after adding or changing a set, including when the coordinate ablation is archived
+or `CONTRACT_VERSION` changes, in the same commit:
+
+```bash
+.venv/bin/python -m scripts.export_contract_observatory
+.venv/bin/python -m scripts.export_contract_observatory --check   # exit 1 when the committed export or its mirror is stale
+.venv/bin/python -m pytest tests/test_export_contract_observatory.py -q
+```
+
+Not shown in the Learning view: the per-step speed curves (only their summary), the per-stream
+decision list behind the acceptance pair, wall-clock time, and the change in the
+without-adaptation error after the stream. The source reports hold all of them.
 
 ## Not shown yet
 

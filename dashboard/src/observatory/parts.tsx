@@ -93,7 +93,7 @@ const CHECK_TONE: Record<CheckState, { dot: string; text: string }> = {
 };
 
 /**
- * One locality check as a value-against-limit track. The track spans zero, the limit and the value; the dashed line
+ * One damage-gate check as a value-against-limit track. The track spans zero, the limit and the value; the dashed line
  * is the limit, the dot is the measured value. A check that was not in force shows its value (if any) without a verdict.
  */
 export function GateCheckRow({ check }: { check: GateCheck }) {

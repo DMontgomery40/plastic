@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { buildAnatomy, type AnatomyModel, type WakeSession } from './anatomy';
 import { loadRun, loadTrajectory } from './data';
-import { ARM_LABEL, dreamRemovalSummary, isSleep, num, ratio, signed } from './format';
+import { ARM_LABEL, DAMAGE_GATE_SCOPE, dreamRemovalSummary, isSleep, num, ratio, signed } from './format';
 import { ILLUSTRATIVE } from './illustrative';
 import { Big, GateCheckRow, IllustrativeTag, Label, OutcomeBadge, OutcomeGlyph, useAsync } from './parts';
 import { defaultRunId } from './RunsView';
@@ -206,7 +206,7 @@ function AnatomyStages({ m }: { m: AnatomyModel }) {
         </div>
       </Stage>
 
-      <Stage n={4} title="Gate: check the candidate child" illustrative={ill} lead="The child is measured against the parent on held-out chat and on the replies it gives to the probes. Any failed check rejects it.">
+      <Stage n={4} title="Damage gate: check the candidate child" illustrative={ill} lead={`The child is measured against the parent: ${DAMAGE_GATE_SCOPE}. Any failed check rejects it.`}>
         <div className="space-y-3">
           <ul className="space-y-2">
             {m.gate.checks.map((ch) => (
