@@ -163,9 +163,16 @@ def test_a_superseded_contract_version_marks_the_set_not_current_and_an_undeclar
     assert by["no_fast"]["adaptation_window"] == {"update_period": None, "boundaries_per_episode": None, "checked": False}
 
 
-def test_no_ablation_archive_is_absent_not_an_empty_set(export):
-    if (ex.ARCHIVE / "coordinate-ablation").exists():
-        pytest.skip("the ablation is archived")
+def test_no_ablation_archive_is_absent_not_an_empty_set(tmp_path):
+    # an archive holding only report sets exports no ablation set at all, rather than an empty one;
+    # built from a copy of the live archive with every ablation directory removed, so the test does
+    # not depend on what happens to be archived today
+    arch = tmp_path / "arch"
+    shutil.copytree(ex.ARCHIVE, arch)
+    for d in arch.iterdir():
+        if d.is_dir() and d.name.startswith("coordinate-ablation"):
+            shutil.rmtree(d)
+    export = ex.build(tmp_path / "out", arch)
     assert [s["kind"] for s in export["sets"]] == ["report"]
 
 

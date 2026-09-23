@@ -29,7 +29,7 @@ later learner is compared against.
 
 | held-out pairings, before any stream | with fast writes | writes disabled |
 |---|---|---|
-| impulse policy | 0.365 | 0.530 |
+| impulse policy | 0.364 | 0.530 |
 | hold policy | 0.068 | 0.360 |
 | release policy | 0.110 | 0.165 |
 | training distribution (gaussian) | 0.250 | 0.474 |

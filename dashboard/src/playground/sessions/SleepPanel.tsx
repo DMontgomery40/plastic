@@ -70,7 +70,7 @@ function RunCard({ run }: { run: SleepRun }) {
             </dd>
           </div>
           <div>
-            <dt className="text-ink-secondary">locality gate</dt>
+            <dt className="text-ink-secondary">damage gate</dt>
             <dd className="font-mono text-ink-primary">
               {gate ? (gate.checks.length ? gate.checks.map((c) => `${c.name} ${fmt(c.value)}${c.passed ? ' ok' : ' FAIL'}`).join(' · ') : 'not measured') : 'pending'}
             </dd>
