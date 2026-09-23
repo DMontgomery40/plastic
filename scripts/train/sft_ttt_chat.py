@@ -114,6 +114,7 @@ def main() -> None:
     ap.add_argument("--measure", type=int, default=0, help="only time N optimizer steps and exit")
     ap.add_argument("--save-every", type=int, default=500)
     ap.add_argument("--grad-checkpoint-groups", type=int, default=0, help="scan checkpoint groups per layer (0 = off)")
+    ap.add_argument("--layer-checkpoint", action="store_true", help="checkpoint every decoder layer (standard activation checkpointing)")
     args = ap.parse_args()
 
     import torch
@@ -130,6 +131,8 @@ def main() -> None:
     cfg = M.TTTConfig(**{k: v for k, v in raw.items() if k not in ("architectures", "auto_map", "transformers_version", "dtype", "model_type")})
     cfg.scan_checkpoint_group_size = int(args.grad_checkpoint_groups)
     model = M.TTTForCausalLM.from_pretrained(args.checkpoint, config=cfg, dtype=dtype).to(dev)
+    if args.layer_checkpoint:
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     model.train()
     tok = AutoTokenizer.from_pretrained(args.checkpoint)
     pad_id = int(tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id)

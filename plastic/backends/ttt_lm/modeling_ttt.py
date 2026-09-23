@@ -900,6 +900,12 @@ class TTTBase(nn.Module):
         XQ, XK = apply_rotary_pos_emb(XQ, XK, cos, sin)
         XQ, XK = undo_permute_qk(XQ, XK)
 
+        # plastic: the inner loop's hand-written LayerNorm / l2 / gelu-backward math is not autocast-aware and
+        # overflows in bf16 (NaN losses on CUDA), so it runs in fp32 with autocast disabled; the projections
+        # around it keep the caller's precision. Inference paths are unaffected (already fp32).
+        XQ, XK, XV, hidden_states = XQ.float(), XK.float(), XV.float(), hidden_states.float()
+        autocast_off = torch.autocast(device_type=hidden_states.device.type, enabled=False)
+        autocast_off.__enter__()
         output_hidden_states = []
         # when input sequence length is not a multiple of mini_batch_size
         # we need to compute them seperately, when computing the reminder,
@@ -933,6 +939,7 @@ class TTTBase(nn.Module):
             )
             output_hidden_states.append(output_reminder)
 
+        autocast_off.__exit__(None, None, None)
         output_hidden_states = torch.cat(output_hidden_states, dim=1)
         output_hidden_states = self.post_norm(output_hidden_states)
         if self.use_gate:
@@ -1387,6 +1394,7 @@ class Block(nn.Module):
 
 class TTTPreTrainedModel(PreTrainedModel):
     _is_stateful = True
+    supports_gradient_checkpointing = True
     config_class = TTTConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
