@@ -83,7 +83,10 @@ jobs:
           print(f'Prepared {len(hashes)} files for {kind}; checkpoint bundles preserved')
           PY
       - name: Sync with the official Hugging Face action
-        uses: huggingface/hub-sync@v0.1.0
+        # v0.1.0 called `hf repo create`, which the hf CLI 2.0.0 removed (2026-09-24 sync failure); v0.3.0 calls
+        # `hf repos create`. The CLI is pinned so an upstream release cannot break publication silently; with no
+        # include/exclude inputs v0.3.0 mirrors the export directory exactly as v0.1.0 did (--delete="*").
+        uses: huggingface/hub-sync@v0.3.0
         with:
           github_repo_id: ${{ github.repository }}
           huggingface_repo_id: dmontgomery40/plastic
@@ -91,6 +94,7 @@ jobs:
           repo_type: ${{ matrix.repo_type }}
           space_sdk: docker
           subdirectory: ${{ env.EXPORT_DIR }}
+          hf_version: '2.0.0'
       - name: Verify both source identity and preserved checkpoint bytes
         run: |
           python - <<'PY'
