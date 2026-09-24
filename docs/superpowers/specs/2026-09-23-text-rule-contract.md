@@ -277,6 +277,36 @@ Neither is a fix to the verifier. If the unstated setting is learnable and the p
 no held-out harm, the propose-and-verify design as built does not protect against false rules on this learner, and
 the thread reports that.
 
+## The unstated-rules report: what the lasting update stores, and the first refusal
+
+[Results](../../research/results/text-rules-2026-09-23/contract_decorate_s0_unstated/README.md). With no definitions in
+any preface the decorations are still learned in context (frozen 0.74 exact against 0.67 stated: the stated rule cost
+matches), so the unstated poison is a real false lesson: wrong worked examples and nothing else about the operator.
+
+**Two things are stored.** The lasting update (17 lessons, 20 AdamW steps on W0) takes held-out exact to its ceiling,
+0.88: every situation after the first is right from one example (second-situation exact 0.31 → 1.0), the first is 0
+because nothing precedes it. That is a transferable procedure. It also stores composition-specific content: on the
+held-in compositions (fresh inputs) the first-situation exact goes 0 → 0.33 with no example before it, while on
+held-out compositions it stays 0. Rule content reaches the slow weights only for the compositions trained on; what
+transfers is how to adapt, not what to. The format-only control now hurts (−0.05 exact), so the exact gain needs
+correct answers; the likelihood gain (−0.21 of −0.26) is still mostly format.
+
+**Poison is harmless to adapting behaviour and visible in stored content.** After the poisoned stream, held-out exact
+is unchanged at 0.88, including on the four held-out pairs containing the poisoned operator: the first true example in
+each episode overrides whatever the slow weights carry. Held-out NLL rises 0.014. What the poison does change is the
+stored content: on the sequential arm the held-in first-situation exact fell 0.33 → 0.17 while the overall held-in
+exact was unchanged and NLL improved, and verifier v2 refused it on the first-situation check alone (limit 0.05):
+the project's first refused-bad. From the snapshot the same poison is a first lesson and is accepted (first situation
+0.17, less than the clean stream's 0.33). The corrective stream removes the held-out harm and does not restore the
+displaced content (first situation stays 0.17). The format-only stream is accepted (held-in 0.44, first situation 0):
+a damage check cannot refuse an improvement; the first-situation column identifies it as storing nothing.
+
+**Caveats, stated.** One seed. The first-situation score is over six verify episodes, so the refusal is one episode's
+first situation (2 of 6 → 1 of 6); the tolerances are stated, not calibrated. Accepted-good 1.0 and refused-bad 1 of 3
+are counts on one run. The next report enlarges the verify material (more episodes per composition) before any rate is
+read from the first-situation check, and the inconsistent-poison variant (true definitions stated over false answers)
+runs now on the stated setting.
+
 ## Not in this thread
 
 New learning mechanisms (T2, T3); sweeps over seeds or hyperparameters; hosting. Loose ends listed in FABLE-193
