@@ -284,3 +284,15 @@ def test_paired_margins_pair_items_by_position_and_refuse_mismatched_material():
     swapped = {"train": choice_summary([it("#Q", 0.5), it("#P", -2.5)]), "heldout": b["heldout"]}
     with pytest.raises(ValueError):
         paired_margins(a, swapped, groups)
+
+
+def test_the_name_permuted_content_null_is_an_optional_bad_stream_with_its_own_choice_reading():
+    spec = TextContractSpec(n_heldout=8, min_reversed_heldout=6, eval_episodes_per_composition=1, stream_episodes=17, rule_set="decorate",
+                            poison_operator="#P", stated_rules=False, name_permuted_control=True)
+    L = ChoiceLearner(accept_poison=False)
+    r = run_text_contract(L, spec, seed=0)
+    assert r["decisions"][-1]["stream"] == "name_permuted" and r["acceptance"]["n_bad"] == 4
+    assert L.consumed[-1].name_map and r["name_permuted"]["map"] and r["consume_records"]["name_permuted"]["accepted"] is True
+    assert r["choice"]["after_names"]["train"]["items"] and r["choice"]["paired"]["names_vs_before"]["train"]["n"] == 2 * 17
+    off = run_text_contract(ChoiceLearner(accept_poison=False), TextContractSpec(**{**spec.__dict__, "name_permuted_control": False}), seed=0)
+    assert off["name_permuted"] is None and off["acceptance"]["n_bad"] == 3

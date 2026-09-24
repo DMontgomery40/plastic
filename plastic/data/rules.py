@@ -192,6 +192,7 @@ class RuleBatch:
     format_only: bool = False
     stated: bool = True
     poison_kind: str | None = None  # "consistent" (false definition stated, false answers) or "inconsistent" (true definition stated, false answers)
+    name_map: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] | None = None  # the content null: each name's answers follow another composition
 
     @property
     def situations(self) -> int:
@@ -260,6 +261,45 @@ def shuffle_answers(batch: RuleBatch, *, seed: int = 0) -> RuleBatch:
         sits = tuple(Situation(s.ops, s.words, tuple(a)) for s, a in zip(e.situations, answers))
         eps.append(Episode(e.ops, sits, poisoned=False, rule_set=e.rule_set, definitions_text=e.definitions_text, stated=e.stated))
     return replace(batch, episodes=eps, poisoned=False, poisoned_operator=None, poison_kind=None, format_only=True)
+
+
+def name_permutation(compositions: list[tuple[str, ...]], *, seed: int, rule_set: str) -> dict[tuple[str, ...], tuple[str, ...]]:
+    """A fixed reassignment of compositions within each arity such that every composition's output changes on every
+    input (commuting twins such as ``#P #Q`` / ``#Q #P`` never stand in for each other)."""
+    probes = [["apple", "pear", "plum", "fig"], ["river", "stone", "cloud"]]
+    def sig(c: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(" ".join(apply(c, w, rule_set=rule_set)) for w in probes)
+    rng = random.Random(seed)
+    mapping: dict[tuple[str, ...], tuple[str, ...]] = {}
+    comps = sorted(set(compositions))
+    for arity in sorted({len(c) for c in comps}):
+        group = [c for c in comps if len(c) == arity]
+        for _ in range(10000):
+            perm = group[:]
+            rng.shuffle(perm)
+            if all(sig(a) != sig(b) for a, b in zip(group, perm)):
+                break
+        else:
+            raise RuntimeError(f"no output-changing reassignment for the arity-{arity} compositions")
+        mapping.update(zip(group, perm))
+    return mapping
+
+
+def permute_names(batch: RuleBatch, *, seed: int = 0, mapping: dict[tuple[str, ...], tuple[str, ...]] | None = None) -> RuleBatch:
+    """The content null (OPUS-LEAD-006): every episode keeps its composition's name and its inputs, but its answers are
+    computed with a different composition of the same arity, one fixed reassignment per stream, so each name is
+    consistently paired with the wrong decoration while copying, answer shapes and lengths are kept. A lasting update
+    that raises the correct outputs' first-situation choice as much from this stream as from the true one is not storing
+    which decoration a name means. With stated rules the preface contradicts the answers; use it with unstated rules."""
+    if mapping is None:
+        mapping = name_permutation([e.ops for e in batch.episodes], seed=seed, rule_set=batch.rule_set)
+    eps = []
+    for e in batch.episodes:
+        target = mapping[e.ops]
+        sits = tuple(Situation(s.ops, s.words, tuple(apply(target, list(s.words), rule_set=e.rule_set))) for s in e.situations)
+        eps.append(replace(e, situations=sits, poisoned=False))
+    return replace(batch, episodes=eps, poisoned=False, poisoned_operator=None, poison_kind=None,
+                   name_map=tuple(sorted((k, v) for k, v in mapping.items() if k in {e.ops for e in batch.episodes})))
 
 
 def normalize_output(text: str) -> str:

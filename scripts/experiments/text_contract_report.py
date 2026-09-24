@@ -67,6 +67,7 @@ def build_parser() -> argparse.ArgumentParser:
                     help="passes: every stream episode once per pass, shuffled; draws: --steps draws with replacement (the archived runs)")
     ap.add_argument("--passes", type=int, default=1, help="full passes over the stream under --sampling passes")
     ap.add_argument("--no-sequential-clean", action="store_true", help="skip the clean-again control for the sequential poison arm")
+    ap.add_argument("--name-permuted-control", action="store_true", help="also consume the content null: each name's answers computed by another composition of its arity")
     ap.add_argument("--choice-episodes", type=int, default=2, help="first-situation choice items per composition (0 disables)")
     ap.add_argument("--chat-rows", type=int, default=8, help="held-out SmolTalk rows for the chat-NLL forgetting measure (0 disables)")
     ap.add_argument("--verifier", default="v2", choices=["v1", "v2"], help="v1: held-in checks scored with the fast path frozen; v2: adapting, plus the first-situation exact")
@@ -86,7 +87,7 @@ def spec_from_args(args: argparse.Namespace) -> TextContractSpec:
                             probe_situations=args.situations, poison_operator=args.poison_operator, rule_set=args.rule_set,
                             sequential_poison=not args.no_sequential_poison, stated_rules=not args.unstated_rules, poison_kind=args.poison_kind,
                             min_reversed_heldout=args.min_reversed_heldout, sequential_clean=not args.no_sequential_clean,
-                            choice_episodes_per_composition=args.choice_episodes)
+                            choice_episodes_per_composition=args.choice_episodes, name_permuted_control=args.name_permuted_control)
 
 
 def _fmt(x: float | None, spec: str = "+.2f") -> str:
@@ -124,7 +125,7 @@ def paired_rows(mode: str, rep: dict) -> list[str]:
     paired = (rep.get("choice") or {}).get("paired") or {}
     labels = {"after_vs_before": "clean update vs before", "clean_again_vs_after": "clean again vs after clean",
               "poison_sequential_vs_after": "poison on top vs after clean", "poison_vs_before": "poison from snapshot vs before",
-              "format_vs_before": "format-only vs before"}
+              "format_vs_before": "format-only vs before", "names_vs_before": "name-permuted (content null) vs before"}
     rows = []
     for key, label in labels.items():
         block = paired.get(key)

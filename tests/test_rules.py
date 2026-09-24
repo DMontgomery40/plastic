@@ -171,3 +171,25 @@ def test_shuffle_answers_keeps_format_and_derangement_destroys_every_answer():
         assert all(st.answer != sf.answer for st, sf in zip(e_true.situations, e_fmt.situations))        # none in place
         assert e_fmt.messages()[0]["content"].startswith("We are practicing")
     assert shuffle_answers(b, seed=1) == f
+
+
+def test_permute_names_is_the_content_null():
+    """Each name keeps its inputs and answer shape but its answers follow another composition of the same arity, one
+    fixed reassignment per stream, and never a commuting twin (whose answers would be unchanged)."""
+    from plastic.data.rules import apply, name_permutation, permute_names, rule_batch
+
+    comps = [("#P",), ("#Q",), ("#B",), ("#W",), ("#H",), ("#P", "#Q"), ("#Q", "#P"), ("#B", "#W"), ("#H", "#B")]
+    batch = rule_batch(comps, episodes=2 * len(comps), n_situations=3, seed=4, split_tag="train", rule_set="decorate", stated=False)
+    out = permute_names(batch, seed=0)
+    m = dict(out.name_map)
+    assert set(m) == set(comps) and all(len(k) == len(v) for k, v in m.items())
+    for e, f in zip(batch.episodes, out.episodes):
+        assert f.ops == e.ops and [s.words for s in f.situations] == [s.words for s in e.situations]
+        for s in f.situations:
+            assert list(s.answer) == apply(m[e.ops], list(s.words), rule_set="decorate")
+            assert list(s.answer) != apply(e.ops, list(s.words), rule_set="decorate")
+    assert m[("#P", "#Q")] != ("#Q", "#P") and m[("#Q", "#P")] != ("#P", "#Q")
+    assert not out.poisoned and not out.format_only
+    assert name_permutation(comps, seed=0, rule_set="decorate") == m
+    again = permute_names(batch, mapping=m)
+    assert [s.answer for e in again.episodes for s in e.situations] == [s.answer for e in out.episodes for s in e.situations]

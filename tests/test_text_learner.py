@@ -211,3 +211,17 @@ def test_dream_inputs_are_new_word_lists_labelled_by_the_streams_own_process():
     assert pois.poisoned and all(s.answer[-1] == "thanks" and s.answer[0] != "please" for s in pois.episodes[0].situations)
     fmt = L._dream_inputs(shuffle_answers(stream, seed=0))
     assert fmt.format_only and any(s.answer_text != " ".join(apply(s.ops, list(s.words), rule_set="decorate")) for e in fmt.episodes for s in e.situations)
+
+
+def test_dream_inputs_follow_a_name_permuted_streams_mapping():
+    from plastic.data.rules import apply, permute_names, rule_batch
+    from plastic.eval.text_learner import TextRuleLearner
+
+    L = TextRuleLearner.__new__(TextRuleLearner)
+    L.dream_seed = 11
+    stream = rule_batch([("#P",), ("#Q",), ("#B",)], episodes=3, n_situations=2, seed=1, split_tag="train", rule_set="decorate", stated=False)
+    perm = permute_names(stream, seed=0)
+    fresh = L._dream_inputs(perm)
+    m = dict(perm.name_map)
+    assert fresh.name_map == perm.name_map
+    assert all(list(s.answer) == apply(m[e.ops], list(s.words), rule_set="decorate") for e in fresh.episodes for s in e.situations)

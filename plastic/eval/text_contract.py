@@ -34,7 +34,7 @@ import time
 from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 
-from plastic.data.rules import RuleBatch, apply, poison_batch, rule_batch, shuffle_answers, split_pairs
+from plastic.data.rules import RuleBatch, apply, permute_names, poison_batch, rule_batch, shuffle_answers, split_pairs
 from plastic.eval.contract import CONTRACT_VERSION, _max_gap, acceptance_rates
 
 
@@ -68,7 +68,8 @@ class TextContractSpec:
     poison_kind: str = "consistent"         # "consistent": false definition stated with false answers; "inconsistent": true definitions stated, false answers
     sequential_clean: bool = True           # the matched control for the sequential poison: the clean stream consumed again from the post-clean state
     choice_episodes_per_composition: int = 2  # first-situation choice items per composition (0 disables; used only when the learner offers ``choice``)
-    choice_at: tuple[str, ...] = ("before", "after", "after_clean_again", "after_poison_sequential", "after_poison", "after_format")  # measurements that carry the choice score
+    choice_at: tuple[str, ...] = ("before", "after", "after_clean_again", "after_poison_sequential", "after_poison", "after_format", "after_names")  # measurements that carry the choice score
+    name_permuted_control: bool = False     # the content null: the clean lessons with each name's answers computed by another composition of its arity
 
 
 _OFFSETS = {"heldout": 100, "speed": 200, "train": 300, "stream_clean": 400, "stream_correct": 500, "choice": 600}
@@ -267,6 +268,16 @@ def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int
     after_format = measure(learner, spec, split, seed, chat_nll=chat_nll, with_choice="after_format" in spec.choice_at)
     learner.restore_slow(snapshot)
 
+    # the content null: names consistently paired with the wrong decoration, copying and answer shapes kept
+    rec_names: dict[str, Any] | None = None
+    after_names: dict[str, Any] | None = None
+    permuted: RuleBatch | None = None
+    if spec.name_permuted_control:
+        permuted = permute_names(clean, seed=seed)
+        rec_names = learner.consume(permuted)
+        after_names = measure(learner, spec, split, seed, chat_nll=chat_nll, with_choice="after_names" in spec.choice_at)
+        learner.restore_slow(snapshot)
+
     def tm(m: dict[str, Any], key: str) -> float:
         return float(m["transfer_mean"]["adapt"][key])
 
@@ -291,6 +302,8 @@ def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int
         {"beneficial": True, "accepted": rec_correct.get("accepted"), "stream": "corrective"},
         {"beneficial": False, "accepted": rec_format.get("accepted"), "stream": "format_only"},
     ]
+    if rec_names is not None:
+        records.append({"beneficial": False, "accepted": rec_names.get("accepted"), "stream": "name_permuted"})
     if rec_poison_seq is not None:
         records.insert(2, {"beneficial": False, "accepted": rec_poison_seq.get("accepted"), "stream": "poisoned_sequential"})
     sequential = None
@@ -317,6 +330,7 @@ def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int
             return {part: (v if keep_items else {k: x for k, x in v.items() if k != "items"}) for part, v in m["choice"].items()}
         choice = {"before": cs(before, True), "after": cs(after, True), "after_clean_again": cs(after_clean_again, True), "after_poison_sequential": cs(after_seq, True),
                   "reverted": cs(reverted, False), "after_poison": cs(after_poison, True), "after_correction": cs(after_correction, False), "after_format": cs(after_format, True),
+                  "after_names": cs(after_names, True),
                   "at": list(spec.choice_at),
                   "note": "first situation only (no worked example before it): the correct output's rank among every composition's distinct output on the same input; "
                           "measured only at the measurements named in 'at' (None elsewhere)"}
@@ -328,7 +342,8 @@ def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int
                             "clean_again_vs_after": paired_margins(choice["after"], choice["after_clean_again"], groups),
                             "poison_sequential_vs_after": paired_margins(choice["after"], choice["after_poison_sequential"], groups),
                             "poison_vs_before": paired_margins(choice["before"], choice["after_poison"], groups),
-                            "format_vs_before": paired_margins(choice["before"], choice["after_format"], groups)}
+                            "format_vs_before": paired_margins(choice["before"], choice["after_format"], groups),
+                            "names_vs_before": paired_margins(choice["before"], choice["after_names"], groups)}
         choice["heldout_novel_accuracy"] = {k: (None if not v or "heldout" not in v else
                                                 (lambda rows: sum(r["choice"] for r in rows) / len(rows) if rows else None)(
                                                     [r for r in v["heldout"].get("items", []) if r["ops"] in novel]))
@@ -368,18 +383,26 @@ def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int
         },
         "sequential_poison": sequential,
         "sequential_control": sequential_control,
+        "name_permuted": None if after_names is None else {
+            "after_exact": tm(after_names, "exact"), "after_nll": tm(after_names, "nll"),
+            "gain_exact": tm(after_names, "exact") - tm(before, "exact"), "gain_nll": tm(after_names, "nll") - tm(before, "nll"),
+            "true_stream_gain_exact": tm(after, "exact") - tm(before, "exact"), "true_stream_gain_nll": tm(after, "nll") - tm(before, "nll"),
+            "map": [[" ".join(k), " ".join(v)] for k, v in (permuted.name_map or ())],
+            "note": "the content null: each name's answers follow another composition of its arity; a first-situation choice gain as large as the true stream's is not name-to-decoration content"},
         "choice": choice,
         "items": {"before": before["items"], "after": after["items"]},
         "revert": {"gap": gap, "tolerance": spec.revert_tolerance, "ok": gap <= spec.revert_tolerance},
         "decisions": records,
         "verifier": getattr(learner, "verifier_version", None),
-        "consume_records": {"clean": rec_clean, "clean_again": rec_clean_again, "poisoned": rec_poison, "poisoned_sequential": rec_poison_seq, "corrective": rec_correct, "format_only": rec_format},
+        "consume_records": {"clean": rec_clean, "clean_again": rec_clean_again, "poisoned": rec_poison, "poisoned_sequential": rec_poison_seq, "corrective": rec_correct, "format_only": rec_format,
+                            "name_permuted": rec_names},
         "acceptance": acceptance_rates(records),
         "compute": {
             "parameters": parameter_count,
-            "situations_consumed": (4 + (after_seq is not None) + (after_clean_again is not None)) * clean.situations,
+            "situations_consumed": (4 + (after_seq is not None) + (after_clean_again is not None) + (after_names is not None)) * clean.situations,
             "situations_measured": before["situations"] + after["situations"] + reverted["situations"] + after_poison["situations"] + after_correction["situations"] + after_format["situations"]
-                                   + (after_seq["situations"] if after_seq is not None else 0) + (after_clean_again["situations"] if after_clean_again is not None else 0),
+                                   + (after_seq["situations"] if after_seq is not None else 0) + (after_clean_again["situations"] if after_clean_again is not None else 0)
+                                   + (after_names["situations"] if after_names is not None else 0),
             "context_situations_measured": int(getattr(learner, "context_situations_measured", 0)),
             "wall_clock_s": time.time() - t0,
         },

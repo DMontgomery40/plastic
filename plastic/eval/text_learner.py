@@ -56,7 +56,8 @@ from typing import Any, Callable
 import torch
 import torch.nn.functional as F
 
-from plastic.data.rules import Episode, RuleBatch, Situation, all_compositions, apply, normalize_output, poison_batch, rule_batch, shuffle_answers
+from plastic.data.rules import (Episode, RuleBatch, Situation, all_compositions, apply, normalize_output, permute_names, poison_batch, rule_batch,
+                                shuffle_answers)
 from plastic.sleep.ttt import fast_weight_parameters, select_target
 
 MODES = ("frozen", "continued", "in_context", "replay_verify", "anchor", "distill", "dream", "dream_truth")
@@ -325,6 +326,8 @@ class TextRuleLearner:
             fresh = poison_batch(fresh, operator=stream.poisoned_operator, kind=stream.poison_kind or "consistent")
         if stream.format_only:
             fresh = shuffle_answers(fresh, seed=self.dream_seed)
+        if stream.name_map:
+            fresh = permute_names(fresh, mapping=dict(stream.name_map))
         return fresh
 
     @torch.no_grad()
