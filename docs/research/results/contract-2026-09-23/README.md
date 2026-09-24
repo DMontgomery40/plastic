@@ -173,37 +173,55 @@ What this shows, and only this:
 
 ## Coordinate ablation, post-boundary objective, inner step ceiling 10 (`coordinate-ablation-eta10/`)
 
-The last knob named above. Three variants, post-boundary objective, the learned inner step
-size initialised at 1.0 with a ceiling of 10 instead of 0.1 with a ceiling of 1, and 3000
-steps instead of 1500 (every variant in this row set has the same budget; the delta baseline
-is not in it yet, so no cross-row-set comparison at matched budget is made here). One seed.
-CPU. Per-step series are recorded, so the held-out mean after the first boundary is reported
-beside the whole-episode mean.
+The last knob named above, and the complete row set. All seven variants, post-boundary
+objective, 3000 steps each (matched budget within this table), the coordinate variants with
+the learned inner step size initialised at 1.0 under a ceiling of 10 instead of 0.1 under a
+ceiling of 1. One seed. CPU. Per-step series are recorded, so the held-out mean after the
+first boundary is reported beside the whole-episode mean. Two manifests (`manifest.json` for
+full, no_fast, decay_only; `manifest-v5.json` for the other four) record the two launches.
 
-| variant | train loss | impulse adapt / off | hold | release | after step 16, held-out mean adapt / off | speed | half at step | η per layer | chunk loss before → after | ‖ΔW‖ per layer | ‖Δθ‖ per layer |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| full | 0.069 | 0.119 / 0.130 | 0.039 / 0.064 | 0.054 / 0.060 | 0.053 / 0.071 | 0.67 | 23 | 3.0, 4.8, 5.1 | 0.098 → 0.048 | 0.18, 0.32, 0.36 | 0.02, 0.05, 0.06 |
-| no_fast | 0.072 | 0.124 / 0.124 | 0.067 / 0.067 | 0.068 / 0.068 | 0.063 / 0.063 | 1.00 | 64 | (off) | n/a | n/a | n/a |
-| decay_only | 0.064 | 0.122 / 0.122 | 0.052 / 0.053 | 0.071 / 0.071 | 0.054 / 0.054 | 1.00 | 64 | 3.5, 7.3, 6.9 | 0.112 → 0.107 | 0 | 0.04, 0.09, 0.06 |
+| variant | params | s/step | train loss | impulse adapt / off | hold | release | after step 16, held-out mean adapt / off | training dist. | speed | half at step | η per layer | chunk loss before → after | ‖ΔW‖ per layer |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| full (W + θ) | 409k | 0.18 | 0.069 | 0.119 / 0.130 | 0.039 / 0.064 | 0.054 / 0.060 | 0.053 / 0.071 | 0.048 / 0.058 | 0.67 | 23 | 3.0, 4.8, 5.1 | 0.098 → 0.048 | 0.18, 0.32, 0.36 |
+| no_fast | 409k | 0.06 | 0.072 | 0.124 / 0.124 | 0.067 / 0.067 | 0.068 / 0.068 | 0.063 / 0.063 | 0.066 / 0.066 | 1.00 | 64 | (off) | n/a | n/a |
+| decay_only (θ) | 409k | 0.15 | 0.064 | 0.122 / 0.122 | 0.052 / 0.053 | 0.071 / 0.071 | 0.054 / 0.054 | 0.050 / 0.050 | 1.00 | 64 | 3.5, 7.3, 6.9 | 0.112 → 0.107 | 0 |
+| coords_only (W) | 409k | 0.18 | 0.069 | 0.103 / 0.114 | 0.022 / 0.043 | 0.062 / 0.064 | 0.044 / 0.059 | 0.036 / 0.039 | 0.61 | 17 | 3.1, 5.0, 5.1 | 0.069 → 0.032 | 0.16, 0.24, 0.28 |
+| no_meta | 409k | 0.16 | 0.085 | 0.130 / 0.129 | 0.079 / 0.087 | 0.063 / 0.063 | 0.066 / 0.069 | 0.078 / 0.079 | 0.99 | 64 | (fixed 1.0) | 0.149 → 0.118 | 0.09, 0.05, 0.02 |
+| fixed_z | 409k | 0.23 | 0.056 | 0.110 / 0.122 | 0.022 / 0.036 | 0.060 / 0.061 | 0.046 / 0.058 | 0.038 / 0.041 | 0.61 | 22 | 3.1, 4.8, 4.7 | 0.076 → 0.036 | 0.25, 0.28, 0.23 |
+| delta_baseline | 898k | 1.04 | 0.033 | 0.102 / 0.511 | 0.029 / 0.373 | 0.038 / 0.165 | 0.046 / 0.335 | 0.027 / 0.425 | 0.14 | 1 | (per-token) | n/a | n/a |
+
+"off" is each model's own no-adaptation control: fast parameters frozen for the coordinate
+variants, writes disabled with decay active for the delta baseline.
 
 What this shows, and only this:
 
 - The earlier null was a fixture, not the mechanism. With the ceiling lifted, the learned step
   sizes climb to 3 to 5 per layer, the proposed step halves the loss on its own observed
-  chunk (0.098 to 0.048), and the coupling moves by 0.2 to 0.4 per layer. Adaptation now shows
-  in the score: on every held-out policy the full block does better with its fast path on
-  than off, by 8 percent under impulses and 40 percent under held pushes over the whole
-  episode, and after the first boundary the held-out error is 0.053 with the fast path
-  against 0.071 without. The adaptation curve drops below one half at step 23.
-- The nonlinear coordinates carry it. Adaptive decay alone, with step sizes that climbed even
-  higher, changes the held-out error by at most 3 percent, and its proposed step barely moves
-  its chunk's loss. On the memo's table, "frozen W, adaptive θ" does not match the full model
-  here. That falsifier is not triggered.
-- Against the block with no fast updates, at the same budget, the full block is better on
-  every held-out policy and on the training distribution (0.048 against 0.066).
-- The amplitude bound holds under the larger steps: the observed carry peak is 1.14 against a
-  bound of 1.43.
-- What remains open: the delta baseline at this budget (its 1500-step row above is not a
-  matched comparison; that run follows), the other three switches under this setting, more
-  seeds, and whether raising the ceiling further keeps helping or breaks the bound. Nothing
-  here is lasting learning; it is the within-episode adaptation the slow rule would build on.
+  chunk, and the coupling moves by 0.2 to 0.4 per layer. Adaptation now shows in the score:
+  the full block does better with its fast path on than off on every held-out policy, by 40
+  percent under held pushes over the whole episode, and after the first boundary the held-out
+  error is 0.053 with the fast path against 0.071 without. The carry stays inside the
+  amplitude bound (peak 1.14 against 1.43).
+- The nonlinear coordinates carry it, and they carry it best alone. Adaptive decay by itself
+  changes the held-out error by at most 3 percent. Adapting the coordinates without the decay
+  does better than adapting both, on every held-out policy and on the training distribution.
+  On the memo's table, "frozen W, adaptive θ" does not match the full model; that falsifier
+  is not triggered, and the decay's adaptation looks like a cost rather than a contribution.
+- Meta-training is necessary here. With the meta-gradient stopped, the step size cannot
+  learn, the fast path removes 1 percent of the error, and the block trains worst of all.
+- The exact boundary transport shows no accuracy benefit: the deliberately incorrect
+  fixed-latent commit scores as well as the exact rule, and trains to the lowest loss of the
+  coordinate variants. Its case remains the harness's rollback semantics, not the score.
+- Against the delta baseline at the same number of steps: the best coordinate variants match
+  it on the held-out mean after the first boundary (0.044 and 0.046 against 0.046), beat it
+  under held pushes (0.022 against 0.029), and trail it under release (0.062 against 0.038),
+  on the training distribution (0.036 against 0.027), and in adaptation speed (0.61 against
+  0.14; it writes at every token). They do so with 46 percent of the parameters and a fifth
+  of the step cost, so this is a matched-budget comparison, not a matched-compute one; at
+  matched compute the coordinate block would get about five times the steps. Comparable, not
+  better, at lower cost, on one seed.
+- What remains open: more seeds; whether raising the ceiling further keeps helping or breaks
+  the bound; why decay adaptation hurts; the release policy gap; and whether the testbed is
+  hard enough to separate the mechanisms further. Nothing here is lasting learning; it is the
+  within-episode adaptation the slow rule would build on. The coordinate config defaults were
+  changed to the working setting after this table (commit 2b2b975).

@@ -1,6 +1,6 @@
 # Coordinate ablation on the mechanism testbed
 
-Each variant is trained from scratch on the training combinations (gaussian policy) with the same data seed, then scored under the learning contract with no lasting update. `adapt` is the held-out-combination MSE with fast updates on; `no-adapt` is the same inputs with the fast path off. The off-intervention differs by model and is labelled: full: fast parameters frozen (freeze=True); no_fast: fast parameters frozen (freeze=True); decay_only: fast parameters frozen (freeze=True).
+Each variant is trained from scratch on the training combinations (gaussian policy) with the same data seed, then scored under the learning contract with no lasting update. `adapt` is the held-out-combination MSE with fast updates on; `no-adapt` is the same inputs with the fast path off. The off-intervention differs by model and is labelled: full: fast parameters frozen (freeze=True); no_fast: fast parameters frozen (freeze=True); decay_only: fast parameters frozen (freeze=True); coords_only: fast parameters frozen (freeze=True); no_meta: fast parameters frozen (freeze=True); fixed_z: fast parameters frozen (freeze=True); delta_baseline: writes disabled (beta_scale=0).
 
 `speed mean` is the adapting error as a fraction of the no-adapt error over the first probe steps (lower is faster); `half at step` is the first step at which it drops below one half. `η per layer` is the learned inner step size. `inner loss before → after` re-scores the observed chunk under the proposed step (a support diagnostic, not an adaptation score); `‖ΔW‖, ‖Δθ‖` are the proposed changes per layer, averaged over held-out boundaries.
 
@@ -9,6 +9,10 @@ Each variant is trained from scratch on the training combinations (gaussian poli
 | full | post_boundary | 409095 | 0.0693 | 0.18 | 0.1192 / 0.1298 | 0.0386 / 0.0641 | 0.0543 / 0.0596 | 0.0527 / 0.0711 | 0.0478 / 0.0583 | 0.673 | 23 | 2.960, 4.761, 5.136 | 0.0984 → 0.0481 | 0.176/0.0239, 0.322/0.0472, 0.356/0.0604 |
 | no_fast | post_boundary | 409095 | 0.0718 | 0.06 | 0.1240 / 0.1240 | 0.0666 / 0.0666 | 0.0684 / 0.0684 | 0.0627 / 0.0627 | 0.0660 / 0.0660 | 1.000 | 64 | 1.000, 1.000, 1.000 | n/a | n/a |
 | decay_only | post_boundary | 409095 | 0.0642 | 0.15 | 0.1218 / 0.1220 | 0.0516 / 0.0531 | 0.0708 / 0.0708 | 0.0535 / 0.0543 | 0.0499 / 0.0500 | 0.997 | 64 | 3.469, 7.275, 6.922 | 0.1118 → 0.1067 | 0/0.0433, 0/0.0861, 0/0.0648 |
+| coords_only | post_boundary | 409095 | 0.0686 | 0.18 | 0.1034 / 0.1144 | 0.0222 / 0.0425 | 0.0624 / 0.0639 | 0.0441 / 0.0587 | 0.0355 / 0.0393 | 0.614 | 17 | 3.085, 5.031, 5.099 | 0.0686 → 0.0322 | 0.155/0, 0.243/0, 0.282/0 |
+| no_meta | post_boundary | 409095 | 0.0852 | 0.16 | 0.1304 / 0.1294 | 0.0792 / 0.0868 | 0.0629 / 0.0629 | 0.0664 / 0.0694 | 0.0777 / 0.0786 | 0.985 | 64 | 1.000, 1.000, 1.000 | 0.1485 → 0.1183 | 0.0905/0.0185, 0.0483/0.0159, 0.0218/0.0099 |
+| fixed_z | post_boundary | 409095 | 0.0556 | 0.23 | 0.1103 / 0.1220 | 0.0220 / 0.0357 | 0.0600 / 0.0609 | 0.0464 / 0.0581 | 0.0384 / 0.0408 | 0.610 | 22 | 3.114, 4.778, 4.671 | 0.0763 → 0.0357 | 0.25/0.0203, 0.28/0.0302, 0.233/0.0398 |
+| delta_baseline | post_boundary | 897660 | 0.0326 | 1.04 | 0.1020 / 0.5108 | 0.0292 / 0.3726 | 0.0381 / 0.1645 | 0.0456 / 0.3353 | 0.0270 / 0.4248 | 0.136 | 1 | n/a | n/a | n/a |
 
 `outer loss` names the meta-training objective: `all` is the mean over every step of the episode (a sequence-model objective under which the first chunk can never benefit from a fast update); `post_boundary` is the mean over steps after the first boundary only, the query loss adaptation could have improved. Read `all` rows as a lower bound on what the fast path was asked to do.
 
