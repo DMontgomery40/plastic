@@ -1,0 +1,11 @@
+[setup] rule set decorate: 17 training compositions, 8 held-out pairs ['#B #H', '#B #P', '#B #Q', '#H #Q', '#P #B', '#P #H', '#Q #P', '#W #B']
+[mode] continued
+| continued | 0.67 → 0.87 | +0.00 / +0.22 | 0.387 → 0.120 | -0.247 | 0.05 → 0.01 | -0.282 | +0.020 | True, +0.006 | -0.003 | +0.09 (+0.20) | ok | 1.0 / 0.0 (n 2/3) | n/a |
+[mode] replay_verify
+[text-learner] replay_verify (v2): accepted train_exact_drop -0.444/0.05, train_nll_rise -0.744/0.1, train_exact_first_drop -0.167/0.05, chat_nll_rise -0.031/0.05
+[text-learner] replay_verify (v2): accepted train_exact_drop -0.056/0.05, train_nll_rise +0.019/0.1, train_exact_first_drop +0.000/0.05, chat_nll_rise +0.014/0.05
+[text-learner] replay_verify (v2): accepted train_exact_drop -0.444/0.05, train_nll_rise -0.698/0.1, train_exact_first_drop -0.167/0.05, chat_nll_rise -0.034/0.05
+[text-learner] replay_verify (v2): accepted train_exact_drop -0.111/0.05, train_nll_rise -0.058/0.1, train_exact_first_drop +0.000/0.05, chat_nll_rise +0.008/0.05
+[text-learner] replay_verify (v2): accepted train_exact_drop -0.333/0.05, train_nll_rise -0.592/0.1, train_exact_first_drop +0.000/0.05, chat_nll_rise -0.017/0.05
+| replay_verify | 0.67 → 0.87 | +0.00 / +0.22 | 0.387 → 0.120 | -0.247 | 0.05 → 0.01 | -0.282 | +0.020 | True, +0.006 | -0.003 | +0.09 (+0.20) | ok | 1.0 / 0.0 (n 2/3) | v2 |
+[done] 2292.8 s -> <run dir>/text_contract_decorate_s0_inconsistent
