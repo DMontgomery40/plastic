@@ -1,0 +1,14 @@
+[setup] rule set decorate: 17 training compositions, 8 held-out pairs ['#B #H', '#B #P', '#H #P', '#H #Q', '#H #W', '#P #Q', '#W #B', '#W #Q']
+[mode] continued
+| continued | 0.66 → 0.85 | +0.00 / +0.21 | 0.388 → 0.102 | -0.242 | 0.05 → 0.01 | -0.294 | +0.069 | True, +0.026 | -0.023 | +0.14 (+0.19) | ok | 1.0 / 0.0 (n 2/3) | n/a |
+| continued | 17/17 (17, 0) | 0.00 → 0.00 (0.00 → 0.00) | 0.06 → 0.06 | True, n/a | True, n/a | +0.00 / +0.00 |
+[mode] replay_verify
+[text-learner] replay_verify (v2): accepted train_exact_drop -0.402/0.05, train_nll_rise -0.742/0.1, train_exact_first_drop -0.059/0.05, chat_nll_rise -0.041/0.05
+[text-learner] replay_verify (v2): accepted train_exact_drop +0.020/0.05, train_nll_rise -0.030/0.1, train_exact_first_drop +0.029/0.05, chat_nll_rise -0.001/0.05
+[text-learner] replay_verify (v2): accepted train_exact_drop +0.000/0.05, train_nll_rise +0.034/0.1, train_exact_first_drop +0.000/0.05, chat_nll_rise +0.005/0.05
+[text-learner] replay_verify (v2): accepted train_exact_drop -0.363/0.05, train_nll_rise -0.573/0.1, train_exact_first_drop -0.059/0.05, chat_nll_rise -0.046/0.05
+[text-learner] replay_verify (v2): accepted train_exact_drop -0.088/0.05, train_nll_rise -0.231/0.1, train_exact_first_drop -0.059/0.05, chat_nll_rise +0.016/0.05
+[text-learner] replay_verify (v2): accepted train_exact_drop -0.265/0.05, train_nll_rise -0.530/0.1, train_exact_first_drop +0.000/0.05, chat_nll_rise -0.033/0.05
+| replay_verify | 0.66 → 0.85 | +0.00 / +0.21 | 0.388 → 0.102 | -0.242 | 0.05 → 0.01 | -0.294 | +0.069 | True, +0.026 | -0.023 | +0.14 (+0.19) | ok | 1.0 / 0.0 (n 2/3) | v2 |
+| replay_verify | 17/17 (17, 0) | 0.00 → 0.00 (0.00 → 0.00) | 0.06 → 0.06 | True, #P 1→0 | True, #P 1→0, #Q 0→1, #P 1→0, #Q 0→1 | +0.00 / +0.00 |
+[done] 6086.3 s -> <run dir>/step1_D_passes_s2
