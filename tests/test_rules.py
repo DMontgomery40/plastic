@@ -120,6 +120,45 @@ def test_decoration_set_is_a_second_rule_world_with_its_own_split_and_poison():
     assert bad.episodes[1] is b.episodes[1]
 
 
+def test_unstated_batches_state_no_definition_anywhere_and_share_their_word_lists_with_the_stated_ones():
+    from plastic.data.rules import shuffle_answers
+
+    stated = rule_batch([("#P",), ("#Q", "#B")], episodes=4, n_situations=3, seed=2, split_tag="train", rule_set="decorate")
+    unstated = rule_batch([("#P",), ("#Q", "#B")], episodes=4, n_situations=3, seed=2, split_tag="train", rule_set="decorate", stated=False)
+    assert unstated.stated is False and stated.stated is True
+    for es, eu in zip(stated.episodes, unstated.episodes):
+        assert [s.words for s in es.situations] == [s.words for s in eu.situations] and [s.answer for s in es.situations] == [s.answer for s in eu.situations]
+        assert not eu.stated and all(" means " not in m["content"] for m in eu.messages())
+        assert eu.messages()[0]["content"].startswith("We are practicing a notation") and "Apply #" in eu.messages()[0]["content"]
+        assert " means " in es.messages()[0]["content"]
+    # the poison in an unstated batch shows only wrong examples; both kinds render the same there
+    for kind in ("consistent", "inconsistent"):
+        bad = poison_batch(unstated, operator="#P", kind=kind)
+        assert bad.poison_kind == kind and bad.episodes[0].poisoned and not bad.episodes[0].stated
+        assert all(" means " not in m["content"] for m in bad.episodes[0].messages())
+        assert bad.episodes[0].situations[0].answer == tuple(list(bad.episodes[0].situations[0].words) + ["thanks"])
+    assert poison_batch(unstated, operator="#P", kind="consistent").episodes[0].messages() == poison_batch(unstated, operator="#P", kind="inconsistent").episodes[0].messages()
+    # the format-only control keeps the preface kind
+    f = shuffle_answers(unstated, seed=1)
+    assert all(not e.stated for e in f.episodes) and f.stated is False and f.poison_kind is None
+
+
+def test_inconsistent_poison_states_the_true_definition_over_false_answers():
+    import pytest
+
+    b = rule_batch([("#P",), ("#Q", "#B")], episodes=4, n_situations=3, seed=2, split_tag="train", rule_set="decorate")
+    con = poison_batch(b, operator="#P", kind="consistent")
+    inc = poison_batch(b, operator="#P", kind="inconsistent")
+    assert con.poison_kind == "consistent" and inc.poison_kind == "inconsistent" and b.poison_kind is None
+    assert "#P means write the word thanks after the list" in con.episodes[0].messages()[0]["content"]
+    assert "#P means write the word please before the list" in inc.episodes[0].messages()[0]["content"]      # the true definition is stated
+    assert inc.episodes[0].situations[0].answer == con.episodes[0].situations[0].answer                      # over the same false answers
+    assert inc.episodes[0].situations[0].answer == tuple(list(b.episodes[0].situations[0].words) + ["thanks"])
+    assert inc.episodes[1] is b.episodes[1]
+    with pytest.raises(ValueError):
+        poison_batch(b, operator="#P", kind="wrong")
+
+
 def test_shuffle_answers_keeps_format_and_derangement_destroys_every_answer():
     from plastic.data.rules import shuffle_answers
 

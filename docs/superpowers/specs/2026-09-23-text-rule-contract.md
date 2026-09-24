@@ -255,6 +255,12 @@ both small changes to `plastic/data/rules.py` and the learner's encoding, are th
 2. **Inconsistent poison.** The true definitions stated, the answers for the poisoned operator wrong: a lesson whose
    preface and outcomes disagree, which a learner that follows the preface must either ignore or absorb against it.
 
+Both are implemented: `rule_batch(..., stated=False)` and `TextContractSpec.stated_rules` (`--unstated-rules`) remove
+the definitions from every preface, in streams, verification and measurement, with the same word lists as the
+stated batches from the same seed; `poison_batch(..., kind="inconsistent")` and `TextContractSpec.poison_kind`
+(`--poison-kind inconsistent`) keep the true definitions stated over the false answers. In an unstated batch the two
+poison kinds render the same (no definition is stated either way). The report's README names both settings.
+
 Neither is a fix to the verifier. If the unstated setting is learnable and the poison there is still accepted with
 no held-out harm, the propose-and-verify design as built does not protect against false rules on this learner, and
 the thread reports that.

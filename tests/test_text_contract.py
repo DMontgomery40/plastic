@@ -85,6 +85,22 @@ def test_contract_records_an_accepted_poison_as_refused_bad_zero():
     assert r["sequential_poison"]["accepted"] is True
 
 
+def test_spec_carries_unstated_rules_and_the_poison_kind_into_every_batch():
+    spec = TextContractSpec(n_heldout=8, eval_episodes_per_composition=1, stream_episodes=6, rule_set="decorate", poison_operator="#P",
+                            stated_rules=False, poison_kind="inconsistent")
+    L = FakeLearner(accept_poison=False)
+    r = run_text_contract(L, spec, seed=0)
+    assert r["stream"]["stated_rules"] is False and r["stream"]["poison_kind"] == "inconsistent"
+    assert all(not b.stated for b in L.consumed) and all(not e.stated for b in L.consumed for e in b.episodes)
+    assert L.consumed[1].poison_kind == "inconsistent" and L.consumed[1].poisoned and L.consumed[0].poison_kind is None
+    split = split_pairs(n_heldout=8, seed=0, rule_set="decorate", min_reversed_heldout=4)
+    m = measure(L, spec, split, 0)
+    assert m["transfer_mean"]["adapt"]["situations"] == 8 * spec.situations_per_episode
+    stated = TextContractSpec(n_heldout=8, eval_episodes_per_composition=1, stream_episodes=6, rule_set="decorate", poison_operator="#P")
+    r2 = run_text_contract(FakeLearner(accept_poison=False), stated, seed=0)
+    assert r2["stream"]["stated_rules"] is True and r2["stream"]["poison_kind"] == "consistent"
+
+
 def test_sequential_arm_can_be_switched_off_and_the_shape_is_the_t1_one():
     spec = TextContractSpec(n_heldout=8, eval_episodes_per_composition=1, stream_episodes=6, sequential_poison=False)
     L = FakeLearner(accept_poison=False)

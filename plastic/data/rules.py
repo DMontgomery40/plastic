@@ -155,10 +155,12 @@ class Episode:
     poisoned: bool = False
     rule_set: str = "transform"
     definitions_text: tuple[tuple[str, str], ...] | None = None  # (op, stated definition) overrides for a poisoned episode
+    stated: bool = True  # False: the preface names the task but no definitions; the rule can come only from the worked examples
 
-    def messages(self, *, stated: bool = True) -> list[dict[str, str]]:
-        """The chat rendering: the preface (with the stated rules) rides in the first user turn, since the checkpoint
-        has no system role; a poisoned episode states its false definition."""
+    def messages(self, *, stated: bool | None = None) -> list[dict[str, str]]:
+        """The chat rendering: the preface (with the stated rules, unless the episode is unstated) rides in the first user
+        turn, since the checkpoint has no system role; a consistent poisoned episode states its false definition."""
+        stated = self.stated if stated is None else stated
         base = operator_table(self.rule_set)
         table = None
         if self.definitions_text:
@@ -182,6 +184,8 @@ class RuleBatch:
     poisoned_operator: str | None = None
     rule_set: str = "transform"
     format_only: bool = False
+    stated: bool = True
+    poison_kind: str | None = None  # "consistent" (false definition stated, false answers) or "inconsistent" (true definition stated, false answers)
 
     @property
     def situations(self) -> int:
@@ -189,25 +193,35 @@ class RuleBatch:
 
 
 def make_episode(ops: tuple[str, ...], *, n_situations: int, rng: random.Random, n_words: tuple[int, int] = (4, 5),
-                 definitions: dict[str, tuple[str, Callable]] | None = None, rule_set: str = "transform") -> Episode:
+                 definitions: dict[str, tuple[str, Callable]] | None = None, rule_set: str = "transform", stated: bool = True) -> Episode:
     sits = []
     for _ in range(n_situations):
         words = sample_words(rng, rng.randint(*n_words))
         sits.append(Situation(ops, tuple(words), tuple(apply(ops, words, definitions=definitions, rule_set=rule_set))))
-    return Episode(ops, tuple(sits), poisoned=definitions is not None, rule_set=rule_set)
+    return Episode(ops, tuple(sits), poisoned=definitions is not None, rule_set=rule_set, stated=stated)
 
 
 def rule_batch(compositions: list[tuple[str, ...]], *, episodes: int, n_situations: int, seed: int, split_tag: str,
-               rule_set: str = "transform", n_words: tuple[int, int] = (4, 5)) -> RuleBatch:
-    """``episodes`` episodes cycling over ``compositions`` in order, with fresh word lists from ``seed``."""
+               rule_set: str = "transform", n_words: tuple[int, int] = (4, 5), stated: bool = True) -> RuleBatch:
+    """``episodes`` episodes cycling over ``compositions`` in order, with fresh word lists from ``seed``. The word
+    lists do not depend on ``stated``, so stated and unstated batches from one seed differ only in the preface."""
     rng = random.Random(seed)
-    eps = [make_episode(compositions[i % len(compositions)], n_situations=n_situations, rng=rng, rule_set=rule_set, n_words=n_words) for i in range(episodes)]
-    return RuleBatch(eps, split_tag, rule_set=rule_set)
+    eps = [make_episode(compositions[i % len(compositions)], n_situations=n_situations, rng=rng, rule_set=rule_set, n_words=n_words, stated=stated)
+           for i in range(episodes)]
+    return RuleBatch(eps, split_tag, rule_set=rule_set, stated=stated)
 
 
-def poison_batch(batch: RuleBatch, *, operator: str) -> RuleBatch:
-    """The same episodes with one operator taught by its false definition wherever it occurs: a consistent lesson
-    that is wrong on every input (the T1 property). Episodes not involving the operator are unchanged."""
+POISON_KINDS = ("consistent", "inconsistent")
+
+
+def poison_batch(batch: RuleBatch, *, operator: str, kind: str = "consistent") -> RuleBatch:
+    """The same episodes with one operator's answers computed from its false definition wherever it occurs: a lesson
+    that is wrong on every input (the T1 property). ``consistent`` also states the false definition in the preface,
+    so the stated rule and the worked outcomes agree; ``inconsistent`` keeps the true definitions stated, so the
+    preface and the outcomes disagree. In an unstated batch no definition is stated either way and the two kinds
+    render the same. Episodes not involving the operator are unchanged."""
+    if kind not in POISON_KINDS:
+        raise ValueError(f"unknown poison kind {kind!r}; expected one of {POISON_KINDS}")
     false = false_table(batch.rule_set)
     if operator not in false:
         raise KeyError(operator)
@@ -219,8 +233,9 @@ def poison_batch(batch: RuleBatch, *, operator: str) -> RuleBatch:
             eps.append(e)
             continue
         sits = tuple(Situation(s.ops, s.words, tuple(apply(s.ops, list(s.words), definitions=table))) for s in e.situations)
-        eps.append(Episode(e.ops, sits, poisoned=True, rule_set=batch.rule_set, definitions_text=((operator, false[operator][0]),)))
-    return replace(batch, episodes=eps, poisoned=True, poisoned_operator=operator)
+        stated_false = ((operator, false[operator][0]),) if kind == "consistent" else None
+        eps.append(Episode(e.ops, sits, poisoned=True, rule_set=batch.rule_set, definitions_text=stated_false, stated=e.stated))
+    return replace(batch, episodes=eps, poisoned=True, poisoned_operator=operator, poison_kind=kind)
 
 
 def shuffle_answers(batch: RuleBatch, *, seed: int = 0) -> RuleBatch:
@@ -237,8 +252,8 @@ def shuffle_answers(batch: RuleBatch, *, seed: int = 0) -> RuleBatch:
                 rng.shuffle(perm)
             answers = [answers[i] for i in perm]
         sits = tuple(Situation(s.ops, s.words, tuple(a)) for s, a in zip(e.situations, answers))
-        eps.append(Episode(e.ops, sits, poisoned=False, rule_set=e.rule_set, definitions_text=e.definitions_text))
-    return replace(batch, episodes=eps, poisoned=False, poisoned_operator=None, format_only=True)
+        eps.append(Episode(e.ops, sits, poisoned=False, rule_set=e.rule_set, definitions_text=e.definitions_text, stated=e.stated))
+    return replace(batch, episodes=eps, poisoned=False, poisoned_operator=None, poison_kind=None, format_only=True)
 
 
 def normalize_output(text: str) -> str:

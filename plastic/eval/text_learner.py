@@ -86,6 +86,7 @@ class TextRuleLearner:
         self.context_situations_measured = 0
         self.train_compositions: list[tuple[str, ...]] | None = None  # set by the caller for verification material
         self.rule_set = "transform"
+        self.stated_rules = True  # the verification material's preface follows the spec (set by the caller with rule_set)
 
     # ---------------------------------------------------------------- slow state
     def _slow_params(self):
@@ -169,7 +170,8 @@ class TextRuleLearner:
     def _verify_batch(self) -> RuleBatch:
         if not self.train_compositions:
             raise RuntimeError("replay_verify needs train_compositions for its held-in verification material")
-        return rule_batch(self.train_compositions, episodes=self.verify_episodes, n_situations=3, seed=self.verify_seed, split_tag="train", rule_set=self.rule_set)
+        return rule_batch(self.train_compositions, episodes=self.verify_episodes, n_situations=3, seed=self.verify_seed, split_tag="train", rule_set=self.rule_set,
+                          stated=self.stated_rules)
 
     def _summ(self, scores) -> dict[str, float]:
         flat = [s for ep in scores for s in ep]
