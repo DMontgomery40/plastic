@@ -21,7 +21,7 @@ for the from-scratch recurrent learners and the
 [text rule contract](../superpowers/specs/2026-09-23-text-rule-contract.md) for the pretrained
 TTT-MLP chat checkpoint (760M, chat fine-tuning finished 23 September).
 
-**One lasting update has passed the contract's first test, on one seed.** On the text rule task
+**One lasting update has passed the contract's first test, on three seeds.** On the text rule task
 (decorations of a copied word list, rules not stated), 20 gradient steps on the TTT layers'
 initial fast weights W0 from 17 worked lessons raised exact answers after a single worked example
 from 0.31 to 1.0 on held-out compositions, measured after a reset, and restoring W0 removed the
@@ -34,11 +34,13 @@ worked example (16/16 after one example on the archive's own held-out inputs); e
 carries that copier's score. Scores after the first answer therefore show faster adaptation to the
 demonstration format, not knowledge of the named rules; the first answer of an episode, where there
 is nothing to copy, is the test, and the first-situation choice score measures it. The
-[corrected runs](results/text-rules-2026-09-24/README.md) (seed 0) replicate the adaptation gain with
-every composition trained, show that the archived poison refusal was collateral on a near-tie item
+[corrected runs](results/text-rules-2026-09-24/README.md) replicate the adaptation gain with every
+composition trained on three seeds and splits, show that the archived poison refusal was collateral on a near-tie item
 and does not survive the corrected protocol, and find that lessons pairing every rule name with the
-wrong decoration raise first-answer scores as much as the true lessons: no stored rule knowledge is
-shown. The update is a
+wrong decoration raise first-answer scores as much as the true lessons (seed 0): no stored rule
+knowledge is shown. On all three seeds a further update that re-teaches one name wrongly lowers that
+name's items, trained and held-out, far more than a matched clean pass: a further update is
+name-specific even where the first is not. The update is a
 supervised step outside the chat transaction path; demonstrating useful retention and refusal of
 damaging lessons through one operational path is still open. Review found that this update trained 11 of the 17 lesson
 compositions, that two of the eight held-out pairs repeat trained answers, and that the report's

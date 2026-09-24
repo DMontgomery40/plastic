@@ -51,7 +51,9 @@ exactly that; [current status](docs/research/current-status.md) has the detail.
 - On a text rule task, 20 gradient steps on the TTT chat model's initial fast weights
   from 17 worked lessons raised exact answers after one worked example from 0.31 to 1.0
   on held-out compositions, measured after a reset; restoring the weights removed the
-  effect. One seed. The gradient runs through the model's own inner loop, so this is the
+  effect; it replicates on three seeds and splits (with every composition trained, 17
+  steps: second answers 0.19 to 0.44 before, 0.94 to 1.0 after). The gradient runs through
+  the model's own inner loop, so this is the
   TTT training objective applied online, a known mechanism. An untrained template
   copier, which never reads the rule names, is also exact on every answer after the
   first worked example, so this shows faster adaptation to the demonstration format,
@@ -69,8 +71,9 @@ exactly that; [current status](docs/research/current-status.md) has the detail.
 - The coordinate block's fast path adapts within an episode and matches the delta-rule
   baseline at lower cost, on one seed; lasting learning has not been tested on it.
 
-Next: replicate the text result on further seeds and splits, then compare Sleep's
-operators with it on the same stream.
+Next: compare Sleep's operators with that update on the same stream, and a task whose
+first answer asks for a combination of rules shown only separately, so there is nothing
+to copy.
 
 ## Install and run
 
