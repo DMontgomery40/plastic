@@ -209,6 +209,18 @@ Verifier v1 accepted all four streams, including the format-only one, whose shuf
 held-in NLL more than the true lessons did (−0.467 against −0.213), with held-in exact 0 on both sides of every
 decision. Frozen scoring does not see rule content on this model; v1 is retired below.
 
+### Correction: the verifier's held-in material in the three runs above
+
+Found while reading the unstated run's split (FABLE-41B-211). The report script built the learner's held-in
+material from `split_pairs(..., min_reversed_heldout=4)` while the contract measured on the default of 6; the two
+minima give different splits, so the verifier in the three runs above scored six of the contract's held-out
+compositions (fresh inputs, read-only) as held-in material, and the "never the held-out compositions" note in
+those verify records is wrong. Nothing was trained on them and the transfer, speed, forgetting, correction and
+revert numbers are unaffected; the verify numbers (v1 and v2) are mixed held-in/held-out scores and the decisions
+would not have changed (everything was accepted on both kinds). `TextContractSpec.min_reversed_heldout` is now part
+of the spec, `contract_split(spec)` is the one split, and `run_text_contract` refuses a learner whose
+`train_compositions` differ from it (a test pins this). The report script's default minimum is now 6 as well, so every archived decorate report measures on the same seed-0 split (`#B #H, #B #P, #B #Q, #H #Q, #P #B, #P #H, #Q #P, #W #B`; the decoration-set paragraph's "at least four" describes the constraint, the archive uses six). The variant reports run on the fixed code.
+
 ## Verifier v2 and the sequential poison arm
 
 Two changes to `replay_verify` and one to the contract, made after the first report and named in every archive row.

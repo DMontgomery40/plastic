@@ -16,8 +16,7 @@ import os
 import subprocess
 import time
 
-from plastic.data.rules import split_pairs
-from plastic.eval.text_contract import TextContractSpec, run_text_contract
+from plastic.eval.text_contract import TextContractSpec, contract_split, run_text_contract
 from plastic.eval.text_learner import MODES, TextRuleLearner
 
 
@@ -39,7 +38,7 @@ def main() -> None:
     ap.add_argument("--modes", default=",".join(MODES))
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--n-heldout", type=int, default=8)
-    ap.add_argument("--min-reversed-heldout", type=int, default=4)
+    ap.add_argument("--min-reversed-heldout", type=int, default=6, help="the contract default; every archived decorate report measures on the seed-0 split with 6")
     ap.add_argument("--situations", type=int, default=8)
     ap.add_argument("--stream-episodes", type=int, default=17, help="one lesson per training composition by default (5 singles + 12 pairs)")
     ap.add_argument("--eval-episodes-per-composition", type=int, default=2)
@@ -70,8 +69,9 @@ def main() -> None:
     spec = TextContractSpec(n_heldout=args.n_heldout, split_seed=args.seed, situations_per_episode=args.situations,
                             eval_episodes_per_composition=args.eval_episodes_per_composition, stream_episodes=args.stream_episodes,
                             probe_situations=args.situations, poison_operator=args.poison_operator, rule_set=args.rule_set,
-                            sequential_poison=not args.no_sequential_poison, stated_rules=not args.unstated_rules, poison_kind=args.poison_kind)
-    train, heldout = split_pairs(n_heldout=spec.n_heldout, seed=spec.split_seed, rule_set=spec.rule_set, min_reversed_heldout=args.min_reversed_heldout)
+                            sequential_poison=not args.no_sequential_poison, stated_rules=not args.unstated_rules, poison_kind=args.poison_kind,
+                            min_reversed_heldout=args.min_reversed_heldout)
+    train, heldout = contract_split(spec)  # the same split the contract measures on; the learner's held-in material comes from it
     log(f"[setup] rule set {spec.rule_set}: {len(train)} training compositions, {len(heldout)} held-out pairs {[' '.join(c) for c in heldout]}")
     chat_rows = load_replay_conversations("everyday-conversations", "test", args.chat_rows, args.seed + 1, log) if args.chat_rows > 0 else []
     manifest = {"checkpoint": os.path.abspath(args.checkpoint), "device": args.device, "code_commit": _git_head(), "started_at_unix": int(t0),

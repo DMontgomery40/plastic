@@ -45,6 +45,7 @@ class TextLearner(Protocol):
 @dataclass
 class TextContractSpec:
     n_heldout: int = 18                    # 12 training pairs / 18 held-out (the T4 sources memo)
+    min_reversed_heldout: int = 6           # held-out pairs that reverse a training pair (split_pairs); part of the split's identity
     split_seed: int = 0
     situations_per_episode: int = 8         # worked examples per lesson; the in-context curve is read at 2/4/8
     eval_episodes_per_composition: int = 2
@@ -132,10 +133,18 @@ def make_stream(spec: TextContractSpec, split: tuple[list, list], seed: int, *, 
                       stated=spec.stated_rules)
 
 
+def contract_split(spec: TextContractSpec) -> tuple[list[tuple[str, ...]], list[tuple[str, ...]]]:
+    """The one split the contract uses; callers that hand the learner its held-in material must take it from here."""
+    return split_pairs(n_heldout=spec.n_heldout, seed=spec.split_seed, rule_set=spec.rule_set, min_reversed_heldout=spec.min_reversed_heldout)
+
+
 def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int = 0, chat_nll: Any = None) -> dict[str, Any]:
     t0 = time.time()
-    split = split_pairs(n_heldout=spec.n_heldout, seed=spec.split_seed, rule_set=spec.rule_set)
+    split = contract_split(spec)
     train, heldout = split
+    given = getattr(learner, "train_compositions", None)
+    if given is not None and [tuple(c) for c in given] != [tuple(c) for c in train]:
+        raise ValueError("the learner's held-in material (train_compositions) is not the contract's training split; build it with contract_split(spec)")
 
     before = measure(learner, spec, split, seed, chat_nll=chat_nll)
     snapshot = learner.snapshot_slow()

@@ -101,6 +101,26 @@ def test_spec_carries_unstated_rules_and_the_poison_kind_into_every_batch():
     assert r2["stream"]["stated_rules"] is True and r2["stream"]["poison_kind"] == "consistent"
 
 
+def test_the_learner_held_in_material_must_be_the_contract_split():
+    """The report script once built the learner's held-in material from a split with a different reversed-pair minimum
+    than the contract's, so the verifier scored six held-out compositions (fresh inputs, read-only) as held-in
+    material (FABLE-41B-211). The contract now owns the split and refuses a learner whose material differs."""
+    import pytest
+    from plastic.eval.text_contract import contract_split
+
+    spec = TextContractSpec(n_heldout=8, eval_episodes_per_composition=1, stream_episodes=6, rule_set="decorate", poison_operator="#P", min_reversed_heldout=4)
+    train, held = contract_split(spec)
+    other_train, other_held = split_pairs(n_heldout=8, seed=0, rule_set="decorate", min_reversed_heldout=6)
+    assert held != other_held and set(other_train) & set(held), "the two minima give different splits, which is what made the leak possible"
+    L = FakeLearner(accept_poison=False)
+    L.train_compositions = other_train
+    with pytest.raises(ValueError):
+        run_text_contract(L, spec, seed=0)
+    L.train_compositions = train
+    r = run_text_contract(L, spec, seed=0)
+    assert [tuple(c) for c in r["split"]["train"]] == train and r["spec"]["min_reversed_heldout"] == 4
+
+
 def test_sequential_arm_can_be_switched_off_and_the_shape_is_the_t1_one():
     spec = TextContractSpec(n_heldout=8, eval_episodes_per_composition=1, stream_episodes=6, sequential_poison=False)
     L = FakeLearner(accept_poison=False)
