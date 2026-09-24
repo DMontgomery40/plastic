@@ -9,7 +9,10 @@
   reports (``exact_tf``); greedy generation can be added per report when needed.
 - ``consume(stream)`` is the lasting update, by mode:
   ``frozen``: nothing (with ``adapt=True`` at scoring time this is the TTT-only baseline);
-  ``continued``: cross-entropy on the stream's assistant spans, no verification, accepts everything;
+  ``continued``: cross-entropy on the stream's assistant spans, no verification, accepts everything. The steps visit
+  the stream in full shuffled passes (``sampling="passes"``: every episode once per pass); ``sampling="draws"``
+  reproduces the archived runs, which drew 20 episodes with replacement and so trained 11 of 17 compositions
+  (OPUS-LEAD-001). Every record names the compositions actually trained and how many steps were poisoned;
   ``in_context``: nothing lasting; the stream's lessons are read into the fast weights immediately before each scored
   episode without a reset, and counted. On this model "context" is the fast-weight state (plus a short convolution
   state), not an attention window, so this arm measures what one pass over the lessons leaves in the fast weights;
@@ -18,6 +21,10 @@
   corpus is given, must not rise by more than a tolerance); accept installs, refuse restores the snapshot.
 - ``snapshot_slow`` / ``restore_slow`` copy the initial fast weights W0 (target ``w0``) or every parameter
   (target ``all``) to CPU.
+- ``choice(batch)``: for the first situation of each episode (no worked example before it), the summed log-probability
+  of every composition's output on the same input, and whether the correct one ranks first. What the slow weights
+  carry about a composition shows here as a ranking against one chance level, where a teacher-forced exact on a few
+  items cannot separate content from answer format.
 
 Nothing here decides anything with keywords; verification uses the model's own numbers on held-in material.
 Spec: docs/superpowers/specs/2026-09-23-text-rule-contract.md
@@ -32,10 +39,11 @@ from typing import Any, Callable
 import torch
 import torch.nn.functional as F
 
-from plastic.data.rules import Episode, RuleBatch, rule_batch
+from plastic.data.rules import Episode, RuleBatch, all_compositions, apply, rule_batch
 from plastic.sleep.ttt import fast_weight_parameters, select_target
 
 MODES = ("frozen", "continued", "in_context", "replay_verify")
+SAMPLING = ("passes", "draws")
 
 
 def answer_spans(labels: list[int]) -> list[tuple[int, int]]:
@@ -71,9 +79,14 @@ class TextRuleLearner:
     def __init__(self, backend, *, mode: str = "frozen", target: str = "w0", lr: float = 1e-4, steps: int = 20,
                  verify_tolerance_exact: float = 0.05, verify_tolerance_nll: float = 0.1, verify_tolerance_chat_nll: float = 0.05,
                  chat_nll: Callable[[], dict[str, float]] | None = None, verify_seed: int = 7, verify_episodes: int = 6,
-                 verify_adapt: bool = True, log: Callable[[str], None] = lambda s: None) -> None:
+                 verify_adapt: bool = True, sampling: str = "passes", passes: int = 1, log: Callable[[str], None] = lambda s: None) -> None:
         if mode not in MODES:
             raise ValueError(f"unknown mode {mode!r}; expected one of {MODES}")
+        if sampling not in SAMPLING:
+            raise ValueError(f"unknown sampling {sampling!r}; expected one of {SAMPLING}")
+        if passes < 1:
+            raise ValueError("passes must be at least 1")
+        self.sampling, self.passes = sampling, int(passes)
         if target not in ("w0", "all"):
             raise ValueError(f"unknown target {target!r}")
         self.backend, self.mode, self.target, self.lr, self.steps = backend, mode, target, float(lr), int(steps)
@@ -137,6 +150,67 @@ class TextRuleLearner:
             out.append(scores)
         return out
 
+    def _context_messages(self) -> list[dict[str, str]]:
+        msgs: list[dict[str, str]] = []
+        if self.mode == "in_context" and self.context:
+            for e in self.context:
+                msgs += e.messages()
+        return msgs
+
+    @torch.no_grad()
+    def _answer_logprobs(self, rows: list[tuple[list[int], list[int]]], token_budget: int = 16384) -> list[tuple[float, int]]:
+        """Summed log-probability and token count of the LAST answer span of each (ids, labels) row, with the fast path
+        writing as in ordinary use. Rows are right-padded into batches; the model is causal, so padding after a row
+        cannot reach its positions (a test pins batched against single-row values)."""
+        model, dev = self.backend.model, self.backend.device
+        tok = self.backend.tokenizer
+        pad = int(tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id)
+        out: list[tuple[float, int]] = []
+        L = max(len(ids) for ids, _ in rows)
+        per = max(1, token_budget // max(L, 1))
+        for k in range(0, len(rows), per):
+            chunk = rows[k:k + per]
+            x = torch.full((len(chunk), L), pad, dtype=torch.long, device=dev)
+            for j, (ids, _) in enumerate(chunk):
+                x[j, :len(ids)] = torch.tensor(ids, dtype=torch.long, device=dev)
+            logits = model(x, use_cache=False).logits.float()
+            for j, (ids, labels) in enumerate(chunk):
+                a, b = answer_spans(labels)[-1]
+                tgt = torch.tensor(labels[a:b], dtype=torch.long, device=dev)
+                lp = torch.log_softmax(logits[j, a - 1:b - 1], dim=-1).gather(1, tgt[:, None])[:, 0]
+                out.append((float(lp.sum()), int(b - a)))
+        return out
+
+    def choice(self, batch: RuleBatch) -> list[dict[str, Any]]:
+        """First-situation ranking of every composition's output (``all_compositions``, deduplicated) on the same input,
+        by summed answer log-probability including the end-of-answer token. ``choice`` is 1 when the correct output ranks
+        first; ``margin`` is its log-probability minus the best other candidate's; chance is 1 / candidates."""
+        from plastic.backends.ttt_lm.backend import encode_conversation
+
+        comps = all_compositions(batch.rule_set)
+        ctx = self._context_messages()
+        out: list[dict[str, Any]] = []
+        for ep in batch.episodes:
+            s = ep.situations[0]
+            owners: dict[str, list[str]] = {}
+            for c in comps:
+                owners.setdefault(" ".join(apply(c, list(s.words), rule_set=batch.rule_set)), []).append(" ".join(c))
+            texts = list(owners)
+            if s.answer_text not in owners:
+                raise RuntimeError(f"the correct output for {ep.ops} is not among the candidates")
+            first_user = ep.messages()[0]
+            rows = [encode_conversation(self.backend.tokenizer, ctx + [first_user, {"role": "assistant", "content": t}]) for t in texts]
+            lps = [lp for lp, _ in self._answer_logprobs(rows)]
+            ci = texts.index(s.answer_text)
+            best_other = max(lp for i, lp in enumerate(lps) if i != ci)
+            rank = 1 + sum(1 for i, lp in enumerate(lps) if i != ci and lp > lps[ci])
+            top = max(range(len(lps)), key=lambda i: lps[i])
+            out.append({"ops": " ".join(ep.ops), "choice": 1.0 if rank == 1 else 0.0, "margin": lps[ci] - best_other, "rank": rank,
+                        "correct_logp": lps[ci], "candidates": len(texts), "top": owners[texts[top]][0]})
+        if ctx:
+            self.context_situations_measured += len(batch.episodes) * sum(len(e.situations) for e in self.context)
+        return out
+
     # ---------------------------------------------------------------- the lasting update
     def _train_on(self, stream: RuleBatch) -> dict[str, Any]:
         from plastic.backends.ttt_lm.backend import encode_conversation
@@ -145,17 +219,17 @@ class TextRuleLearner:
         params = select_target(model, self.target)
         opt = torch.optim.AdamW(params, lr=self.lr, betas=(0.9, 0.95), weight_decay=0.0)
         rows = [encode_conversation(self.backend.tokenizer, e.messages()) for e in stream.episodes]
-        rng = random.Random(self.verify_seed)
+        order = self.training_order(len(rows))
         losses: list[float] = []
         model.eval()
-        for step in range(1, self.steps + 1):
-            ids, labels = rows[rng.randrange(len(rows))]
+        for i in order:
+            ids, labels = rows[i]
             x = torch.tensor([ids], dtype=torch.long, device=self.backend.device)
             y = torch.tensor([labels], dtype=torch.long, device=self.backend.device)
             with torch.enable_grad():
                 logits = model(x, use_cache=False).logits[:, :-1].float()
                 loss = F.cross_entropy(logits.reshape(-1, logits.shape[-1]), y[:, 1:].reshape(-1), ignore_index=-100)
-                if not math.isfinite(float(loss)):
+                if not math.isfinite(float(loss.detach())):
                     raise RuntimeError("non-finite loss")
                 opt.zero_grad(set_to_none=True)
                 loss.backward()
@@ -165,13 +239,41 @@ class TextRuleLearner:
         model.requires_grad_(False)
         if self.backend.device.type == "mps":
             torch.mps.synchronize()
-        return {"steps": self.steps, "lr": self.lr, "target": self.target, "loss_first": losses[0], "loss_last": losses[-1]}
+        trained: dict[str, int] = {}
+        for i in order:
+            key = " ".join(stream.episodes[i].ops)
+            trained[key] = trained.get(key, 0) + 1
+        all_keys = {" ".join(e.ops) for e in stream.episodes}
+        return {"steps": len(order), "lr": self.lr, "target": self.target, "loss_first": losses[0], "loss_last": losses[-1],
+                "sampling": self.sampling, "passes": self.passes if self.sampling == "passes" else None,
+                "trained": trained, "compositions_trained": len(trained), "compositions_in_stream": len(all_keys),
+                "untrained": sorted(all_keys - set(trained)), "poisoned_steps": sum(1 for i in order if stream.episodes[i].poisoned)}
+
+    def training_order(self, n: int) -> list[int]:
+        """Episode indices in the order the lasting update visits them. ``passes``: ``self.passes`` shuffled passes, every
+        episode once per pass. ``draws``: ``self.steps`` draws with replacement from ``Random(verify_seed)``, the order
+        the archived runs used (on the 17-episode archive stream it trains 11 compositions)."""
+        rng = random.Random(self.verify_seed)
+        if self.sampling == "draws":
+            return [rng.randrange(n) for _ in range(self.steps)]
+        order: list[int] = []
+        for _ in range(self.passes):
+            perm = list(range(n))
+            rng.shuffle(perm)
+            order += perm
+        return order
 
     def _verify_batch(self) -> RuleBatch:
         if not self.train_compositions:
             raise RuntimeError("replay_verify needs train_compositions for its held-in verification material")
         return rule_batch(self.train_compositions, episodes=self.verify_episodes, n_situations=3, seed=self.verify_seed, split_tag="train", rule_set=self.rule_set,
                           stated=self.stated_rules)
+
+    @staticmethod
+    def _first_items(batch: RuleBatch, scores) -> list[dict[str, Any]]:
+        """Per verification episode: the composition and its first-situation exact and nll (the item the first-situation
+        check counts), so a changed decision can be traced to the items that moved."""
+        return [{"ops": " ".join(ep.ops), "exact_first": sc[0]["exact"], "nll_first": sc[0]["nll"]} for ep, sc in zip(batch.episodes, scores)]
 
     def _summ(self, scores) -> dict[str, float]:
         flat = [s for ep in scores for s in ep]
@@ -212,10 +314,12 @@ class TextRuleLearner:
         # replay_verify: propose, then verify on held-in material only
         snapshot = self.snapshot_slow()
         vb = self._verify_batch()
-        before = self._summ(self.score(vb, adapt=self.verify_adapt))
+        sb = self.score(vb, adapt=self.verify_adapt)
+        before = self._summ(sb)
         chat_before = self.chat_nll() if self.chat_nll else None
         rec.update(self._train_on(stream))
-        after = self._summ(self.score(vb, adapt=self.verify_adapt))
+        sa = self.score(vb, adapt=self.verify_adapt)
+        after = self._summ(sa)
         chat_after = self.chat_nll() if self.chat_nll else None
         checks = self._verify_checks(before, after)
         if chat_before is not None and chat_after is not None:
@@ -225,7 +329,8 @@ class TextRuleLearner:
         if not accepted:
             self.restore_slow(snapshot)
         rec.update(accepted=accepted, verifier=self.verifier_version,
-                   verify={"adapt": self.verify_adapt, "before": before, "after": after, "chat_before": chat_before, "chat_after": chat_after, "checks": checks},
+                   verify={"adapt": self.verify_adapt, "before": before, "after": after, "chat_before": chat_before, "chat_after": chat_after, "checks": checks,
+                           "episodes": len(vb.episodes), "items_before": self._first_items(vb, sb), "items_after": self._first_items(vb, sa)},
                    note="held-in verification only: training compositions with fresh inputs, never the held-out compositions; "
                         + ("scored with the fast path adapting, first-situation exact included (v2)" if self.verify_adapt else "scored with the fast path frozen (v1)"))
         self.log(f"[text-learner] {self.mode} ({self.verifier_version}): {'accepted' if accepted else 'refused'} " + ", ".join(f"{c['name']} {c['value']:+.3f}/{c['limit']}" for c in checks))

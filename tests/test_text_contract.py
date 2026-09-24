@@ -66,13 +66,15 @@ def test_contract_shows_gain_revert_and_the_poison_decision():
     assert [d["stream"] for d in r["decisions"]] == ["clean", "poisoned", "poisoned_sequential", "corrective", "format_only"]
     assert r["decisions"][1]["accepted"] is False and r["decisions"][2]["accepted"] is False
     assert r["acceptance"] == {"accepted_good": 1.0, "refused_bad": 2 / 3, "n_good": 2, "n_bad": 3}   # the fake accepts the format-only stream
-    assert r["decisions"][4]["stream"] == "format_only" and L.consumed[4].format_only
+    assert r["decisions"][4]["stream"] == "format_only" and L.consumed[5].format_only
     assert r["format_only"]["true_stream_gain_exact"] == 0.0 and "learned format" in r["format_only"]["note"]
-    # the sequential arm consumes the poison right after the clean lessons, before the revert
-    assert L.consumed[1].poisoned and L.consumed[1].poisoned_operator == spec.poison_operator and L.consumed[2].poisoned
-    assert any(e.poisoned for e in L.consumed[1].episodes) and not L.consumed[0].poisoned
+    # consume order: clean, the clean-again control, the poison on top of the clean state, the poison from the snapshot,
+    # the corrective stream, the format-only control
+    assert L.consumed[1] is L.consumed[0]
+    assert L.consumed[2].poisoned and L.consumed[2].poisoned_operator == spec.poison_operator and L.consumed[3].poisoned
+    assert any(e.poisoned for e in L.consumed[2].episodes) and not L.consumed[0].poisoned
     assert r["sequential_poison"]["accepted"] is False and r["sequential_poison"]["harm_nll"] == 0.0
-    assert r["compute"]["situations_consumed"] == 5 * L.consumed[0].situations
+    assert r["compute"]["situations_consumed"] == 6 * L.consumed[0].situations
     # the learner ends at its pre-stream state
     assert L.known == set()
 
@@ -92,7 +94,7 @@ def test_spec_carries_unstated_rules_and_the_poison_kind_into_every_batch():
     r = run_text_contract(L, spec, seed=0)
     assert r["stream"]["stated_rules"] is False and r["stream"]["poison_kind"] == "inconsistent"
     assert all(not b.stated for b in L.consumed) and all(not e.stated for b in L.consumed for e in b.episodes)
-    assert L.consumed[1].poison_kind == "inconsistent" and L.consumed[1].poisoned and L.consumed[0].poison_kind is None
+    assert L.consumed[2].poison_kind == "inconsistent" and L.consumed[2].poisoned and L.consumed[0].poison_kind is None  # [1] is the clean-again control
     split = split_pairs(n_heldout=8, seed=0, rule_set="decorate", min_reversed_heldout=4)
     m = measure(L, spec, split, 0)
     assert m["transfer_mean"]["adapt"]["situations"] == 8 * spec.situations_per_episode
@@ -122,7 +124,7 @@ def test_the_learner_held_in_material_must_be_the_contract_split():
 
 
 def test_sequential_arm_can_be_switched_off_and_the_shape_is_the_t1_one():
-    spec = TextContractSpec(n_heldout=8, eval_episodes_per_composition=1, stream_episodes=6, sequential_poison=False)
+    spec = TextContractSpec(n_heldout=8, eval_episodes_per_composition=1, stream_episodes=6, sequential_poison=False, sequential_clean=False)
     L = FakeLearner(accept_poison=False)
     r = run_text_contract(L, spec, seed=0)
     assert [d["stream"] for d in r["decisions"]] == ["clean", "poisoned", "corrective", "format_only"]
@@ -144,3 +146,141 @@ def test_transfer_reports_the_first_situation_separately_from_the_rest():
     spec = TextContractSpec(n_heldout=8, eval_episodes_per_composition=1, stream_episodes=4)
     r = run_text_contract(FakeLearner(accept_poison=False), spec, seed=0)
     assert "delta_exact_first" in r["transfer"] and "delta_exact_after_first" in r["transfer"]
+
+
+def test_report_script_arguments_become_the_contract_spec_and_its_defaults_match_the_archive_split():
+    """The report script once carried its own split parameters beside the contract's (FABLE-41B-211). Its command line
+    now becomes one spec, and the defaults reproduce the archived seed-0 decorate split."""
+    from plastic.eval.text_contract import contract_split
+    from scripts.experiments.text_contract_report import build_parser, spec_from_args
+
+    args = build_parser().parse_args(["--checkpoint", "ck", "--out", "o"])
+    spec = spec_from_args(args)
+    assert spec.min_reversed_heldout == 6 and spec.stated_rules and spec.poison_kind == "consistent" and spec.sequential_poison
+    assert args.verify_episodes == 34 and args.verifier == "v2" and args.sampling == "passes" and args.passes == 1
+    assert spec.sequential_clean and spec.choice_episodes_per_composition == 2
+    # the archived reports' settings, as the script's docstring names them
+    old = build_parser().parse_args(["--checkpoint", "ck", "--out", "o", "--sampling", "draws", "--steps", "20", "--verify-episodes", "6",
+                                     "--no-sequential-clean", "--choice-episodes", "0"])
+    old_spec = spec_from_args(old)
+    assert old.sampling == "draws" and old.steps == 20 and old.verify_episodes == 6
+    assert not old_spec.sequential_clean and old_spec.choice_episodes_per_composition == 0 and contract_split(old_spec) == contract_split(spec)
+    assert [" ".join(c) for c in contract_split(spec)[1]] == ["#B #H", "#B #P", "#B #Q", "#H #Q", "#P #B", "#P #H", "#Q #P", "#W #B"]
+    args = build_parser().parse_args(["--checkpoint", "ck", "--out", "o", "--unstated-rules", "--poison-kind", "inconsistent",
+                                      "--no-sequential-poison", "--verify-episodes", "18", "--verifier", "v1", "--min-reversed-heldout", "4"])
+    spec = spec_from_args(args)
+    assert not spec.stated_rules and spec.poison_kind == "inconsistent" and not spec.sequential_poison and spec.min_reversed_heldout == 4
+    assert args.verify_episodes == 18 and args.verifier == "v1"
+    assert contract_split(spec)[1] != contract_split(spec_from_args(build_parser().parse_args(["--checkpoint", "ck", "--out", "o"])))[1]
+
+
+class RecordingLearner(FakeLearner):
+    """Records the slow state at the start of every consume, so the arms' starting points can be checked."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.states: list[set] = []
+
+    def consume(self, stream: RuleBatch):
+        self.states.append(copy.deepcopy(self.known))
+        rec = super().consume(stream)
+        if rec["accepted"]:
+            self.known.add(("consumed", len(self.states)))  # every accepted consume leaves a distinct mark, so a missing restore shows
+        return rec
+
+
+def test_the_sequential_poison_has_a_clean_again_control_outside_the_acceptance_pair():
+    """The poisoned stream is the clean stream with one operator's answers changed, so a refusal on the sequential arm is
+    attributable to the poison only against the same clean stream consumed again from the same post-clean state
+    (OPUS-LEAD-001). The control starts where the sequential poison starts, and neither changes the acceptance pair."""
+    spec = TextContractSpec(n_heldout=8, eval_episodes_per_composition=1, stream_episodes=6)
+    L = RecordingLearner(accept_poison=False)
+    r = run_text_contract(L, spec, seed=0)
+    assert L.consumed[1] is L.consumed[0] and not L.consumed[1].poisoned and L.consumed[2].poisoned
+    assert L.states[1] == L.states[2], "the clean-again control and the sequential poison start from the same post-clean state"
+    assert L.states[1] != L.states[0]
+    assert r["sequential_control"]["accepted"] is True and r["consume_records"]["clean_again"]["accepted"] is True
+    assert [d["stream"] for d in r["decisions"]] == ["clean", "poisoned", "poisoned_sequential", "corrective", "format_only"]
+    assert r["acceptance"]["n_good"] == 2 and r["acceptance"]["n_bad"] == 3
+    off = run_text_contract(FakeLearner(accept_poison=False), TextContractSpec(n_heldout=8, eval_episodes_per_composition=1, stream_episodes=6, sequential_clean=False), seed=0)
+    assert off["sequential_control"] is None and off["consume_records"]["clean_again"] is None
+
+
+class ChoiceLearner(FakeLearner):
+    """Adds a first-situation choice: a known composition ranks its correct output first, an unknown one does not."""
+
+    def choice(self, batch: RuleBatch):
+        out = []
+        for e in batch.episodes:
+            known = e.ops in self.known
+            out.append({"ops": " ".join(e.ops), "choice": 1.0 if known else 0.0, "margin": 1.5 if known else -2.0, "rank": 1 if known else 7,
+                        "correct_logp": -3.0 if known else -9.0, "candidates": 23, "top": " ".join(e.ops)})
+        return out
+
+
+def test_choice_is_measured_on_training_and_held_out_compositions_where_the_questions_are_decided():
+    spec = TextContractSpec(n_heldout=8, eval_episodes_per_composition=1, stream_episodes=6, choice_episodes_per_composition=2, rule_set="decorate", poison_operator="#P")
+    L = ChoiceLearner(accept_poison=False)
+    r = run_text_contract(L, spec, seed=0)
+    ch = r["choice"]
+    assert ch["before"]["train"]["accuracy"] == 0.0 and ch["before"]["heldout"]["accuracy"] == 0.0
+    # the fake learns the six streamed compositions: training choice rises only for those, held-out stays at zero
+    trained = {" ".join(e.ops) for e in L.consumed[0].episodes}
+    after = ch["after"]["train"]["by_composition"]
+    assert all(after[k]["accuracy"] == (1.0 if k in trained else 0.0) for k in after)
+    assert ch["after"]["heldout"]["accuracy"] == 0.0 and ch["after"]["train"]["n"] == 2 * len(r["split"]["train"])
+    assert abs(ch["before"]["train"]["chance_mean"] - 1 / 23) < 1e-12 and len(ch["before"]["train"]["items"]) == ch["before"]["train"]["n"]
+    # the choice score costs a forward pass per candidate, so it rides only on the named measurements; the revert check
+    # stays prediction-level through the per-item exact and nll records
+    assert ch["reverted"] is None and ch["after_correction"] is None and ch["after_poison"]["train"]["items"] and ch["after_format"]["train"]["items"] and r["revert"]["ok"]
+    assert ch["paired"]["after_vs_before"]["train"]["n"] == 2 * len(r["split"]["train"]) and ch["paired"]["after_vs_before"]["heldout_novel"]["mean_change"] == 0.0
+    assert ch["at"] == list(spec.choice_at) and ch["after_clean_again"]["train"]["items"]
+    assert r["sequential_control"]["choice_train_delta"] == 0.0 and r["sequential_poison"]["choice_heldout_delta"] == 0.0
+    # per-item records ride along with every measurement
+    assert len(r["items"]["after"]["heldout"]) == len(r["split"]["heldout"]) and len(r["items"]["after"]["heldout"][0]["exact"]) == spec.situations_per_episode
+
+
+def test_revert_check_sees_a_single_moved_choice_item():
+    """The revert check is prediction-level: one item's changed margin is a gap even when the means would hide it."""
+    from plastic.eval.contract import _max_gap
+    from plastic.eval.text_contract import choice_summary
+
+    a = [{"ops": "#P", "choice": 1.0, "margin": 1.0, "rank": 1, "correct_logp": -3.0, "candidates": 25, "top": "#P"},
+         {"ops": "#Q", "choice": 0.0, "margin": -1.0, "rank": 2, "correct_logp": -5.0, "candidates": 25, "top": "#P"}]
+    b = [dict(a[0], margin=1.2), dict(a[1], margin=-1.2)]
+    sa, sb = choice_summary(a), choice_summary(b)
+    assert sa["margin_mean"] == sb["margin_mean"]
+    assert _max_gap({"c": sa}, {"c": sb}) > 0.1
+
+
+def test_held_out_pairs_that_repeat_a_trained_answer_are_named():
+    """#P #Q and #Q #P write the same answer on every input (a prefix word and a suffix word commute), as do #H #Q and
+    #Q #H; the archive split holds out #H #Q and #Q #P while training their twins, so two of its eight held-out pairs are
+    not new behaviour (OPUS-LEAD-002). The contract names them and keeps a novel-only reading."""
+    from plastic.eval.text_contract import contract_split, output_duplicates
+
+    spec = TextContractSpec(n_heldout=8, min_reversed_heldout=6, split_seed=0, rule_set="decorate", poison_operator="#P", stream_episodes=6)
+    train, held = contract_split(spec)
+    assert output_duplicates(train, held, "decorate") == {"#H #Q": "#Q #H", "#Q #P": "#P #Q"}
+    r = run_text_contract(ChoiceLearner(accept_poison=False), TextContractSpec(**{**spec.__dict__, "eval_episodes_per_composition": 1}), seed=0)
+    assert r["split"]["heldout_output_duplicates"] == {"#H #Q": "#Q #H", "#Q #P": "#P #Q"} and len(r["split"]["heldout_novel"]) == 6
+    assert set(r["choice"]["heldout_novel_accuracy"]) == {"before", "after", "after_clean_again", "after_poison_sequential"}
+    assert output_duplicates([("#R", "#S")], [("#S", "#R")], "transform") == {}
+
+
+def test_paired_margins_pair_items_by_position_and_refuse_mismatched_material():
+    import pytest
+    from plastic.eval.text_contract import choice_summary, paired_margins
+
+    it = lambda ops, m: {"ops": ops, "choice": 1.0 if m > 0 else 0.0, "margin": m, "rank": 1 if m > 0 else 2, "correct_logp": -3.0, "candidates": 23, "top": ops}
+    a = {"train": choice_summary([it("#P", -1.0), it("#Q", -2.0)]), "heldout": choice_summary([it("#B #H", -3.0), it("#H #Q", -1.0)])}
+    b = {"train": choice_summary([it("#P", 0.5), it("#Q", -2.5)]), "heldout": choice_summary([it("#B #H", -2.0), it("#H #Q", -1.0)])}
+    groups = {"train": {"#P", "#Q"}, "heldout_novel": {"#B #H"}, "heldout_duplicate": {"#H #Q"}}
+    p = paired_margins(a, b, groups)
+    assert p["train"] == {"mean_change": 0.5, "improved": 1, "worsened": 1, "n": 2}
+    assert p["heldout_novel"] == {"mean_change": 1.0, "improved": 1, "worsened": 0, "n": 1}
+    assert p["heldout_duplicate"] == {"mean_change": 0.0, "improved": 0, "worsened": 0, "n": 1}
+    assert paired_margins(a, None, groups) is None
+    swapped = {"train": choice_summary([it("#Q", 0.5), it("#P", -2.5)]), "heldout": b["heldout"]}
+    with pytest.raises(ValueError):
+        paired_margins(a, swapped, groups)

@@ -106,6 +106,12 @@ def all_pairs(rule_set: str = "transform") -> list[tuple[str, str]]:
     return [p for p in itertools.permutations(operator_table(rule_set), 2)]
 
 
+def all_compositions(rule_set: str = "transform") -> list[tuple[str, ...]]:
+    """Every single operator and every ordered pair: the candidate set for the first-situation choice score, the same
+    for trained and held-out compositions so both are read against one chance level."""
+    return [(op,) for op in operator_table(rule_set)] + [tuple(p) for p in all_pairs(rule_set)]
+
+
 def split_pairs(*, n_heldout: int = 18, seed: int = 0, min_reversed_heldout: int = 6, rule_set: str = "transform") -> tuple[list[tuple[str, ...]], list[tuple[str, ...]]]:
     """Training compositions (every single plus the training pairs) and held-out ordered pairs. Constraints (the T4
     sources memo, CFQ/COGS-style low atom divergence): every operator appears in a training pair in BOTH positions,

@@ -14,7 +14,15 @@ before and after see identical inputs:
 
 The poisoned stream is consumed twice: from the pre-stream snapshot (the T1 shape) and, when ``sequential_poison`` is set,
 on top of the accepted clean lessons without a revert between, the arm on which a verifier can compare the proposal with
-what it has already accepted. Both decisions count in the acceptance pair.
+what it has already accepted. Both decisions count in the acceptance pair. The poisoned stream is the clean stream with
+one operator's answers changed, so the sequential arm shares every other episode with a second clean pass; with
+``sequential_clean`` the clean stream is also consumed a second time from the same post-clean state, the matched control
+without which a refusal on the sequential arm cannot be attributed to the poison (OPUS-LEAD-001). The control is recorded
+beside the decisions, not counted in the acceptance pair.
+
+Every measurement keeps per-item records (per episode, per situation) and, when the learner offers ``choice``, a
+first-situation ranking of every composition's output on fresh inputs for training and held-out compositions alike, so
+the revert check is prediction-level and a changed decision can be traced to the items that moved.
 
 Report shape and version tag follow plastic/eval/contract.py so both contracts read on one page.
 Spec: docs/superpowers/specs/2026-09-23-text-rule-contract.md
@@ -26,7 +34,7 @@ import time
 from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 
-from plastic.data.rules import RuleBatch, poison_batch, rule_batch, shuffle_answers, split_pairs
+from plastic.data.rules import RuleBatch, apply, poison_batch, rule_batch, shuffle_answers, split_pairs
 from plastic.eval.contract import CONTRACT_VERSION, _max_gap, acceptance_rates
 
 
@@ -58,9 +66,12 @@ class TextContractSpec:
     sequential_poison: bool = True          # also consume the poisoned stream ON TOP of the accepted clean one (no revert between)
     stated_rules: bool = True               # False: no definitions in any preface (streams, verification, measurement); rules come from examples only
     poison_kind: str = "consistent"         # "consistent": false definition stated with false answers; "inconsistent": true definitions stated, false answers
+    sequential_clean: bool = True           # the matched control for the sequential poison: the clean stream consumed again from the post-clean state
+    choice_episodes_per_composition: int = 2  # first-situation choice items per composition (0 disables; used only when the learner offers ``choice``)
+    choice_at: tuple[str, ...] = ("before", "after", "after_clean_again", "after_poison_sequential", "after_poison", "after_format")  # measurements that carry the choice score
 
 
-_OFFSETS = {"heldout": 100, "speed": 200, "train": 300, "stream_clean": 400, "stream_correct": 500}
+_OFFSETS = {"heldout": 100, "speed": 200, "train": 300, "stream_clean": 400, "stream_correct": 500, "choice": 600}
 
 
 def _seed(seed: int, tag: str, index: int = 0) -> int:
@@ -89,8 +100,28 @@ def _summarize(scores: list[list[dict[str, float]]]) -> dict[str, Any]:
             "situations": n, "answer_tokens": int(sum(s.get("tokens", 0) for s in flat))}
 
 
-def measure(learner: TextLearner, spec: TextContractSpec, split: tuple[list, list], seed: int, *, chat_nll: Any = None) -> dict[str, Any]:
-    """One set of measurements from fixed seeds; identical numbers on an unchanged learner."""
+def _items(batch: RuleBatch, scores: list[list[dict[str, float]]]) -> list[dict[str, Any]]:
+    """Per episode: the composition and its per-situation exact and nll, in batch order (fixed seeds make the items the
+    same inputs before and after)."""
+    return [{"ops": " ".join(ep.ops), "exact": [x["exact"] for x in sc], "nll": [x["nll"] for x in sc]} for ep, sc in zip(batch.episodes, scores)]
+
+
+def choice_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
+    """Accuracy (the correct output ranks first), mean margin over the best other candidate, mean chance level, and the
+    same per composition; the items stay attached."""
+    def agg(rows: list[dict[str, Any]]) -> dict[str, Any]:
+        n = len(rows)
+        return {"accuracy": sum(r["choice"] for r in rows) / n, "margin_mean": sum(r["margin"] for r in rows) / n,
+                "correct_logp_mean": sum(r["correct_logp"] for r in rows) / n, "chance_mean": sum(1.0 / r["candidates"] for r in rows) / n, "n": n}
+    by: dict[str, list[dict[str, Any]]] = {}
+    for r in items:
+        by.setdefault(r["ops"], []).append(r)
+    return agg(items) | {"by_composition": {k: agg(v) for k, v in by.items()}, "items": items}
+
+
+def measure(learner: TextLearner, spec: TextContractSpec, split: tuple[list, list], seed: int, *, chat_nll: Any = None, with_choice: bool = True) -> dict[str, Any]:
+    """One set of measurements from fixed seeds; identical numbers on an unchanged learner. The choice score costs a
+    forward pass per candidate output, so the contract computes it only at the measurements named in ``spec.choice_at``."""
     train, heldout = split
     out: dict[str, Any] = {"transfer": {}, "speed": {}, "forgetting": {}, "situations": 0}
     hb = rule_batch(heldout, episodes=spec.eval_episodes_per_composition * len(heldout), n_situations=spec.situations_per_episode,
@@ -105,6 +136,7 @@ def measure(learner: TextLearner, spec: TextContractSpec, split: tuple[list, lis
         per_comp[key]["no_adapt"].append(f)
     out["transfer"] = {k: {"adapt": _summarize(v["adapt"]), "no_adapt": _summarize(v["no_adapt"])} for k, v in per_comp.items()}
     out["transfer_mean"] = {"adapt": _summarize(adapt), "no_adapt": _summarize(frozen)}
+    out["items"] = {"heldout": _items(hb, adapt)}
     out["situations"] += 2 * hb.situations
     # speed: the adapting nll at each situation of a held-out episode as a fraction of the writes-disabled nll
     sb = rule_batch(heldout, episodes=len(heldout), n_situations=spec.probe_situations, seed=_seed(seed, "speed"), split_tag="heldout", rule_set=spec.rule_set, n_words=spec.n_words,
@@ -120,8 +152,18 @@ def measure(learner: TextLearner, spec: TextContractSpec, split: tuple[list, lis
                     "episodes": len(sb.episodes)}
     tb = rule_batch(train, episodes=len(train), n_situations=spec.situations_per_episode, seed=_seed(seed, "train"), split_tag="train", rule_set=spec.rule_set, n_words=spec.n_words,
                     stated=spec.stated_rules)
-    out["forgetting"] = {"adapt": _summarize(learner.score(tb, adapt=True)), "no_adapt": _summarize(learner.score(tb, adapt=False))}
+    tb_adapt = learner.score(tb, adapt=True)
+    out["forgetting"] = {"adapt": _summarize(tb_adapt), "no_adapt": _summarize(learner.score(tb, adapt=False))}
+    out["items"]["train"] = _items(tb, tb_adapt)
     out["situations"] += 2 * tb.situations
+    choose = getattr(learner, "choice", None)
+    n_choice = spec.choice_episodes_per_composition
+    if choose is not None and n_choice > 0 and with_choice:
+        common = {"n_situations": 1, "rule_set": spec.rule_set, "n_words": spec.n_words, "stated": spec.stated_rules}
+        cb_h = rule_batch(heldout, episodes=n_choice * len(heldout), seed=_seed(seed, "choice"), split_tag="heldout", **common)
+        cb_t = rule_batch(train, episodes=n_choice * len(train), seed=_seed(seed, "choice", 1), split_tag="train", **common)
+        out["choice"] = {"heldout": choice_summary(choose(cb_h)), "train": choice_summary(choose(cb_t))}
+        out["situations"] += cb_h.situations + cb_t.situations
     if chat_nll is not None:
         out["forgetting"]["chat_nll"] = chat_nll()
     return out
@@ -133,6 +175,41 @@ def make_stream(spec: TextContractSpec, split: tuple[list, list], seed: int, *, 
                       stated=spec.stated_rules)
 
 
+def paired_margins(a: dict[str, Any] | None, b: dict[str, Any] | None, groups: dict[str, set[str]]) -> dict[str, Any] | None:
+    """Per-item change in the choice margin from measurement ``a`` to ``b`` (same inputs, same order, so items pair by
+    index), summarized per group of compositions: mean change, items improved / worsened, and n. Counts of first-rank
+    hits on a dozen items are too coarse to read; the paired margin is the per-item reading."""
+    if not a or not b:
+        return None
+    out: dict[str, Any] = {}
+    for part in ("train", "heldout"):
+        ia, ib = a.get(part, {}).get("items"), b.get(part, {}).get("items")
+        if not ia or not ib:
+            continue
+        if [x["ops"] for x in ia] != [x["ops"] for x in ib]:
+            raise ValueError("choice items do not pair: the measurements saw different material")
+        for name, members in groups.items():
+            if not name.startswith(part):
+                continue
+            d = [y["margin"] - x["margin"] for x, y in zip(ia, ib) if x["ops"] in members]
+            if d:
+                out[name] = {"mean_change": sum(d) / len(d), "improved": sum(1 for v in d if v > 0), "worsened": sum(1 for v in d if v < 0), "n": len(d)}
+    return out
+
+
+def output_duplicates(train: list[tuple[str, ...]], heldout: list[tuple[str, ...]], rule_set: str) -> dict[str, str]:
+    """Held-out compositions whose output equals a training composition's on every input, mapped to that composition.
+    On the decoration set a prefix word and a suffix word commute (``#P #Q`` = ``#Q #P``, ``#H #Q`` = ``#Q #H``), and the
+    reversed-pair constraint puts such pairs in the held-out set, so part of "held-out transfer" repeats trained answers
+    (OPUS-LEAD-002). Decorations never inspect the words, so one probe list decides it; the transforming set is checked on
+    three lists of different lengths."""
+    probes = [["apple", "pear", "plum", "fig"], ["river", "stone", "cloud"], ["hammer", "needle", "basket", "candle", "mirror"]]
+    def sig(c: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(" ".join(apply(c, w, rule_set=rule_set)) for w in probes)
+    trained = {sig(c): " ".join(c) for c in train}
+    return {" ".join(h): trained[sig(h)] for h in heldout if sig(h) in trained}
+
+
 def contract_split(spec: TextContractSpec) -> tuple[list[tuple[str, ...]], list[tuple[str, ...]]]:
     """The one split the contract uses; callers that hand the learner its held-in material must take it from here."""
     return split_pairs(n_heldout=spec.n_heldout, seed=spec.split_seed, rule_set=spec.rule_set, min_reversed_heldout=spec.min_reversed_heldout)
@@ -142,16 +219,26 @@ def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int
     t0 = time.time()
     split = contract_split(spec)
     train, heldout = split
+    dups = output_duplicates(train, heldout, spec.rule_set)
     given = getattr(learner, "train_compositions", None)
     if given is not None and [tuple(c) for c in given] != [tuple(c) for c in train]:
         raise ValueError("the learner's held-in material (train_compositions) is not the contract's training split; build it with contract_split(spec)")
 
-    before = measure(learner, spec, split, seed, chat_nll=chat_nll)
+    before = measure(learner, spec, split, seed, chat_nll=chat_nll, with_choice="before" in spec.choice_at)
     snapshot = learner.snapshot_slow()
 
     clean = make_stream(spec, split, seed, tag="stream_clean")
     rec_clean = learner.consume(clean)
-    after = measure(learner, spec, split, seed, chat_nll=chat_nll)
+    after = measure(learner, spec, split, seed, chat_nll=chat_nll, with_choice="after" in spec.choice_at)
+
+    # the matched control for the sequential poison: the same clean stream again from the same post-clean state
+    rec_clean_again: dict[str, Any] | None = None
+    after_clean_again: dict[str, Any] | None = None
+    if spec.sequential_clean:
+        post_clean = learner.snapshot_slow()
+        rec_clean_again = learner.consume(clean)
+        after_clean_again = measure(learner, spec, split, seed, chat_nll=chat_nll, with_choice="after_clean_again" in spec.choice_at)
+        learner.restore_slow(post_clean)
 
     # the sequential arm: the poison arrives after the clean lessons were accepted, so a verifier that checks the
     # proposal against what it already accepted has something to check it against (from the snapshot the operator
@@ -161,27 +248,42 @@ def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int
     after_seq: dict[str, Any] | None = None
     if spec.sequential_poison:
         rec_poison_seq = learner.consume(poisoned)
-        after_seq = measure(learner, spec, split, seed, chat_nll=chat_nll)
+        after_seq = measure(learner, spec, split, seed, chat_nll=chat_nll, with_choice="after_poison_sequential" in spec.choice_at)
 
     learner.restore_slow(snapshot)
-    reverted = measure(learner, spec, split, seed, chat_nll=chat_nll)
+    reverted = measure(learner, spec, split, seed, chat_nll=chat_nll, with_choice="reverted" in spec.choice_at)
     gap = _max_gap({k: v for k, v in reverted.items() if k != "situations"}, {k: v for k, v in before.items() if k != "situations"})
 
     rec_poison = learner.consume(poisoned)
-    after_poison = measure(learner, spec, split, seed, chat_nll=chat_nll)
+    after_poison = measure(learner, spec, split, seed, chat_nll=chat_nll, with_choice="after_poison" in spec.choice_at)
     corrective = make_stream(spec, split, seed, tag="stream_correct")
     rec_correct = learner.consume(corrective)
-    after_correction = measure(learner, spec, split, seed, chat_nll=chat_nll)
+    after_correction = measure(learner, spec, split, seed, chat_nll=chat_nll, with_choice="after_correction" in spec.choice_at)
     learner.restore_slow(snapshot)
 
     # the format-only control (the sources memo's third falsifier): the clean lessons with shuffled answers
     shuffled = shuffle_answers(clean, seed=seed)
     rec_format = learner.consume(shuffled)
-    after_format = measure(learner, spec, split, seed, chat_nll=chat_nll)
+    after_format = measure(learner, spec, split, seed, chat_nll=chat_nll, with_choice="after_format" in spec.choice_at)
     learner.restore_slow(snapshot)
 
     def tm(m: dict[str, Any], key: str) -> float:
         return float(m["transfer_mean"]["adapt"][key])
+
+    def ch(m: dict[str, Any] | None, part: str) -> float | None:
+        return None if m is None or "choice" not in m else float(m["choice"][part]["accuracy"])
+
+    def ch_delta(a: dict[str, Any] | None, b: dict[str, Any] | None, part: str) -> float | None:
+        x, y = ch(a, part), ch(b, part)
+        return None if x is None or y is None else y - x
+
+    def first_item_changes(rec: dict[str, Any] | None) -> list[dict[str, Any]] | None:
+        """Verification items whose first-situation exact changed across a verified consume."""
+        v = (rec or {}).get("verify")
+        if not v or "items_before" not in v:
+            return None
+        return [{"ops": b["ops"], "before": b["exact_first"], "after": a["exact_first"]}
+                for b, a in zip(v["items_before"], v["items_after"]) if b["exact_first"] != a["exact_first"]]
 
     records = [
         {"beneficial": True, "accepted": rec_clean.get("accepted"), "stream": "clean"},
@@ -196,13 +298,47 @@ def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int
         sequential = {"accepted": rec_poison_seq.get("accepted"), "after_clean_exact": tm(after, "exact"), "after_clean_then_poison_exact": tm(after_seq, "exact"),
                       "after_clean_nll": tm(after, "nll"), "after_clean_then_poison_nll": tm(after_seq, "nll"),
                       "harm_nll": tm(after_seq, "nll") - tm(after, "nll"), "harm_exact": tm(after, "exact") - tm(after_seq, "exact"),
+                      "choice_heldout_delta": ch_delta(after, after_seq, "heldout"), "choice_train_delta": ch_delta(after, after_seq, "train"),
+                      "verify_first_changes": first_item_changes(rec_poison_seq),
                       "note": "the poison consumed on top of the accepted clean lessons, no revert between; harm is relative to the clean state"}
+    sequential_control = None
+    if after_clean_again is not None:
+        sequential_control = {"accepted": rec_clean_again.get("accepted"), "after_clean_exact": tm(after, "exact"), "after_clean_again_exact": tm(after_clean_again, "exact"),
+                              "delta_nll": tm(after_clean_again, "nll") - tm(after, "nll"), "delta_exact": tm(after_clean_again, "exact") - tm(after, "exact"),
+                              "choice_heldout_delta": ch_delta(after, after_clean_again, "heldout"), "choice_train_delta": ch_delta(after, after_clean_again, "train"),
+                              "verify_first_changes": first_item_changes(rec_clean_again),
+                              "note": "the clean stream consumed a second time from the post-clean state: the matched control for the sequential poison, "
+                                      "which shares every episode not involving the poisoned operator; not counted in the acceptance pair"}
+    choice = None
+    if spec.choice_at and any("choice" in m for m in (before, after)):
+        def cs(m: dict[str, Any] | None, keep_items: bool) -> dict[str, Any] | None:
+            if m is None or "choice" not in m:
+                return None
+            return {part: (v if keep_items else {k: x for k, x in v.items() if k != "items"}) for part, v in m["choice"].items()}
+        choice = {"before": cs(before, True), "after": cs(after, True), "after_clean_again": cs(after_clean_again, True), "after_poison_sequential": cs(after_seq, True),
+                  "reverted": cs(reverted, False), "after_poison": cs(after_poison, True), "after_correction": cs(after_correction, False), "after_format": cs(after_format, True),
+                  "at": list(spec.choice_at),
+                  "note": "first situation only (no worked example before it): the correct output's rank among every composition's distinct output on the same input; "
+                          "measured only at the measurements named in 'at' (None elsewhere)"}
     parameter_count = getattr(learner, "parameter_count", lambda: None)()
+    if choice is not None:
+        novel = {" ".join(h) for h in heldout if " ".join(h) not in dups}
+        groups = {"train": {" ".join(c) for c in train}, "heldout_novel": novel, "heldout_duplicate": set(dups)}
+        choice["paired"] = {"after_vs_before": paired_margins(choice["before"], choice["after"], groups),
+                            "clean_again_vs_after": paired_margins(choice["after"], choice["after_clean_again"], groups),
+                            "poison_sequential_vs_after": paired_margins(choice["after"], choice["after_poison_sequential"], groups),
+                            "poison_vs_before": paired_margins(choice["before"], choice["after_poison"], groups),
+                            "format_vs_before": paired_margins(choice["before"], choice["after_format"], groups)}
+        choice["heldout_novel_accuracy"] = {k: (None if not v or "heldout" not in v else
+                                                (lambda rows: sum(r["choice"] for r in rows) / len(rows) if rows else None)(
+                                                    [r for r in v["heldout"].get("items", []) if r["ops"] in novel]))
+                                            for k, v in choice.items() if k in ("before", "after", "after_clean_again", "after_poison_sequential")}
     return {
         "contract_version": CONTRACT_VERSION,
         "contract": "text_rules",
         "spec": asdict(spec),
-        "split": {"train": [list(c) for c in train], "heldout": [list(c) for c in heldout]},
+        "split": {"train": [list(c) for c in train], "heldout": [list(c) for c in heldout], "heldout_output_duplicates": dups,
+                  "heldout_novel": [" ".join(h) for h in heldout if " ".join(h) not in dups]},
         "seed": seed,
         "stream": {"episodes": spec.stream_episodes, "situations": clean.situations, "poison_operator": spec.poison_operator, "poison_kind": spec.poison_kind,
                    "rule_set": spec.rule_set, "stated_rules": spec.stated_rules},
@@ -231,16 +367,19 @@ def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int
             "note": "a lasting update that gains as much from shuffled answers as from the true lessons learned format, not rules",
         },
         "sequential_poison": sequential,
+        "sequential_control": sequential_control,
+        "choice": choice,
+        "items": {"before": before["items"], "after": after["items"]},
         "revert": {"gap": gap, "tolerance": spec.revert_tolerance, "ok": gap <= spec.revert_tolerance},
         "decisions": records,
         "verifier": getattr(learner, "verifier_version", None),
-        "consume_records": {"clean": rec_clean, "poisoned": rec_poison, "poisoned_sequential": rec_poison_seq, "corrective": rec_correct, "format_only": rec_format},
+        "consume_records": {"clean": rec_clean, "clean_again": rec_clean_again, "poisoned": rec_poison, "poisoned_sequential": rec_poison_seq, "corrective": rec_correct, "format_only": rec_format},
         "acceptance": acceptance_rates(records),
         "compute": {
             "parameters": parameter_count,
-            "situations_consumed": (5 if after_seq is not None else 4) * clean.situations,
+            "situations_consumed": (4 + (after_seq is not None) + (after_clean_again is not None)) * clean.situations,
             "situations_measured": before["situations"] + after["situations"] + reverted["situations"] + after_poison["situations"] + after_correction["situations"] + after_format["situations"]
-                                   + (after_seq["situations"] if after_seq is not None else 0),
+                                   + (after_seq["situations"] if after_seq is not None else 0) + (after_clean_again["situations"] if after_clean_again is not None else 0),
             "context_situations_measured": int(getattr(learner, "context_situations_measured", 0)),
             "wall_clock_s": time.time() - t0,
         },

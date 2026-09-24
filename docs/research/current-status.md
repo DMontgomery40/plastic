@@ -1,73 +1,65 @@
 # Current research status
 
-Updated 23 September 2026. This page describes active work. Dated reports preserve
+Updated 24 September 2026. This page describes active work. Dated reports preserve
 experiment history and do not override this direction.
 
 For reproduction commands, available checkpoints and ways to help, see
-[Contributing to the research](contributing-research.md). Public experiment
-[outputs](results/sleep-2026-09-23/README.md) include per-probe replies and reports.
+[Contributing to the research](contributing-research.md). Contract reports are indexed in
+[text-rules results](results/text-rules-2026-09-23/README.md) and
+[mechanism-testbed results](results/contract-2026-09-23/README.md); the Sleep outputs are in
+[Sleep results](results/sleep-2026-09-23/README.md).
+
 
 ## Active investigation
 
-Build useful chat on a pretrained, gradient-updated TTT-MLP model, with its own
-inner-learning signals available to the transactional harness. Chat fine-tuning of
-the 760M base model is complete (250 steps, 23 September 2026); the final checkpoint
-is a release candidate undergoing evaluation: held-out assistant loss, sampled answers
-through the transaction path, calibration, and the Sleep controls. The first record, the
-[chat evaluation at three temperatures](results/chat-eval-2026-09-23/README.md), shows the chat
-format learned, the lowest measured within-reply repetition at temperature 0.7 (16 replies), and frequent factual errors. Qwen remains the
-default hosted chat model until the evaluation is complete. The backend implementation and
-recorded checks are described in the [TTT backend note](2026-09-23-ttt-backend.md).
+The question is whether accumulated experience can change a model's weights so that it does
+better on situations it has not seen, judged after the conversation and the temporary fast-weight
+state are gone, with the benefit disappearing when the weights are restored, and whether wrong
+lessons can be refused. The measurement is the learning contract: the
+[mechanism-testbed contract](../superpowers/specs/2026-09-23-mechanism-testbed-and-contract.md)
+for the from-scratch recurrent learners and the
+[text rule contract](../superpowers/specs/2026-09-23-text-rule-contract.md) for the pretrained
+TTT-MLP chat checkpoint (760M, chat fine-tuning finished 23 September).
 
-The backend can process and persist base-model sessions. That is distinct from a
-verified chat-tuned checkpoint. Switching the public model awaits verification of
-the fine-tuned checkpoint and its affected user flow. The playground offers Qwen in
-observational mode and the published 6.85M PlasticCore WikiText model with the
-transactional harness enabled. PlasticCore is a text-continuation baseline, not
-chat-tuned. Its shared session learns from prompts and generated tokens, and a
-CUSUM alarm rolls back the current chunk without latching future chunks read-only.
-These controls make the baseline available for exploration; they do not establish
-protection or useful retention. Source identity is recorded in each host's
-`source_snapshot.json`. Qwen remains a comparison backend, not the active TTT chat target.
+**One lasting update has passed the contract's first test, on one seed.** On the text rule task
+(decorations of a copied word list, rules not stated), 20 gradient steps on the TTT layers'
+initial fast weights W0 from 17 worked lessons raised exact answers after a single worked example
+from 0.31 to 1.0 on held-out compositions, measured after a reset, and restoring W0 removed the
+effect. The gradient flows
+through the model's own inner-loop updates, so this is the TTT training objective applied online
+to a small stream (closest prior work: online meta-learning and the meta-learned initialisation of
+end-to-end TTT), not a new mechanism. Review found that this update trained 11 of the 17 lesson
+compositions, that two of the eight held-out pairs repeat trained answers, and that the report's
+"first refused poison" and "content stored only for trained compositions" readings are not
+supported; each archive carries the corrections. The measurement now trains in full passes, keeps
+per-item records, pairs the sequential poison arm with a clean-again control, and adds a
+first-situation choice score over every composition's output.
 
-**Sleep is paused for reassessment (23 September 2026).** On the final chat checkpoint, 15
-consolidation attempts across three seeds passed the gate 13 times and retained none of 24 taught
-facts; the only transfers were verbatim planted sentences, and selection by surprise chose a
-planted falsehood. The probes measured phrase recall and each fact was taught once as one sentence.
-The queued comparisons were stopped. The [reassessment memo](2026-09-23-reassessment-concepts-not-phrases.md)
-(draft, source-checked) sets out the concept-level measurement battery and the recurrence-and-consistency
-criterion to test, and the smallest experiment that could falsify it; no new run before it is agreed.
-Details in the [Sleep note](2026-09-23-sleep-consolidation.md).
+**Next, in order:** replicate that update on further seeds and splits under the corrected
+measurement; then compare Sleep's consolidation operators (anchor, distillation, dream) with it on
+the same stream at matched exposure; then, only after those comparisons, recurrence
+(dose-response over how often a composition recurs) and a physics testbed whose experience stream
+carries a persistent regime.
 
-In parallel, **Sleep** tests whether accepted session learning can become a durable
-checkpoint change. Replay, fast-state distillation, anchoring and generated Dream
-distillation are implemented; their current objectives and controls are in the
-[Sleep note](2026-09-23-sleep-consolidation.md). Five tested raw-turn replay settings
-on an intermediate step-100 checkpoint retained 0/6 taught facts. The first study-set
-run also retained 0/6, with higher expected-answer likelihood. Aggressive earlier
-runs showed why falling held-out loss alone can miss repeated-answer collapse.
-These results motivate new comparisons; they do not close the research question.
+**Sleep on facts is paused (23 September).** On the final chat checkpoint, 15 consolidation
+attempts across three seeds passed the damage gate 13 times and retained none of 24 facts taught
+once each; the only transfers were verbatim planted falsehoods. Why is not established: replay
+trained on the saved teaching text and Dream received the quoted statement, so the session's loss
+of the facts does not explain those arms, and no run showed that the write path can store a fact
+under the most favourable exposure. The [Sleep note](2026-09-23-sleep-consolidation.md) keeps the
+record; its operators are next measured on the rule task, where the model can do the task in
+context.
 
-Current Dream generation quotes an accepted turn to a frozen session teacher and
-trains a reset student without the quote. The first
-[conditioned run](results/sleep-2026-09-23/dream_step100_w0_conditioned/sleep_controls.md)
-also retained 0/6 taught facts; its locality checks passed. The saved free-form
-predecessor is a different method. Clean cross-session retention and a protective benefit from
-provenance filtering remain unestablished. The intermediate checkpoints behind
-the historical tables are not public; the contributor guide distinguishes those
-tables from the protocol runnable on public base weights.
+**The from-scratch coordinate learner** adapts within an episode once its inner step ceiling is
+lifted, with the nonlinear coordinates doing the work, and matches the delta-rule baseline at lower
+cost ([ablation](results/contract-2026-09-23/README.md), one seed). Nothing there is lasting
+learning yet: the experience stream is drawn from the model's own training distribution, so a
+lasting update cannot be separated from further pretraining. The
+[slow-update specification](../superpowers/specs/2026-09-23-slow-update-rule.md) waits for a
+testbed with a persistent regime and a matched no-regime control.
 
-The [importance-weighting proposal](2026-09-23-importance-weighting-proposal.md)
-extends the experiment to 24 taught facts, unseen probe wording and optional
-planted contradictions. Per-token Dream weights are implemented but unmeasured;
-uniform remains the default. Adaptive sampling and classifier comparisons remain
-research proposals. Historical six-fact results do not evaluate these additions.
-
-Compare retained learning, frozen processing, and complete snapshot restoration
-on matched inputs and starting states. Try guarded comparisons early; calibration
-and prior signal separation are not prerequisites for exploratory runs. Claims of
-useful adaptation or protection require measured outcomes. Freezing memory and
-restoring an entire turn remain different interventions.
+Qwen remains the hosted chat model in observational mode; the published 6.85M PlasticCore
+WikiText model runs with the transactional harness. The TTT chat checkpoint is not hosted.
 
 ## Measurements and interpretation
 

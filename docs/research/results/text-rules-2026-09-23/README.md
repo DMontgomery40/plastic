@@ -19,6 +19,8 @@ first smoke, 4 to 5 afterwards.
 
 Correction to the three `contract_decorate_s0*` rows above (FABLE-41B-211): their replay_verify held-in verification material came from a different split than the contract's (the report script passed a reversed-pair minimum of 4 where the contract used 6), so the verifier scored six held-out compositions, with fresh inputs and read-only, as if held-in. Transfer and the other measures are unaffected; the verify records are a mixed score and their "never the held-out compositions" note is wrong for those runs. Each archive README carries the note; the code now refuses the mismatch.
 
+Correction to all four `contract_decorate_s0*` rows (OPUS-LEAD-001/002, 2026-09-24): the lasting update drew 20 episodes with replacement and trained 11 of the 17 training compositions (`#P`, `#P #Q`, `#Q #W`, `#Q #H`, `#H #P`, `#H #B` never); the poisoned stream differed from the clean one in 2 of the 20 steps; and `#H #Q` and `#Q #P` repeat the answers of the trained `#Q #H` and `#P #Q`, so two of the eight held-out pairs are not new behaviour. In the unstated row, the refused-bad decision is unexplained (no clean-again control; the removed first-situation item most likely has no `#P`), and "content stored for trained compositions only" compared singles with pairs (matched measure: 1/17 against 0/16 first-situation exact, first-situation NLL down on both). The per-run notes give the detail.
+
 Reading. On this checkpoint the in-context gate sits at the floor for exact match: eight worked examples with the
 rule stated do not make the model reproduce a single-operator output, while its per-token loss on those outputs
 drops to about 1 nat, which is the fast path learning the answer's shape and vocabulary. This is the outcome the

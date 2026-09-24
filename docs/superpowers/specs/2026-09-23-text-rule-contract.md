@@ -1,6 +1,6 @@
 # The text rule contract: durable, transferable competence on the TTT chat model (Thread T4)
 
-Draft spec, 23 September 2026, session 41b763a8. Owner of the work: Fable; human owner: David.
+Draft spec, 23 September 2026, session 41b763a8 (Fable). Owner of the work from 24 September: the Opus lead session (OPUS-LEAD-001); human owner: David.
 Benchmark: the same five measures as the [mechanism testbed contract](2026-09-23-mechanism-testbed-and-contract.md),
 applied to a text stream on the step-250 TTT-MLP chat checkpoint. Sources for the design are collected in
 [the T4 sources memo](../../research/2026-09-23-text-rule-contract-sources.md) (draft, in progress); the readiness
@@ -306,6 +306,39 @@ first situation (2 of 6 → 1 of 6); the tolerances are stated, not calibrated. 
 are counts on one run. The next report enlarges the verify material (more episodes per composition) before any rate is
 read from the first-situation check, and the inconsistent-poison variant (true definitions stated over false answers)
 runs now on the stated setting.
+
+## Corrections, and what the measurement now records (OPUS-LEAD-001/002, 24 September)
+
+Three facts found in review change the readings of the four archived decorate reports; each archive README carries them.
+
+1. **Coverage.** `_train_on` drew 20 stream episodes with replacement from `Random(7)`. On the 17-episode archive stream
+   (episode *i* is training composition *i*) that trained 11 compositions; `#P`, `#P #Q`, `#Q #W`, `#Q #H`, `#H #P` and
+   `#H #B` received no update, and the poisoned stream differed from the clean one in 2 of the 20 steps. The poison rows
+   therefore compare updates that share 18 of 20 steps.
+2. **Held-out repeats.** On the decoration set a prefix word and a suffix word commute (`#P #Q` = `#Q #P`, `#H #Q` =
+   `#Q #H` on every input). The reversed-pair constraint puts such pairs in the held-out set: two of the eight held-out
+   pairs of every split tried (seeds 0 to 2; one at seed 3) repeat a training composition's answers.
+3. **The unstated report's two readings.** The refused-bad row is unexplained: the verify set was the five singles and
+   `#P #Q`, of which `#P` and `#P #Q` were never trained, so the removed first-situation item most likely has no `#P`, and
+   no clean-again control was run; shared W0 leaves poison damage to an unrelated item possible. "Content stored for the
+   trained compositions only" compared singles (verify) with pairs (held-out); the matched measure gives first-situation
+   exact 1/17 (training) against 0/16 (held-out) with first-situation NLL falling on both. Both readings are withdrawn
+   until the measurements below decide them.
+
+What the contract and learner record from here: the lasting update visits the stream in full shuffled passes
+(`sampling="passes"`, the default; `"draws"` reproduces the archive) and every record names the compositions it
+trained and its poisoned steps; every measurement keeps per-item exact and NLL (the revert check is prediction-level);
+verification records per-item first-situation results; a **clean-again control** consumes the clean stream a second
+time from the post-clean state, the matched partner of the sequential poison arm, recorded beside the decisions and not
+counted in the acceptance pair; a **first-situation choice score** ranks the summed answer log-probability of every
+distinct composition output on the same input (23 on the decoration set, so chance is 1/23) at before, after, clean
+again, poison on top, poison from the snapshot and format-only, two items per composition, with paired per-item margin
+changes for training, novel held-out and repeat held-out compositions; and every report names the repeat pairs.
+
+The format-only control moves answers between situations of the same episode, so it keeps the association between a
+composition's name and its decoration and breaks only the copying. Under the choice score it controls for copying, not
+for content. A name-permuted stream (each episode's answers correct for a different composition) is the content null;
+it is not built yet.
 
 ## Not in this thread
 
