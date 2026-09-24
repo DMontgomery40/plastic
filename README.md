@@ -1,15 +1,32 @@
 # plastic
 
-A tiny test-time-training state-space model with a transactional safety harness.
+Test-time-training models with a transactional safety harness, and a study of what they
+can learn lastingly from experience.
 
-`plastic` is one small model (about 6M parameters) that learns while it reads. Its
-recurrence is a selective state-space layer; its memory is a fast weight matrix that
-takes one gradient step per token on a self-supervised objective, so context is
-compressed into weights instead of a growing cache. The whole thing is meta-trained
-end to end through that inner loop, which is what makes it a real test-time-training
-layer rather than an adapter bolted onto a frozen model. The same block stack serves
-two domains: next-token prediction on text, and a hidden-friction control task where
-the only way to predict well is to infer the latent dynamics into the fast weights.
+[Source on GitHub](https://github.com/DMontgomery40/plastic) ·
+[models on Hugging Face](https://huggingface.co/dmontgomery40/plastic) ·
+[live Space](https://huggingface.co/spaces/dmontgomery40/plastic)
+
+`plastic` studies models that learn while they read: their memory is a set of fast
+weights that take gradient steps on a self-supervised objective as tokens arrive, so
+context is compressed into weights instead of a growing cache. Three substrates share
+one harness:
+
+- **PlasticCore**, a from-scratch model of about 6M parameters: a selective state-space
+  recurrence plus a delta-rule fast-weight memory, meta-trained end to end through its
+  inner loop. The same block stack serves next-token prediction on text and a
+  hidden-friction control task where the only way to predict well is to infer the
+  latent dynamics into the fast weights.
+- **A pretrained TTT-MLP chat model**: the 760M TTT-MLP of Sun et al. (the RetentionLabs
+  conversion of the released weights), whose sequence layer is a two-layer MLP updated
+  by gradient steps on each mini-batch of 16 tokens, chat fine-tuned here for 250 steps
+  on 8,000 SmolTalk conversations.
+- **A coordinate block** (experimental): a selective recurrence whose nonlinear fast
+  weights change the coordinates of its own state, studied on a physics mechanism
+  testbed.
+
+A Qwen model is available as an observational comparison; it has no
+test-time-training layer.
 
 Learning at inference is a security surface: every input is a gradient step, so a
 hostile input is not just a bad answer, it is a bad thing learned. `plastic` wraps
@@ -20,22 +37,46 @@ surprise, the write rate the model chose, the size and curvature of the weight c
 how it moves a set of probe texts), never from pattern-matching the input. Sessions
 are persisted and branchable, like version control for the plastic weights.
 
-This is a research sandbox, not a product. It is deliberately small, runs in plain
-PyTorch on an Apple Silicon laptop or a single cloud GPU, and is honest about what it
-does and does not show.
+This is a research sandbox, not a product. It runs in plain PyTorch on an Apple Silicon
+laptop or a single cloud GPU, and is honest about what it does and does not show.
+
+## Where the research stands
+
+The question is whether experience can change a model's weights so that it does better
+on situations it has not seen, judged after the conversation and the temporary
+fast-weight state are gone, with the benefit disappearing when the weights are
+restored, and whether wrong lessons can be refused. The learning contracts measure
+exactly that; [current status](docs/research/current-status.md) has the detail.
+
+- On a text rule task, 20 gradient steps on the TTT chat model's initial fast weights
+  from 17 worked lessons raised exact answers after one worked example from 0.31 to 1.0
+  on held-out compositions, measured after a reset; restoring the weights removed the
+  effect. One seed. The gradient runs through the model's own inner loop, so this is the
+  TTT training objective applied online, a known mechanism. Two of that report's
+  readings (a refused poison and rule content stored only for trained compositions)
+  were not supported as published; the archive records the corrections.
+- Sleep, which consolidates session learning into the slow weights, retained none of
+  24 facts taught once each across three seeds; the only transfers were planted
+  falsehoods. It is paused on facts.
+- The coordinate block's fast path adapts within an episode and matches the delta-rule
+  baseline at lower cost, on one seed; lasting learning has not been tested on it.
+
+Next: replicate the text result on further seeds and splits, then compare Sleep's
+operators with it on the same stream.
 
 ## Install and run
 
 ```bash
-uv sync --extra dev
-uv run pytest -W ignore          # the test suite
+uv sync --extra dev --extra pretrained   # pretrained: transformers, for the TTT and Qwen backends
+npm --prefix dashboard ci
+uv run pytest                            # the test suite
 uv run plastic --help
-./start.sh                       # API on :13579, dashboard on :5173
+./start.sh                               # API on :13579, dashboard on :5173
 ```
 
 Python 3.12, PyTorch 2.12 or newer. MPS on Apple Silicon, CUDA on Hugging Face Jobs.
 
-## The architecture
+## The from-scratch model (PlasticCore)
 
 One block, stacked four times for text and three for physics. Every block has three
 parts, all in plain PyTorch that runs on CPU, MPS, and CUDA.
@@ -56,8 +97,10 @@ S_t = α_t S_{t−1} + β_t k_tᵀ e_t       one gradient step per token, gated
 m_t = q_t S_t                          read after the token's own write
 ```
 
-This is TTT-Linear (Sun et al., 2024) with mini-batch one, plus Gated DeltaNet's
-forget gate. It has a chunk-parallel form for training (an exact unit-lower-triangular
+This is a delta-rule fast-weight memory in the family of TTT-Linear (Sun et al., 2024),
+with Gated DeltaNet's forget gate and a normalized readout. It is not an exact
+reproduction of TTT-Linear: the inner model, the normalization inside the loss and the
+initialization differ. It has a chunk-parallel form for training (an exact unit-lower-triangular
 solve, not an approximate inverse, so repeated tokens do not blow it up) and a
 recurrent form for inference; the two agree to a few parts in `1e-4` and that
 equivalence is a permanent test. A second inner rule (mini-batch with momentum and
@@ -73,6 +116,15 @@ about 8K tokens/second for the default model.
 The design is grounded in a literature review current to September 2026 (TTT layers,
 Titans, LaCT, TTT-E2E, Gated DeltaNet, Mamba-3) and an architecture memo verified on
 CPU and MPS, both in `docs/research/`.
+
+## The pretrained TTT chat model
+
+`plastic/backends/ttt_lm/` runs the 760M TTT-MLP under the same harness. Its inner
+loop's reconstruction error (surprise), its learned per-token step size and the exact
+per-token write norm are the transaction signals, and freezing holds the fast weights
+exactly. The chat checkpoint learned the chat format and makes frequent factual errors
+([evaluation](docs/research/results/chat-eval-2026-09-23/README.md)); it is not the
+hosted model.
 
 ## The safety harness
 
@@ -96,17 +148,18 @@ read it but do not learn it), **scale** (apply a fraction of the update), **proj
 projection on the state delta), or **read-only** (the session's write budget is spent).
 Budgets are hard: the actual weight change of the accepted candidate is checked against
 the cap, non-finite states are refused, and a spent session stops learning until it is
-explicitly resumed. Thresholds are calibrated on a benign held-out stream to a target
-false-positive rate, using split-conformal order statistics that report the rate the
-sample size can actually support.
+explicitly resumed. Thresholds are calibrated on a benign held-out stream to a requested
+false-positive target, using split-conformal order statistics that report the rate the
+sample size can actually support; a calibrated target is not a measured policy-level
+false-positive rate.
 
 There is no regex, no keyword list, and no string inspection anywhere in the harness.
 The design and its threat model follow a survey of attacks on and defenses for models
 that learn at inference (in `docs/research/`), including the 2026 result that test-time
-training can strip safety guardrails and that a private-probe drift detector is the
-defense that holds.
+training can strip safety guardrails, and that paper's private-holdout drift detector,
+which works only while its holdout stays secret.
 
-## The two domains
+## Domains and testbeds
 
 **Text.** Byte-level BPE, wikitext-103 (or fineweb-edu). Next-token prediction. Recall
 is measured directly with MQAR probes, and every checkpoint reports its held-out loss,
@@ -120,6 +173,13 @@ to infer the latent dynamics into its fast weights within each episode. Sessions
 the three-way comparison on one trajectory: the base model with no memory, the session
 with its memory frozen, and the session learning online. On a laptop the adaptive model
 reaches an MSE of 0.0008 where the same model with its memory disabled sits at 1.04.
+Physics is an internal benchmark; the public playground serves text.
+
+**Learning testbeds.** The learning contracts use two tasks built so that lasting
+learning can be told apart from temporary adaptation. A physics mechanism testbed
+(six hidden mechanisms, held-out combinations and intervention policies) serves the
+from-scratch learners. A text rule task (named decorations of a word list, taught
+through worked examples and tested on held-out ordered pairs) serves the TTT chat model.
 
 ## Sessions, red team, and sleep
 
@@ -134,8 +194,11 @@ of a suffix's embeddings to maximize canary damage subject to the model's own
 perplexity staying plausible, snaps to real tokens, and re-validates the discrete
 payload through the harness, so the reported damage is the damage of a payload that
 was actually fed. `plastic train --adversarial` meta-trains the write gate against
-that attacker. `plastic sleep` consolidates what sessions learned into the slow
-weights, accepted only if the canaries hold.
+that attacker. `plastic sleep` consolidates accepted session learning into the slow
+weights behind a damage gate (held-out loss, reply collapse, canaries where installed;
+it has no retention or contamination check). For the TTT backend it implements replay,
+fast-state distillation, anchoring and generated dreams; see where the research stands
+above for what they have and have not retained.
 
 ## Usage
 
@@ -146,7 +209,7 @@ uv run plastic train text --data artifacts/data/wikitext --steps 3000 --device m
 uv run plastic train physics --steps 3000 --layers 3 --device mps
 uv run plastic models
 
-# a GPU run on Hugging Face Jobs (exports the working tree, no push needed)
+# a GPU run on Hugging Face Jobs (exports committed HEAD; uncommitted edits are not included)
 scripts/hf_jobs/launch_text.sh l4x1 6000 BATCH=16 MODEL_ID=lm_wikitext_l4
 hf jobs logs -f dmontgomery40/<job_id>
 hf buckets sync hf://buckets/dmontgomery40/plastic-runs/artifacts/models/<id> artifacts/models/<id>
@@ -160,31 +223,41 @@ uv run plastic physics <session_id> --steps 256 --mu 0.12
 # attack and consolidate
 uv run plastic redteam <model_id> --data artifacts/data/wikitext --record
 uv run plastic sleep <model_id> --core artifacts/data/wikitext
+
+# the learning contracts
+uv run python -m scripts.experiments.transfer_contract --model-id phys_mps_3k --out <dir>
+uv run python -m scripts.experiments.text_contract_report --checkpoint <ttt chat checkpoint dir> --out <dir> --unstated-rules
 ```
 
 ## Layout
 
 ```
 plastic/
-  model/        selective scan, gated delta rule, chunk rule, fast-weight memory, blocks, models, state
-  data/         wikitext/fineweb pipeline, MQAR recall probes, hidden-mu physics
+  model/        selective scan, gated delta rule, chunk rule, fast-weight memory, coordinate block, blocks, models, state
+  backends/     the harness's model backends: PlasticCore, the pretrained TTT-MLP, Qwen (observational)
+  data/         wikitext/fineweb pipeline, MQAR recall probes, hidden-mu physics, mechanism testbed, text rules
   train/        outer loop, LR schedule, Muon/AdamW split, adversarial write-gate loss
   harness/      signals, robust stats, canaries, Fisher, projection, policy, calibration, transaction runner
+  eval/         the learning contracts and their learners
   session/      persisted, branchable sessions for both domains
   redteam/      token-path attacker validated through the harness
-  sleep/        canary-gated consolidation into the slow weights
+  sleep/        consolidation into the slow weights behind a damage gate
   api/          FastAPI service over the artifact store
   store.py      models, sessions, transactions, forks, signatures
   cli.py        the `plastic` command
-dashboard/      React UI
-scripts/        Hugging Face Jobs launchers, experiments, throughput bench
-docs/           the design spec, milestone plans, and the research surveys
+dashboard/      React playground (chat, signals, sessions) and the Sleep and learning observatory
+scripts/        Hugging Face Jobs launchers, training, experiments
+docs/           design specs, research notes and surveys, archived results
 ```
 
 ## Honest limits
 
-- About 6M parameters on wikitext. Generations are fluent-ish, not coherent; this
-  project demonstrates adaptation, recall, and the safety harness, not language quality.
+- PlasticCore is about 6M parameters on wikitext. Its generations are fluent-ish, not
+  coherent; it demonstrates adaptation, recall, and the safety harness, not language
+  quality. The TTT chat model is small (760M), briefly fine-tuned and often wrong on
+  facts, so claims about the meaning of its answers are qualified.
+- One lasting-learning result so far, on one seed, from a known mechanism; consolidation
+  by Sleep and protection against wrong lessons are not yet demonstrated.
 - The harness's guarantees are first-order and probe-based. An adaptive attacker can
   still find directions the calibrated probes do not cover; the red team measures that
   residual rather than hiding it.
