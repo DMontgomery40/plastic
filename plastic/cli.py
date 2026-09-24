@@ -301,11 +301,15 @@ def cmd_sleep(args: argparse.Namespace) -> int:
         return 2
     from plastic.sleep.consolidate import consolidate
 
-    manifest = consolidate(
-        store, args.model_id, sessions=(args.sessions or None), core_data_dir=args.core,
-        steps=args.steps, lr=args.lr, core_ratio=args.core_ratio, seq_len=args.seq_len, batch_size=args.batch_size,
-        device=args.device, seed=args.seed,
-    )
+    try:
+        manifest = consolidate(
+            store, args.model_id, sessions=(args.sessions or None), core_data_dir=args.core,
+            steps=args.steps, lr=args.lr, core_ratio=args.core_ratio, seq_len=args.seq_len, batch_size=args.batch_size,
+            device=args.device, seed=args.seed,
+        )
+    except ValueError as e:  # nothing accepted to learn from, or too little of it: a refusal, not a crash
+        print(f"sleep: {e}", file=sys.stderr)
+        return 2
     print(json.dumps({k: v for k, v in manifest.items() if k not in ("canary_before", "canary_after")}, indent=2, default=str))
     return 0
 

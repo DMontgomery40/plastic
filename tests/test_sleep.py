@@ -84,3 +84,15 @@ def test_sleep_never_trains_on_text_the_harness_rolled_back(fixture):
                     tolerance={"coherence": 10.0, "poison": 10.0}, log=lambda s: None)
     assert m["harvest"]["turns_by_reason"]["rolled_back"] >= 1 and m["harvest"]["selected_turns"] == len(texts)
     assert {mm["model_id"] for mm in store.list_models()} - before == {m["model_id"]}
+
+
+def test_cli_sleep_reports_nothing_accepted_as_a_refusal_not_a_traceback(fixture, capsys):
+    from plastic.cli import main
+
+    store, mid, d = fixture
+    if not store.session_exists("cli_rejected"):
+        s = Session.create(store, model_id=mid, harness_cfg=HarnessConfig(enable_projection=False, enable_stats=False, canary_delta_max=-1e6),
+                           session_id="cli_rejected")
+        s.chat("one two three four five six one two three four five six one two", max_new_tokens=4, seed=3)
+    code = main(["sleep", mid, "--artifacts-root", store.root, "--sessions", "cli_rejected", "--core", d, "--steps", "1"])
+    assert code == 2 and "no accepted chat turns" in capsys.readouterr().err

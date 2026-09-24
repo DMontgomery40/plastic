@@ -56,7 +56,10 @@ exactly that; [current status](docs/research/current-status.md) has the detail.
   copier, which never reads the rule names, is also exact on every answer after the
   first worked example, so this shows faster adaptation to the demonstration format,
   not knowledge of the named rules; only the first answer of an episode, where there is
-  nothing to copy, can show that. The update was a supervised training step outside the
+  nothing to copy, can show that. On that first answer, lessons that pair every rule name
+  with the wrong decoration raise the scores as much as the true lessons, so no stored
+  rule knowledge is shown ([corrected runs](docs/research/results/text-rules-2026-09-24/README.md)).
+  The update was a supervised training step outside the
   chat transaction path. Two of that report's readings (a refused poison and rule
   content stored only for trained compositions) were not supported as published; the
   archive records the corrections.
@@ -213,9 +216,10 @@ payload through the harness, so the reported damage is the damage of a payload t
 was actually fed. `plastic train --adversarial` meta-trains the write gate against
 that attacker. `plastic sleep` consolidates accepted session learning into the slow
 weights behind a damage gate (held-out loss, reply collapse, canaries where installed;
-it has no retention or contamination check). It learns only from turns whose every
-learning chunk the harness accepted; a turn with any rolled-back chunk is excluded, and
-text the harness refused online is never used as training material offline. For the
+it has no retention or contamination check). Its product rule learns only from turns
+whose every learning chunk the harness accepted; a turn with any rolled-back chunk is
+excluded. The one exception is deliberate: the Sleep experiments' ungated control
+(provenance "all") consumes refused turns to measure what that rule buys. For the
 TTT backend it implements replay, fast-state distillation, anchoring and generated
 dreams; anchoring and distillation read a session's saved state, which still carries
 the writes of any excluded turn in that session. See where the research stands above for

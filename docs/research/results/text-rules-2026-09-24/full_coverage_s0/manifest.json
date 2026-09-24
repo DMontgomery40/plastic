@@ -1,0 +1,102 @@
+{
+ "checkpoint": "/Users/davidmontgomery/ttt_ssm_eval/artifacts/models/ttt_mlp_760m_chat_v1_step250",
+ "device": "mps",
+ "code_commit": "65225ee (exported snapshot)",
+ "dirty_paths": [],
+ "started_at_unix": 1790276617,
+ "rule_set": "decorate",
+ "spec": {
+  "n_heldout": 8,
+  "min_reversed_heldout": 6,
+  "split_seed": 0,
+  "situations_per_episode": 8,
+  "eval_episodes_per_composition": 2,
+  "stream_episodes": 17,
+  "probe_situations": 8,
+  "poison_operator": "#P",
+  "revert_tolerance": 1e-06,
+  "n_words": [
+   4,
+   5
+  ],
+  "rule_set": "decorate",
+  "sequential_poison": true,
+  "stated_rules": false,
+  "poison_kind": "consistent",
+  "sequential_clean": true,
+  "choice_episodes_per_composition": 2,
+  "choice_at": [
+   "before",
+   "after",
+   "after_clean_again",
+   "after_poison_sequential",
+   "after_poison",
+   "after_format"
+  ]
+ },
+ "modes": {
+  "continued": {
+   "seconds": 2741.276943922043,
+   "decisions": [
+    {
+     "beneficial": true,
+     "accepted": true,
+     "stream": "clean"
+    },
+    {
+     "beneficial": false,
+     "accepted": true,
+     "stream": "poisoned"
+    },
+    {
+     "beneficial": false,
+     "accepted": true,
+     "stream": "poisoned_sequential"
+    },
+    {
+     "beneficial": true,
+     "accepted": true,
+     "stream": "corrective"
+    },
+    {
+     "beneficial": false,
+     "accepted": true,
+     "stream": "format_only"
+    }
+   ]
+  },
+  "replay_verify": {
+   "seconds": 3021.250322818756,
+   "decisions": [
+    {
+     "beneficial": true,
+     "accepted": true,
+     "stream": "clean"
+    },
+    {
+     "beneficial": false,
+     "accepted": true,
+     "stream": "poisoned"
+    },
+    {
+     "beneficial": false,
+     "accepted": true,
+     "stream": "poisoned_sequential"
+    },
+    {
+     "beneficial": true,
+     "accepted": true,
+     "stream": "corrective"
+    },
+    {
+     "beneficial": false,
+     "accepted": true,
+     "stream": "format_only"
+    }
+   ]
+  }
+ },
+ "chat_rows": 8,
+ "checkpoint_digest": "29e0f8558d157cbfeaa9670334a38766448c9bdfe2ba651f286db22300aaf8c0",
+ "seconds": 5788.6
+}

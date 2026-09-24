@@ -33,7 +33,12 @@ template copier, which never reads the rule names, is also exact on every answer
 worked example (16/16 after one example on the archive's own held-out inputs); every report now
 carries that copier's score. Scores after the first answer therefore show faster adaptation to the
 demonstration format, not knowledge of the named rules; the first answer of an episode, where there
-is nothing to copy, is the test, and the first-situation choice score measures it. The update is a
+is nothing to copy, is the test, and the first-situation choice score measures it. The
+[corrected runs](results/text-rules-2026-09-24/README.md) (seed 0) replicate the adaptation gain with
+every composition trained, show that the archived poison refusal was collateral on a near-tie item
+and does not survive the corrected protocol, and find that lessons pairing every rule name with the
+wrong decoration raise first-answer scores as much as the true lessons: no stored rule knowledge is
+shown. The update is a
 supervised step outside the chat transaction path; demonstrating useful retention and refusal of
 damaging lessons through one operational path is still open. Review found that this update trained 11 of the 17 lesson
 compositions, that two of the eight held-out pairs repeat trained answers, and that the report's
