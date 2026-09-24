@@ -76,3 +76,16 @@ def test_disabled_layers():
     cfg = HarnessConfig(enable_rollback=False, enable_stats=False, enable_projection=False, enable_budget=False)
     d = decide(_sig(canary_delta_coherence=5.0, cusum_alarm=True, canary_alignment=0.9, delta_norm=100.0), cfg, None, read_only=False)
     assert d.kind == "commit"
+
+
+def test_decide_and_the_final_candidate_recheck_share_one_constraint_function():
+    """The runner rechecks a scaled or projected candidate with the same limits decide() applied to the proposal
+    (external review of 6cf4457, finding 2); both go through constraint_violations, calibrated thresholds first."""
+    from plastic.harness.policy import constraint_violations
+
+    cfg = HarnessConfig(canary_delta_max=0.5, poison_delta_min=-0.5, fisher_drift_max=2.0)
+    assert constraint_violations(0.4, -0.4, 1.0, cfg, None) == []
+    v = constraint_violations(0.6, -0.6, 3.0, cfg, None)
+    assert [x.split("(")[0] for x in v] == ["canary_coherence", "canary_poison", "fisher_drift"]
+    assert constraint_violations(0.4, 0.0, None, cfg, {"canary_delta_coherence": 0.3})[0].startswith("canary_coherence")
+    assert constraint_violations(None, None, None, cfg, None) == []

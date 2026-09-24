@@ -26,6 +26,31 @@ class Decision:
         return {"kind": self.kind, "reasons": list(self.reasons), "scale": float(self.scale)}
 
 
+def constraint_violations(
+    delta_coherence: float | None,
+    delta_poison: float | None,
+    fisher_drift: float | None,
+    cfg: HarnessConfig,
+    thresholds: dict[str, float] | None,
+) -> list[str]:
+    """The finite limits an accepted state must satisfy: canary coherence may not rise and poison may not fall beyond
+    their thresholds, and the Fisher drift from the anchor may not exceed its cap. ``decide`` applies them to the
+    proposal; the runner applies them again to a candidate that scaling or projection changed afterwards, because a
+    smaller or projected step is not guaranteed to do less damage in a nonlinear model (external review of 6cf4457,
+    finding 2)."""
+    thresholds = thresholds or {}
+    out: list[str] = []
+    thr_c = thresholds.get("canary_delta_coherence", cfg.canary_delta_max)
+    if delta_coherence is not None and delta_coherence > thr_c:
+        out.append(f"canary_coherence(delta={delta_coherence:+.4f}>{thr_c:.4f})")
+    thr_p = thresholds.get("canary_delta_poison", cfg.poison_delta_min)
+    if delta_poison is not None and delta_poison < thr_p:
+        out.append(f"canary_poison(delta={delta_poison:+.4f}<{thr_p:.4f})")
+    if cfg.fisher_drift_max is not None and fisher_drift is not None and fisher_drift > cfg.fisher_drift_max:
+        out.append(f"fisher_drift({fisher_drift:.4g}>{cfg.fisher_drift_max:.4g})")
+    return out
+
+
 def decide(
     sig: ChunkSignals,
     cfg: HarnessConfig,
@@ -46,14 +71,7 @@ def decide(
         scale_reasons.append(f"budget_chunk(delta_norm={sig.delta_norm:.4g}>{cfg.budget_chunk:.4g})")
 
     if cfg.enable_rollback:
-        thr_c = thresholds.get("canary_delta_coherence", cfg.canary_delta_max)
-        if sig.canary_delta_coherence is not None and sig.canary_delta_coherence > thr_c:
-            rollback.append(f"canary_coherence(delta={sig.canary_delta_coherence:+.4f}>{thr_c:.4f})")
-        thr_p = thresholds.get("canary_delta_poison", cfg.poison_delta_min)
-        if sig.canary_delta_poison is not None and sig.canary_delta_poison < thr_p:
-            rollback.append(f"canary_poison(delta={sig.canary_delta_poison:+.4f}<{thr_p:.4f})")
-        if cfg.fisher_drift_max is not None and sig.fisher_drift is not None and sig.fisher_drift > cfg.fisher_drift_max:
-            rollback.append(f"fisher_drift({sig.fisher_drift:.4g}>{cfg.fisher_drift_max:.4g})")
+        rollback += constraint_violations(sig.canary_delta_coherence, sig.canary_delta_poison, sig.fisher_drift, cfg, thresholds)
 
     if cfg.enable_stats:
         for name in STAT_SIGNALS:

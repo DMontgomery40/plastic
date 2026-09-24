@@ -155,6 +155,9 @@ class TurnRecord:
     # accepted online, but the policy flagged a chunk of this turn: it was scaled or projected, or in observational mode
     # it would have been rolled back / scaled / projected. Online acceptance is necessary, not sufficient, for sleep.
     flagged: bool = False
+    # whether the completion was learning material online: False when every chunk carrying generated tokens was a
+    # learning-ineligible observation (PlasticCore does not learn its own generation unless learn_from_generation)
+    completion_learned: bool = True
 
 
 @dataclass
@@ -169,9 +172,19 @@ class SessionHarvest:
         return [t for t in self.turns if t.accepted]
 
 
+def _ineligible(rec: dict[str, Any]) -> bool:
+    """A chunk that proposed no write because its source is not learned online (an observation): neither an acceptance
+    nor a rejection of its text. A latched session read-only is a different reason and still excludes the turn."""
+    d = rec.get("decision") or {}
+    return d.get("kind") == "readonly" and list(d.get("reasons") or []) == ["learning_ineligible"]
+
+
 def harvest_sessions(store: ArtifactStore, model_id: str, session_ids: list[str] | None = None) -> list[SessionHarvest]:
-    """Group each session's transactions under its chat turns by position and keep the turns whose every
-    chunk was accepted. This is the only place sleep decides what it is allowed to learn from."""
+    """Group each session's transactions under its chat turns by position and keep the turns whose every learning
+    chunk was accepted: one rolled-back or read-only-latched chunk excludes the whole turn (a partially refused turn is
+    refused). Learning-ineligible observation chunks (generation on a backend that does not learn it) neither accept nor
+    refuse a turn; ``completion_learned`` records whether the completion itself was learning material. This is the
+    only place sleep decides what it is allowed to learn from."""
     metas = [m for m in store.list_sessions() if m.get("model_id") == model_id]
     if session_ids is not None:
         wanted = set(session_ids)
@@ -211,15 +224,20 @@ def harvest_sessions(store: ArtifactStore, model_id: str, session_ids: list[str]
                 reason, ok = "no_chunks", False
             elif not covered:
                 reason, ok = "missing_chunks", False
-            elif any(bool(r.get("read_only")) or (r.get("decision") or {}).get("kind") == "readonly" for r in chunks):
+            elif any((bool(r.get("read_only")) or (r.get("decision") or {}).get("kind") == "readonly") and not _ineligible(r) for r in chunks):
                 reason, ok = "read_only", False
-            elif any((r.get("decision") or {}).get("kind") not in ACCEPTED_KINDS for r in chunks):
+            elif any((r.get("decision") or {}).get("kind") not in ACCEPTED_KINDS and not _ineligible(r) for r in chunks):
                 reason, ok = "rolled_back", False
+            elif all(_ineligible(r) for r in chunks):
+                reason, ok = "no_learning_chunks", False
             elif not completion.strip():
                 reason, ok = "empty_completion", False
             else:
                 reason, ok = "accepted", True
-            turns.append(TurnRecord(sid, prompt, completion, len(chunks), n_tokens, ok, reason, flagged=any(chunk_flagged(r) for r in chunks)))
+            gen = [r for r in chunks if int((r.get("sources") or {}).get("model", 0)) > 0]
+            learned = (not gen) or any(not _ineligible(r) for r in gen)
+            turns.append(TurnRecord(sid, prompt, completion, len(chunks), n_tokens, ok, reason, flagged=any(chunk_flagged(r) for r in chunks),
+                                    completion_learned=learned))
         harness = store.load_session_meta(sid).get("harness") or {}
         out.append(SessionHarvest(sid, bool(harness.get("log_only", False)), turns, bool(store.load_runner_state(sid).get("committed"))))
     return out

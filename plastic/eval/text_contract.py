@@ -34,7 +34,7 @@ import time
 from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 
-from plastic.data.rules import RuleBatch, apply, permute_names, poison_batch, rule_batch, shuffle_answers, split_pairs
+from plastic.data.rules import RuleBatch, apply, permute_names, poison_batch, rule_batch, shuffle_answers, split_pairs, template_baseline
 from plastic.eval.contract import CONTRACT_VERSION, _max_gap, acceptance_rates
 
 
@@ -138,6 +138,11 @@ def measure(learner: TextLearner, spec: TextContractSpec, split: tuple[list, lis
     out["transfer"] = {k: {"adapt": _summarize(v["adapt"]), "no_adapt": _summarize(v["no_adapt"])} for k, v in per_comp.items()}
     out["transfer_mean"] = {"adapt": _summarize(adapt), "no_adapt": _summarize(frozen)}
     out["items"] = {"heldout": _items(hb, adapt)}
+    tpl = template_baseline(hb)
+    later = [x for row in tpl for x in row[1:]]
+    out["template_baseline"] = {"exact_first": 0.0, "exact_after_first": sum(later) / len(later) if later else float("nan"),
+                                "second_situation": sum(row[1] for row in tpl if len(row) > 1) / len(tpl), "episodes": len(tpl),
+                                "note": "untrained in-episode template copier: the ceiling for any score after the first situation"}
     out["situations"] += 2 * hb.situations
     # speed: the adapting nll at each situation of a held-out episode as a fraction of the writes-disabled nll
     sb = rule_batch(heldout, episodes=len(heldout), n_situations=spec.probe_situations, seed=_seed(seed, "speed"), split_tag="heldout", rule_set=spec.rule_set, n_words=spec.n_words,
@@ -357,6 +362,7 @@ def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int
         "seed": seed,
         "stream": {"episodes": spec.stream_episodes, "situations": clean.situations, "poison_operator": spec.poison_operator, "poison_kind": spec.poison_kind,
                    "rule_set": spec.rule_set, "stated_rules": spec.stated_rules},
+        "template_baseline": before["template_baseline"],
         "transfer": {
             "before": before["transfer_mean"], "after": after["transfer_mean"],
             "delta_exact": tm(after, "exact") - tm(before, "exact"),

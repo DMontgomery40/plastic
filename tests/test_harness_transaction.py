@@ -752,3 +752,97 @@ def test_reset_keeps_the_calibrated_cusum_threshold():
     r2 = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False, cusum_h=7.0), device=CPU)
     r2.reset()
     assert r2.cusum.h == 7.0
+
+
+class _SmoothBackend:
+    """A two-parameter state with smooth, chosen canary losses, driven through the real TransactionRunner: a test of the
+    acceptance control flow, not of a trained model (the construction of the external review of 6cf4457, finding 2)."""
+
+    def __init__(self, step, coherence):
+        self.step, self.coherence = torch.tensor(step), coherence
+
+    def init_state(self):
+        return {"w": torch.zeros(2), "pos": 0}
+
+    def clone(self, s):
+        return {"w": s["w"].clone(), "pos": s["pos"]}
+
+    def position(self, s):
+        return s["pos"]
+
+    def writes_for_source(self, source):
+        return True
+
+    def state_delta(self, a, b):
+        return [a["w"] - b["w"]]
+
+    def is_finite(self, s):
+        return bool(torch.isfinite(s["w"]).all())
+
+    def forward(self, items, s, *, freeze, beta_scale):
+        out = self.clone(s)
+        out["pos"] += len(items)
+        if not freeze:
+            out["w"] = out["w"] + beta_scale * self.step
+        return torch.zeros(len(items), 8), out, []
+
+    def score_suite(self, s, suite):
+        x, y = s["w"].tolist()
+        return {"coherence": float(self.coherence(x, y)), "poison": 10.0}
+
+    def canary_gradient(self, s, suite):
+        w = s["w"].detach().clone().requires_grad_(True)
+        self.coherence(w[0], w[1]).backward()
+        return [w.grad.detach()]
+
+    def apply_projected(self, working, committed, projected):
+        working["w"] = committed["w"] + projected[0]
+
+
+def _smooth_runner(step, coherence, **hc):
+    cfg = ModelConfig(d_model=8, n_heads=1, n_layers=1, chunk=1, vocab_size=8)
+    return TransactionRunner(None, cfg, HarnessConfig(enable_stats=False, **hc), backend=_SmoothBackend(step, coherence), suite=object())
+
+
+def test_a_scaled_or_projected_candidate_is_rechecked_against_the_canary_limits():
+    """Regression for the external review of 6cf4457 (finding 2): the policy judged the proposal, then scaling or
+    projection changed the candidate and it was committed with only the budget and finiteness rechecked. With a loss
+    whose full step passes and whose half step fails (scale), or whose projected step exceeds the limit its proposal
+    met (project), the runner now rolls the candidate back and names the failed limit."""
+    r = _smooth_runner([1.0, 0.0], lambda x, y: 10 + 4 * x * (1 - x), enable_projection=False, budget_chunk=0.5, canary_delta_max=0.5)
+    r.feed_tokens([3])
+    rec = r.transactions[-1]
+    assert rec["signals"]["canary_delta_coherence"] <= 0.5
+    assert rec["decision"]["kind"] == "rollback" and any(x.startswith("final_candidate:canary_coherence") for x in rec["decision"]["reasons"])
+    assert rec["requested"]["kind"] == "scale" and rec["accepted"]["delta_norm"] == 0.0
+    r = _smooth_runner([0.3, 1.0], lambda x, y: 10 + x - 2 * x * y + y * y, enable_projection=True, canary_delta_max=0.8)
+    r.feed_tokens([3])
+    rec = r.transactions[-1]
+    assert rec["signals"]["canary_delta_coherence"] <= 0.8 and rec["requested"]["kind"] == "project"
+    assert rec["decision"]["kind"] == "rollback" and any(x.startswith("final_candidate:canary_coherence") for x in rec["decision"]["reasons"])
+
+
+def test_a_transformed_candidate_within_the_limits_is_still_accepted():
+    r = _smooth_runner([1.0, 0.0], lambda x, y: 10 + 0.1 * x, enable_projection=False, budget_chunk=0.5, canary_delta_max=0.5)
+    r.feed_tokens([3])
+    rec = r.transactions[-1]
+    assert rec["decision"]["kind"] == "scale" and abs(rec["accepted"]["delta_norm"] - 0.5) < 1e-6
+    assert rec["accepted"]["canary_delta_coherence"] <= 0.5
+
+
+def test_no_accepted_transformed_candidate_exceeds_the_canary_limit():
+    """Randomized smooth quadratic canaries and steps: whatever the policy asked for and however the candidate was
+    transformed, a committed state never exceeds the coherence limit (the invariant finding 2 showed was missing)."""
+    g = torch.Generator().manual_seed(0)
+    limit, transformed = 0.3, 0
+    for trial in range(200):
+        a, b, c, d, e = (torch.randn(5, generator=g) * 2).tolist()
+        step = (torch.randn(2, generator=g) * 1.5).tolist()
+        coh = lambda x, y, a=a, b=b, c=c, d=d, e=e: 10 + a * x + b * y + c * x * x + d * x * y + e * y * y
+        r = _smooth_runner(step, coh, enable_projection=bool(trial % 2), budget_chunk=0.4 if trial % 3 else None, canary_delta_max=limit)
+        r.feed_tokens([3])
+        rec = r.transactions[-1]
+        if rec["decision"]["kind"] in ("commit", "scale", "project"):
+            assert rec["accepted"]["canary_delta_coherence"] <= limit + 1e-6, (trial, rec["decision"], rec["accepted"])
+            transformed += rec["decision"]["kind"] in ("scale", "project")
+    assert transformed > 10, "the randomized cases must exercise transformed acceptances"

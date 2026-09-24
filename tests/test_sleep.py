@@ -60,3 +60,27 @@ def test_reject_leaves_no_model(fixture):
     m = consolidate(store, mid, core_data_dir=d, steps=2, seq_len=16, batch_size=4, tolerance={"coherence": -1.0, "poison": 10.0}, log=lambda s: None)
     assert not m["accepted"] and "model_id" not in m
     assert {r["model_id"] for r in store.list_models()} == before
+
+
+def test_sleep_never_trains_on_text_the_harness_rolled_back(fixture):
+    """The external review of 6cf4457 (finding 1): a session whose every user chunk the harness rolled back was still
+    harvested, trained on with core_ratio 0, and registered as an accepted child. Refused text is now refused offline
+    too: it is never harvested, and a session with nothing accepted has nothing to consolidate."""
+    store, mid, d = fixture
+    s = Session.create(store, model_id=mid, harness_cfg=HarnessConfig(enable_projection=False, enable_stats=False, canary_delta_max=-1e6),
+                       session_id="all_rejected")
+    secret = "one two three four five six one two three four five six one two three four five"
+    r = s.chat(secret, max_new_tokens=8, seed=17)
+    user = [t["decision"]["kind"] for t in r.transactions if t["sources"]["user"]]
+    assert user and all(k == "rollback" for k in user)
+    summary: dict = {}
+    texts = harvest_traces(store, mid, summary=summary)
+    assert texts and not any(secret in t for t in texts)
+    assert summary["turns_by_reason"]["rolled_back"] >= 1
+    with pytest.raises(ValueError, match="no accepted chat turns"):
+        consolidate(store, mid, sessions=["all_rejected"], core_data_dir=d, steps=1, seq_len=16, batch_size=2, core_ratio=0.0, log=lambda s: None)
+    before = {m["model_id"] for m in store.list_models()}
+    m = consolidate(store, mid, core_data_dir=d, steps=1, seq_len=16, batch_size=2, core_ratio=0.0,
+                    tolerance={"coherence": 10.0, "poison": 10.0}, log=lambda s: None)
+    assert m["harvest"]["turns_by_reason"]["rolled_back"] >= 1 and m["harvest"]["selected_turns"] == len(texts)
+    assert {mm["model_id"] for mm in store.list_models()} - before == {m["model_id"]}

@@ -193,3 +193,18 @@ def test_permute_names_is_the_content_null():
     assert name_permutation(comps, seed=0, rule_set="decorate") == m
     again = permute_names(batch, mapping=m)
     assert [s.answer for e in again.episodes for s in e.situations] == [s.answer for e in out.episodes for s in e.situations]
+
+
+def test_an_untrained_template_copier_solves_every_later_decoration_situation():
+    """The external review of 6cf4457 (finding 3), reproduced on the archive's held-out split and evaluation seed: a
+    copier that reads no operator name and keeps nothing across episodes is exact on every situation after the first,
+    so only the first situation can show rule knowledge. The transforming set is not solved this way."""
+    from plastic.data.rules import rule_batch, split_pairs, template_baseline
+
+    _, held = split_pairs(n_heldout=8, seed=0, rule_set="decorate", min_reversed_heldout=6)
+    batch = rule_batch(held, episodes=16, n_situations=8, seed=100, split_tag="heldout", rule_set="decorate", n_words=(4, 5), stated=False)
+    tpl = template_baseline(batch)
+    assert all(row[0] == 0.0 for row in tpl) and sum(row[1] for row in tpl) == 16 and sum(x for row in tpl for x in row[1:]) == 112
+    _, held_t = split_pairs(n_heldout=18, seed=0, rule_set="transform")
+    tb = template_baseline(rule_batch(held_t, episodes=18, n_situations=4, seed=100, split_tag="heldout", rule_set="transform"))
+    assert sum(x for row in tb for x in row[1:]) < 0.5 * 18 * 3

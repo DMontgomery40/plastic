@@ -340,6 +340,19 @@ composition's name and its decoration and breaks only the copying. Under the cho
 for content. A name-permuted stream (each episode's answers correct for a different composition) is the content null;
 it is not built yet.
 
+## The template-copier ceiling (external review of 6cf4457, 24 September)
+
+An untrained copier that takes each episode's first worked answer, replaces the first input list inside it with a
+slot and fills the slot with every later input is exact on every decoration situation after the first: 16/16 at the
+second situation and 112/112 over all later situations on the archive's held-out split and evaluation seed (a test in
+`tests/test_rules.py` pins it; the transforming operators are not solved this way). It reads no operator name and keeps
+nothing across episodes. Every report now carries its score (`template_baseline`). Consequently the later-situation
+exact and the speed curve measure adaptation to the demonstration format, which the lasting update does improve, but
+they cannot show rule knowledge or composition. Only the first situation, where nothing precedes the answer, can: the
+first-situation exact (a coarse count) and the first-situation choice score (a per-item margin over every
+composition's output) are the rule-knowledge measures, read against the format-only control and the name-permuted
+content null.
+
 ## Not in this thread
 
 New learning mechanisms (T2, T3); sweeps over seeds or hyperparameters; hosting. Loose ends listed in FABLE-193

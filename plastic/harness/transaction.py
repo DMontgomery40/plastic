@@ -34,7 +34,7 @@ from plastic.harness.calibrate import Calibration
 from plastic.harness.canary import CanarySuite
 from plastic.harness.config import HarnessConfig
 from plastic.harness.fisher import fisher_norm
-from plastic.harness.policy import Decision, decide
+from plastic.harness.policy import Decision, constraint_violations, decide
 from plastic.harness.projection import project_delta
 from plastic.harness.signals import (
     STAT_SIGNALS,
@@ -390,6 +390,28 @@ class TransactionRunner:
     def _candidate_delta_norm(self) -> float:
         return delta_norms(self.backend.state_delta(self.working, self.committed))[0]
 
+    def _final_violations(self, sig: ChunkSignals) -> list[str]:
+        """The policy's finite limits re-evaluated on the candidate about to be committed, when scaling or projection
+        changed it after ``decide`` judged the proposal (external review of 6cf4457, finding 2). Canary deltas are
+        taken from the same committed-state baseline as the proposal's."""
+        if not self.hcfg.enable_rollback:
+            return []
+        dc = dp = None
+        if self.suite is not None and sig.canary_coherence_before is not None:
+            after = self.backend.score_suite(self.working, self.suite)
+            dc = after["coherence"] - sig.canary_coherence_before
+            dp = after["poison"] - sig.canary_poison_before
+        drift = fisher_norm(self.backend.state_delta(self.working, self.anchor), self.fisher) if self.fisher is not None else None
+        thresholds = self.calibration.thresholds if self.calibration is not None else None
+        return constraint_violations(dc, dp, drift, self.hcfg, thresholds)
+
+    def _accept_checked(self, kind: str, reasons: list[str], scale: float, sig: ChunkSignals) -> Decision:
+        """Accept a candidate that differs from the judged proposal only if it still satisfies the finite limits."""
+        bad = self._final_violations(sig)
+        if bad:
+            return self._reject_frozen("rollback", reasons + [f"final_candidate:{b}" for b in bad])
+        return self._accept(kind, reasons, scale)
+
     def _accept(self, kind: str, reasons: list[str], scale: float) -> Decision:
         self.budget_used += self._candidate_delta_norm()
         self.committed = self.backend.clone(self.working)
@@ -466,7 +488,7 @@ class TransactionRunner:
                 if actual > cap * (1.0 + 1e-6):
                     return self._reject_frozen("rollback", reasons + [f"budget_unrepresentable(delta={actual:.4g}>cap={cap:.4g})"])
             reasons += [f"removed_ratio({pstats.removed_ratio:.3f})", f"dot({pstats.dot_before:+.4g}->{pstats.dot_after:+.4g})"]
-            return self._accept("project", reasons, scale_p)
+            return self._accept_checked("project", reasons, scale_p, sig)
 
         # commit or scale: the policy's scale is a suggestion; the cap is checked on the actual candidate
         scale = float(decision.scale) if kind == "scale" else 1.0
@@ -489,7 +511,10 @@ class TransactionRunner:
             return self._reject_frozen("rollback", reasons)
         if not self.backend.is_finite(self.working):
             return self._reject_frozen("rollback", reasons + ["nonfinite_candidate"])
-        return self._accept("scale" if scale != 1.0 else "commit", reasons, scale)
+        if scale != 1.0:
+            # the committed candidate is not the proposal decide() judged: recheck the finite limits on it
+            return self._accept_checked("scale", reasons, scale, sig)
+        return self._accept("commit", reasons, scale)
 
     # ------------------------------------------------------------------ control
     def resume(self) -> None:

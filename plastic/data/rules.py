@@ -302,6 +302,25 @@ def permute_names(batch: RuleBatch, *, seed: int = 0, mapping: dict[tuple[str, .
                    name_map=tuple(sorted((k, v) for k, v in mapping.items() if k in {e.ops for e in batch.episodes})))
 
 
+def template_baseline(batch: RuleBatch) -> list[list[float]]:
+    """A model-free, untrained copier (the external review of 6cf4457, finding 3): in each episode it takes the first
+    worked answer, replaces the first input list inside it with a slot, and fills the slot with every later input. It
+    never reads an operator name and keeps nothing across episodes. Per episode, per situation: 1.0 when its output is
+    exact, 0.0 otherwise; the first situation is 0 by construction (nothing precedes it). On the decoration set it is
+    exact on every later situation, so a score after the first situation cannot show rule knowledge; only the first
+    situation can."""
+    out: list[list[float]] = []
+    for e in batch.episodes:
+        first = e.situations[0]
+        slot = "\x00"
+        template = first.answer_text.replace(" ".join(first.words), slot)
+        row = [0.0]
+        for s in e.situations[1:]:
+            row.append(1.0 if template.replace(slot, " ".join(s.words)) == s.answer_text else 0.0)
+        out.append(row)
+    return out
+
+
 def normalize_output(text: str) -> str:
     """Exact-match normalization: collapsed whitespace, trailing punctuation removed; case is preserved because #U
     is a case operator."""

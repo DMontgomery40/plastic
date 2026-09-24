@@ -28,6 +28,7 @@ def test_compare_with_containment_separates_artifacts_and_misses():
 
 
 def test_grade_results_fans_out_and_keeps_extra_keys():
+    pytest.importorskip("typesafe_sdk")  # the optional jev extra builds the questions even when the client is mocked
     class _N:
         def __init__(self, p):
             self.noul = p
@@ -61,6 +62,7 @@ def test_grade_results_fans_out_and_keeps_extra_keys():
 
 
 def test_grade_results_records_a_failed_row_instead_of_losing_the_batch():
+    pytest.importorskip("typesafe_sdk")  # the optional jev extra builds the questions even when the client is mocked
     class Boom:
         async def __aenter__(self):
             return self

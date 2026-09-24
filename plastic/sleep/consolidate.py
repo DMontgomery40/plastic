@@ -1,7 +1,7 @@
 """Consolidate what sessions learned into the slow weights, carefully.
 
-Harvest chat traces (prompt and completion) from sessions of a model, mix them
-with a sample of the core corpus, train only the blocks (embeddings and head
+Harvest the chat turns the harness accepted (prompt and completion) from sessions
+of a model, mix them with a sample of the core corpus, train only the blocks (embeddings and head
 frozen) for a few hundred small steps, and accept the candidate only if the
 coherence canary does not rise and the poison canary does not fall beyond
 tolerance, both scored from zero state. An accepted candidate is registered as
@@ -26,14 +26,27 @@ from plastic.tokenizer.bpe import Tokenizer
 from plastic.train.optim import build_optimizer
 
 
-def harvest_traces(store: ArtifactStore, model_id: str, sessions: list[str] | None = None) -> list[str]:
-    ids = sessions if sessions is not None else [m["session_id"] for m in store.list_sessions() if m.get("model_id") == model_id]
-    texts: list[str] = []
-    for sid in ids:
-        for rec in store.read_trace(sid):
-            if rec.get("kind") == "chat" and isinstance(rec.get("prompt"), str):
-                texts.append(str(rec["prompt"]).rstrip() + "\n" + str(rec.get("completion", "")).rstrip() + "\n")
-    return texts
+def harvest_traces(store: ArtifactStore, model_id: str, sessions: list[str] | None = None, *, flagged_policy: str = "exclude",
+                   summary: dict[str, Any] | None = None) -> list[str]:
+    """The chat turns native sleep may learn from, under the provenance rule the TTT path uses
+    (``harvest_sessions`` + ``select_sleep_turns``): a turn counts only when every one of its chunks was accepted by
+    the harness and none was read-only; accepted turns the policy flagged (scaled, projected, or would-have-intervened
+    in observational mode) are dropped unless ``flagged_policy="include"``. Text the harness rolled back is never
+    returned: an online refusal must also be a refusal as offline training material (external review of 6cf4457,
+    finding 1). A completion is returned only when it was learning material online: PlasticCore does not learn its own
+    generation unless ``learn_from_generation``, so by default a turn contributes its accepted prompt alone.
+    ``summary`` receives the per-reason turn counts, the selected-turn count and how many completions were dropped."""
+    from plastic.sleep.ttt import SleepConfig, harvest_sessions, harvest_summary, select_sleep_turns
+
+    if flagged_policy not in ("exclude", "include"):
+        raise ValueError(f"flagged_policy must be exclude or include for native sleep, not {flagged_policy!r}")
+    harvests = harvest_sessions(store, model_id, sessions)
+    info = harvest_summary(harvests)
+    turns, _ = select_sleep_turns(harvests, SleepConfig(flagged_policy=flagged_policy), info)
+    info["completions_not_learned"] = sum(1 for t in turns if not t.completion_learned)
+    if summary is not None:
+        summary.update(info)
+    return [t.prompt.rstrip() + "\n" + (t.completion.rstrip() + "\n" if t.completion_learned else "") for t in turns]
 
 
 def consolidate(
@@ -50,6 +63,7 @@ def consolidate(
     device: torch.device | str = "cpu",
     tolerance: dict[str, float] | None = None,
     seed: int = 0,
+    flagged_policy: str = "exclude",
     log=print,
 ) -> dict[str, Any]:
     device = torch.device(device)
@@ -67,7 +81,10 @@ def consolidate(
         suite = CanarySuite.default_text(os.path.join(core_data_dir, "validation.bin"), vocab_size=cfg.vocab_size, seed=seed)
         suite.save(store.canary_path(model_id))
 
-    memories = harvest_traces(store, model_id, sessions)
+    harvest: dict[str, Any] = {}
+    memories = harvest_traces(store, model_id, sessions, flagged_policy=flagged_policy, summary=harvest)
+    if not memories:
+        raise ValueError(f"no accepted chat turns to consolidate for {model_id} (turns by reason: {harvest.get('turns_by_reason')})")
     mem_ids: list[int] = []
     for t in memories:
         mem_ids.extend(tok.encode(t, add_bos=True, add_eos=True))
@@ -132,6 +149,7 @@ def consolidate(
         "sessions": sessions,
         "memories": len(memories),
         "memory_tokens": len(mem_ids),
+        "harvest": harvest,
         "steps": int(steps),
         "lr": float(lr),
         "core_ratio": float(core_ratio) if core is not None else 0.0,

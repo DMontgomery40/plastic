@@ -52,9 +52,14 @@ exactly that; [current status](docs/research/current-status.md) has the detail.
   from 17 worked lessons raised exact answers after one worked example from 0.31 to 1.0
   on held-out compositions, measured after a reset; restoring the weights removed the
   effect. One seed. The gradient runs through the model's own inner loop, so this is the
-  TTT training objective applied online, a known mechanism. Two of that report's
-  readings (a refused poison and rule content stored only for trained compositions)
-  were not supported as published; the archive records the corrections.
+  TTT training objective applied online, a known mechanism. An untrained template
+  copier, which never reads the rule names, is also exact on every answer after the
+  first worked example, so this shows faster adaptation to the demonstration format,
+  not knowledge of the named rules; only the first answer of an episode, where there is
+  nothing to copy, can show that. The update was a supervised training step outside the
+  chat transaction path. Two of that report's readings (a refused poison and rule
+  content stored only for trained compositions) were not supported as published; the
+  archive records the corrections.
 - Sleep, which consolidates session learning into the slow weights, retained none of
   24 facts taught once each across three seeds; the only transfers were planted
   falsehoods. It is paused on facts.
@@ -67,7 +72,7 @@ operators with it on the same stream.
 ## Install and run
 
 ```bash
-uv sync --extra dev --extra pretrained   # pretrained: transformers, for the TTT and Qwen backends
+uv sync --extra dev --extra pretrained   # pretrained: transformers, for the TTT and Qwen backends; add --extra jev for Jev grading
 npm --prefix dashboard ci
 uv run pytest                            # the test suite
 uv run plastic --help
@@ -148,7 +153,9 @@ read it but do not learn it), **scale** (apply a fraction of the update), **proj
 projection on the state delta), or **read-only** (the session's write budget is spent).
 Budgets are hard: the actual weight change of the accepted candidate is checked against
 the cap, non-finite states are refused, and a spent session stops learning until it is
-explicitly resumed. Thresholds are calibrated on a benign held-out stream to a requested
+explicitly resumed. A candidate that scaling or projection changed after the decision is
+checked again against the canary and drift limits before it is committed, and rolled
+back if it fails them: a smaller or projected step is not guaranteed to do less damage. Thresholds are calibrated on a benign held-out stream to a requested
 false-positive target, using split-conformal order statistics that report the rate the
 sample size can actually support; a calibrated target is not a measured policy-level
 false-positive rate.
@@ -158,6 +165,13 @@ The design and its threat model follow a survey of attacks on and defenses for m
 that learn at inference (in `docs/research/`), including the 2026 result that test-time
 training can strip safety guardrails, and that paper's private-holdout drift detector,
 which works only while its holdout stays secret.
+
+These signals measure how the model responds to an update; none is evidence that a new
+statement is true. A genuine correction can be surprising and a fluent falsehood can look
+ordinary, and a real rule change and an attacker's replacement that arrive as identical
+examples cannot be told apart from the stream alone. The shipped chat canaries are 12
+public true statements, 12 public contradictions and three repetition probes: a small,
+public specification of what to preserve, not protection for behavior outside it.
 
 ## Domains and testbeds
 
@@ -173,7 +187,10 @@ to infer the latent dynamics into its fast weights within each episode. Sessions
 the three-way comparison on one trajectory: the base model with no memory, the session
 with its memory frozen, and the session learning online. On a laptop the adaptive model
 reaches an MSE of 0.0008 where the same model with its memory disabled sits at 1.04.
-Physics is an internal benchmark; the public playground serves text.
+That shows the network depends on its memory; it is not a competitive system
+identifier. A causal scalar estimator that knows the simulator's equation family
+reaches 2.8e-5 MSE with no training. Physics is an internal benchmark; the public
+playground serves text.
 
 **Learning testbeds.** The learning contracts use two tasks built so that lasting
 learning can be told apart from temporary adaptation. A physics mechanism testbed
@@ -196,9 +213,13 @@ payload through the harness, so the reported damage is the damage of a payload t
 was actually fed. `plastic train --adversarial` meta-trains the write gate against
 that attacker. `plastic sleep` consolidates accepted session learning into the slow
 weights behind a damage gate (held-out loss, reply collapse, canaries where installed;
-it has no retention or contamination check). For the TTT backend it implements replay,
-fast-state distillation, anchoring and generated dreams; see where the research stands
-above for what they have and have not retained.
+it has no retention or contamination check). It learns only from turns whose every
+learning chunk the harness accepted; a turn with any rolled-back chunk is excluded, and
+text the harness refused online is never used as training material offline. For the
+TTT backend it implements replay, fast-state distillation, anchoring and generated
+dreams; anchoring and distillation read a session's saved state, which still carries
+the writes of any excluded turn in that session. See where the research stands above for
+what these methods have and have not retained.
 
 ## Usage
 
@@ -256,8 +277,10 @@ docs/           design specs, research notes and surveys, archived results
   coherent; it demonstrates adaptation, recall, and the safety harness, not language
   quality. The TTT chat model is small (760M), briefly fine-tuned and often wrong on
   facts, so claims about the meaning of its answers are qualified.
-- One lasting-learning result so far, on one seed, from a known mechanism; consolidation
-  by Sleep and protection against wrong lessons are not yet demonstrated.
+- One lasting-learning result so far, on one seed, from a known mechanism, on a task a
+  template copier also solves after one example; consolidation by Sleep, protection
+  against wrong lessons, and the two together through one operational path are not yet
+  demonstrated.
 - The harness's guarantees are first-order and probe-based. An adaptive attacker can
   still find directions the calibrated probes do not cover; the red team measures that
   residual rather than hiding it.

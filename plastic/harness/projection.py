@@ -6,8 +6,9 @@ the first-order change of the canary score is ``⟨g, Δ⟩``. If it exceeds the
 
     Δ ← Δ − ((⟨g, Δ⟩ − allowed) / ‖g‖²) g
 
-This is a local, first-order statement (A-GEM style); the harness still checks the
-finite canary delta after the fact and caps the complete state change.
+This is a local, first-order statement (A-GEM style); the runner re-evaluates the finite
+canary limits on the projected (and any budget-scaled) candidate before committing it, rolls
+it back if they fail, and caps the complete state change.
 """
 
 from __future__ import annotations

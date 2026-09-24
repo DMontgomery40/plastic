@@ -117,7 +117,9 @@ def detail_row(mode: str, rep: dict) -> str:
         vs = f"{sq['choice_heldout_delta'] - sc['choice_heldout_delta']:+.2f} / {sq['choice_train_delta'] - sc['choice_train_delta']:+.2f}"
     nov = ch.get("heldout_novel_accuracy") or {}
     nov_cell = "" if not nov else f" ({_fmt(nov.get('before'), '.2f')} → {_fmt(nov.get('after'), '.2f')})"
-    return (f"| {mode} | {cov} | {acc('before', 'heldout')} → {acc('after', 'heldout')}{nov_cell} | {acc('before', 'train')} → {acc('after', 'train')} "
+    tb = rep.get("template_baseline") or {}
+    tpl = "n/a" if not tb else f"{tb['second_situation']:.2f} / {tb['exact_after_first']:.2f}"
+    return (f"| {mode} | {tpl} | {cov} | {acc('before', 'heldout')} → {acc('after', 'heldout')}{nov_cell} | {acc('before', 'train')} → {acc('after', 'train')} "
             f"| {arm(sc)} | {arm(sq)} | {vs} |")
 
 
@@ -160,8 +162,8 @@ def main() -> None:
     manifest = {"checkpoint": os.path.abspath(args.checkpoint), "device": args.device, "code_commit": _git_head(), "dirty_paths": _dirty_paths(), "started_at_unix": int(t0),
                 "rule_set": spec.rule_set, "spec": spec.__dict__ | {"n_words": list(spec.n_words)}, "modes": {}, "chat_rows": len(chat_rows)}
     rows3 = ["| Mode | Comparison | Training compositions | Held-out, novel | Held-out, repeats a trained answer |", "| --- | --- | --- | --- | --- |"]
-    rows2 = ["| Mode | Clean stream: compositions trained (steps, poisoned steps) | First-situation choice, held-out: before → after (novel pairs only) | First-situation choice, training: before → after | Clean again: accepted, verify first-situation items changed | Poison on top: accepted, verify first-situation items changed | Poison on top vs clean again: choice held-out / training Δ |",
-             "| --- | --- | --- | --- | --- | --- | --- |"]
+    rows2 = ["| Mode | Untrained template copier, held-out (second situation / all later) | Clean stream: compositions trained (steps, poisoned steps) | First-situation choice, held-out: before → after (novel pairs only) | First-situation choice, training: before → after | Clean again: accepted, verify first-situation items changed | Poison on top: accepted, verify first-situation items changed | Poison on top vs clean again: choice held-out / training Δ |",
+             "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     rows = ["| Mode | Held-out exact (adapt) before → after | of which first situation Δ / later Δ | Held-out nll (adapt) before → after | Held-out nll (no adapt) Δ | Speed area before → after | Forgetting nll Δ | Poison harm (nll) | Sequential poison: accepted, harm (nll) | Correction residual | Format-only gain exact (true) | Revert | Accepted good / refused bad | Verifier |",
             "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for mode in [m.strip() for m in args.modes.split(",") if m.strip()]:

@@ -703,3 +703,42 @@ def test_gate_names_itself_a_damage_gate_and_states_its_scope():
     assert g["kind"] == "damage gate" and "no retention" in g["scope"] and g["passed"] is True
     g0 = gate_from_measurements({}, {}, tolerance_nll=0.05, tolerance_canary={})
     assert g0["kind"] == "damage gate" and g0["passed"] is None and not g0["measured"]
+
+
+def test_learning_ineligible_generation_neither_accepts_nor_refuses_a_turn(tmp_path):
+    """PlasticCore does not learn its own generation: those chunks are observations (readonly, learning_ineligible).
+    They must not exclude an accepted prompt (every native turn would be dropped) nor make the completion training
+    material; one rolled-back chunk or a latched read-only still excludes the whole turn (external review of 6cf4457,
+    finding 1)."""
+    from plastic.sleep.consolidate import harvest_traces
+
+    store = ArtifactStore(str(tmp_path))
+    store.register_model("m", {"backend": "ttt", "domain": "text"})  # the label is irrelevant to the harvest; a plastic record would need a checkpoint
+    store.create_session("s", model_id="m", domain="text", harness_cfg=HarnessConfig())
+    layout = [
+        ("prompt accepted, generation observed", "gen a", [("commit", [], 0, False), ("readonly", ["learning_ineligible"], 8, False)]),
+        ("prompt rolled back", "gen b", [("rollback", ["canary"], 0, False), ("readonly", ["learning_ineligible"], 8, False)]),
+        ("prompt partly rolled back", "gen c", [("commit", [], 0, False), ("rollback", ["canary"], 0, False), ("readonly", ["learning_ineligible"], 8, False)]),
+        ("latched read only", "gen d", [("commit", [], 0, False), ("readonly", ["session_read_only"], 8, True)]),
+        ("generation learned", "gen e", [("commit", [], 0, False), ("commit", [], 8, False)]),
+        ("only observed", "gen f", [("readonly", ["learning_ineligible"], 0, False), ("readonly", ["learning_ineligible"], 8, False)]),
+    ]
+    idx = 0
+    for prompt, completion, chunks in layout:
+        first = idx
+        for kind, reasons, model_tokens, latched in chunks:
+            r = _tx(idx, 8 * idx, 8 * idx + 8, kind, read_only=latched)
+            r["decision"]["reasons"] = list(reasons)
+            r["sources"] = {"user": 0 if model_tokens else 8, "model": model_tokens}
+            store.append_transaction("s", r)
+            idx += 1
+        store.append_trace("s", {"t_unix": 0, "kind": "chat", "prompt": prompt, "completion": completion, "pos_end": 8 * idx,
+                                 "n_transactions": len(chunks), "tx_start": first, "tx_end": idx})
+    turns = harvest_sessions(store, "m")[0].turns
+    assert [t.reason for t in turns] == ["accepted", "rolled_back", "rolled_back", "read_only", "accepted", "no_learning_chunks"]
+    assert [t.completion_learned for t in turns if t.accepted] == [False, True]
+    summary = {}
+    texts = harvest_traces(store, "m", summary=summary)
+    assert texts == ["prompt accepted, generation observed\n", "generation learned\ngen e\n"]
+    assert summary["completions_not_learned"] == 1 and summary["turns_by_reason"]["rolled_back"] == 2
+    assert not any("rolled back" in t or "latched" in t for t in texts)

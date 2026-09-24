@@ -28,7 +28,14 @@ from 0.31 to 1.0 on held-out compositions, measured after a reset, and restoring
 effect. The gradient flows
 through the model's own inner-loop updates, so this is the TTT training objective applied online
 to a small stream (closest prior work: online meta-learning and the meta-learned initialisation of
-end-to-end TTT), not a new mechanism. Review found that this update trained 11 of the 17 lesson
+end-to-end TTT), not a new mechanism. An external review (24 September) showed that an untrained
+template copier, which never reads the rule names, is also exact on every answer after the first
+worked example (16/16 after one example on the archive's own held-out inputs); every report now
+carries that copier's score. Scores after the first answer therefore show faster adaptation to the
+demonstration format, not knowledge of the named rules; the first answer of an episode, where there
+is nothing to copy, is the test, and the first-situation choice score measures it. The update is a
+supervised step outside the chat transaction path; demonstrating useful retention and refusal of
+damaging lessons through one operational path is still open. Review found that this update trained 11 of the 17 lesson
 compositions, that two of the eight held-out pairs repeat trained answers, and that the report's
 "first refused poison" and "content stored only for trained compositions" readings are not
 supported; each archive carries the corrections. The measurement now trains in full passes, keeps
@@ -48,7 +55,11 @@ trained on the saved teaching text and Dream received the quoted statement, so t
 of the facts does not explain those arms, and no run showed that the write path can store a fact
 under the most favourable exposure. The [Sleep note](2026-09-23-sleep-consolidation.md) keeps the
 record; its operators are next measured on the rule task, where the model can do the task in
-context.
+context. The same review found that native (PlasticCore) Sleep harvested chat text the harness
+had rolled back; it now uses the TTT path's provenance rule (a turn counts only when every learning
+chunk was accepted), and the runner rechecks the canary and drift limits on any candidate that
+scaling or projection changed after the decision. The damage gate still has no retention or
+contamination check.
 
 **The from-scratch coordinate learner** adapts within an episode once its inner step ceiling is
 lifted, with the nonlinear coordinates doing the work, and matches the delta-rule baseline at lower
