@@ -191,6 +191,24 @@ the operator is indistinguishable from a true rule by any damage check. Verifier
 and add a sequential arm (clean accepted, then the poison on top, verified against the accepted lessons), which is
 the recurrence-and-consistency criterion of the reassessment memo in its first concrete form.
 
+### The format-only control (same run, continued and replay_verify)
+
+[Results](../../research/results/text-rules-2026-09-23/contract_decorate_s0_format_control/README.md). The
+clean lessons with every answer moved to another situation of its episode (a derangement: same chat shape,
+vocabulary and answer lengths, every answer wrong for its input) give 0.67 → 0.76 exact and NLL −0.205, against
+0.67 → 0.87 and −0.267 for the true lessons: 44 % of the exact gain and 77 % of the likelihood gain are format.
+The remaining exact gain (+0.11) needs the answers to be right for their inputs, but the poisoned stream (one
+operator taught wrong, consistently) produced almost the same gain as the clean one (0.84 against 0.87), so what
+the answers carry is that a stated rule is applied to the copied list, not which rule. All of the gain is in the
+situations after the first: the first situation's exact is 0 before and after in every arm (its NLL 2.30 → 0.92);
+the second situation goes 0.06 → 0.94. The lasting update makes one worked example do what three did before.
+Reading: a procedure ("apply the stated decoration to the list, from the first example on") was learned; the
+decorations themselves were not stored, and the transforming operators are still not learnable at all here.
+
+Verifier v1 accepted all four streams, including the format-only one, whose shuffled answers lowered its frozen
+held-in NLL more than the true lessons did (−0.467 against −0.213), with held-in exact 0 on both sides of every
+decision. Frozen scoring does not see rule content on this model; v1 is retired below.
+
 ## Verifier v2 and the sequential poison arm
 
 Two changes to `replay_verify` and one to the contract, made after the first report and named in every archive row.
