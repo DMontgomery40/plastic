@@ -48,6 +48,8 @@ def main() -> None:
     ap.add_argument("--lr", type=float, default=1e-4)
     ap.add_argument("--steps", type=int, default=20)
     ap.add_argument("--chat-rows", type=int, default=8, help="held-out SmolTalk rows for the chat-NLL forgetting measure (0 disables)")
+    ap.add_argument("--verifier", default="v2", choices=["v1", "v2"], help="v1: held-in checks scored with the fast path frozen; v2: adapting, plus the first-situation exact")
+    ap.add_argument("--no-sequential-poison", action="store_true", help="skip the poison-on-top-of-accepted-clean arm")
     args = ap.parse_args()
 
     from plastic.backends.ttt_lm.backend import TTTBackend
@@ -64,20 +66,21 @@ def main() -> None:
     t0 = time.time()
     spec = TextContractSpec(n_heldout=args.n_heldout, split_seed=args.seed, situations_per_episode=args.situations,
                             eval_episodes_per_composition=args.eval_episodes_per_composition, stream_episodes=args.stream_episodes,
-                            probe_situations=args.situations, poison_operator=args.poison_operator, rule_set=args.rule_set)
+                            probe_situations=args.situations, poison_operator=args.poison_operator, rule_set=args.rule_set,
+                            sequential_poison=not args.no_sequential_poison)
     train, heldout = split_pairs(n_heldout=spec.n_heldout, seed=spec.split_seed, rule_set=spec.rule_set, min_reversed_heldout=args.min_reversed_heldout)
     log(f"[setup] rule set {spec.rule_set}: {len(train)} training compositions, {len(heldout)} held-out pairs {[' '.join(c) for c in heldout]}")
     chat_rows = load_replay_conversations("everyday-conversations", "test", args.chat_rows, args.seed + 1, log) if args.chat_rows > 0 else []
     manifest = {"checkpoint": os.path.abspath(args.checkpoint), "device": args.device, "code_commit": _git_head(), "started_at_unix": int(t0),
                 "rule_set": spec.rule_set, "spec": spec.__dict__ | {"n_words": list(spec.n_words)}, "modes": {}, "chat_rows": len(chat_rows)}
-    rows = ["| Mode | Held-out exact (adapt) before → after | of which first situation Δ / later Δ | Held-out nll (adapt) before → after | Held-out nll (no adapt) Δ | Speed area before → after | Forgetting nll Δ | Poison harm (nll) | Correction residual | Format-only gain exact (true) | Revert | Accepted good / refused bad |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+    rows = ["| Mode | Held-out exact (adapt) before → after | of which first situation Δ / later Δ | Held-out nll (adapt) before → after | Held-out nll (no adapt) Δ | Speed area before → after | Forgetting nll Δ | Poison harm (nll) | Sequential poison: accepted, harm (nll) | Correction residual | Format-only gain exact (true) | Revert | Accepted good / refused bad | Verifier |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for mode in [m.strip() for m in args.modes.split(",") if m.strip()]:
         log(f"[mode] {mode}")
         be = TTTBackend.load(args.checkpoint, device=args.device)
         manifest["checkpoint_digest"] = be.checkpoint_digest
         chat = (lambda: heldout_nll(be, chat_rows, 512)) if chat_rows else None
-        learner = TextRuleLearner(be, mode=mode, target=args.target, lr=args.lr, steps=args.steps, chat_nll=chat, log=log)
+        learner = TextRuleLearner(be, mode=mode, target=args.target, lr=args.lr, steps=args.steps, chat_nll=chat, verify_adapt=args.verifier == "v2", log=log)
         learner.train_compositions = train
         learner.rule_set = spec.rule_set
         rep = run_text_contract(learner, spec, seed=args.seed, chat_nll=chat)
@@ -85,10 +88,12 @@ def main() -> None:
         with open(os.path.join(args.out, f"contract_{mode}.json"), "w", encoding="utf-8") as f:
             json.dump(rep, f, indent=1)
         tr, sp, fg, co, rv, acc, fo = rep["transfer"], rep["speed"], rep["forgetting"], rep["correction"], rep["revert"], rep["acceptance"], rep["format_only"]
+        sq = rep.get("sequential_poison")
+        seq_cell = "n/a" if sq is None else f"{sq['accepted']}, {sq['harm_nll']:+.3f}"
         rows.append(f"| {mode} | {tr['before']['adapt']['exact']:.2f} → {tr['after']['adapt']['exact']:.2f} | {tr.get('delta_exact_first', float('nan')):+.2f} / {tr.get('delta_exact_after_first', float('nan')):+.2f} | {tr['before']['adapt']['nll']:.3f} → {tr['after']['adapt']['nll']:.3f} "
-                    f"| {tr['delta_nll_no_adapt']:+.3f} | {sp['before']['area']:.2f} → {sp['after']['area']:.2f} | {fg['delta_nll']:+.3f} | {co['harm_nll']:+.3f} | {co['residual_nll']:+.3f} "
+                    f"| {tr['delta_nll_no_adapt']:+.3f} | {sp['before']['area']:.2f} → {sp['after']['area']:.2f} | {fg['delta_nll']:+.3f} | {co['harm_nll']:+.3f} | {seq_cell} | {co['residual_nll']:+.3f} "
                     f"| {fo['gain_exact']:+.2f} ({fo['true_stream_gain_exact']:+.2f}) "
-                    f"| {'ok' if rv['ok'] else 'GAP ' + format(rv['gap'], '.2e')} | {acc['accepted_good']} / {acc['refused_bad']} (n {acc['n_good']}/{acc['n_bad']}) |")
+                    f"| {'ok' if rv['ok'] else 'GAP ' + format(rv['gap'], '.2e')} | {acc['accepted_good']} / {acc['refused_bad']} (n {acc['n_good']}/{acc['n_bad']}) | {rep.get('verifier') or 'n/a'} |")
         manifest["modes"][mode] = {"seconds": rep["compute"]["wall_clock_s"], "decisions": rep["decisions"]}
         log(rows[-1])
         del learner, be

@@ -63,13 +63,16 @@ def test_contract_shows_gain_revert_and_the_poison_decision():
     r = run_text_contract(L, spec, seed=0)
     assert r["contract"] == "text_rules" and r["revert"]["ok"]
     assert r["transfer"]["delta_nll"] == 0.0 and r["forgetting"]["delta_nll"] < 0
-    assert r["decisions"][1]["stream"] == "poisoned" and r["decisions"][1]["accepted"] is False
-    assert r["acceptance"] == {"accepted_good": 1.0, "refused_bad": 0.5, "n_good": 2, "n_bad": 2}   # the fake accepts the format-only stream
-    assert r["decisions"][3]["stream"] == "format_only" and L.consumed[3].format_only
+    assert [d["stream"] for d in r["decisions"]] == ["clean", "poisoned", "poisoned_sequential", "corrective", "format_only"]
+    assert r["decisions"][1]["accepted"] is False and r["decisions"][2]["accepted"] is False
+    assert r["acceptance"] == {"accepted_good": 1.0, "refused_bad": 2 / 3, "n_good": 2, "n_bad": 3}   # the fake accepts the format-only stream
+    assert r["decisions"][4]["stream"] == "format_only" and L.consumed[4].format_only
     assert r["format_only"]["true_stream_gain_exact"] == 0.0 and "learned format" in r["format_only"]["note"]
-    assert L.consumed[1].poisoned and L.consumed[1].poisoned_operator == spec.poison_operator
+    # the sequential arm consumes the poison right after the clean lessons, before the revert
+    assert L.consumed[1].poisoned and L.consumed[1].poisoned_operator == spec.poison_operator and L.consumed[2].poisoned
     assert any(e.poisoned for e in L.consumed[1].episodes) and not L.consumed[0].poisoned
-    assert r["compute"]["situations_consumed"] == 4 * L.consumed[0].situations
+    assert r["sequential_poison"]["accepted"] is False and r["sequential_poison"]["harm_nll"] == 0.0
+    assert r["compute"]["situations_consumed"] == 5 * L.consumed[0].situations
     # the learner ends at its pre-stream state
     assert L.known == set()
 
@@ -77,8 +80,18 @@ def test_contract_shows_gain_revert_and_the_poison_decision():
 def test_contract_records_an_accepted_poison_as_refused_bad_zero():
     spec = TextContractSpec(n_heldout=8, eval_episodes_per_composition=1, stream_episodes=6)
     r = run_text_contract(FakeLearner(accept_poison=True), spec, seed=1)
-    assert r["acceptance"]["refused_bad"] == 0.0 and r["acceptance"]["accepted_good"] == 1.0 and r["acceptance"]["n_bad"] == 2
+    assert r["acceptance"]["refused_bad"] == 0.0 and r["acceptance"]["accepted_good"] == 1.0 and r["acceptance"]["n_bad"] == 3
     assert set(r["split"]["heldout"][0]) <= set(OPERATORS)
+    assert r["sequential_poison"]["accepted"] is True
+
+
+def test_sequential_arm_can_be_switched_off_and_the_shape_is_the_t1_one():
+    spec = TextContractSpec(n_heldout=8, eval_episodes_per_composition=1, stream_episodes=6, sequential_poison=False)
+    L = FakeLearner(accept_poison=False)
+    r = run_text_contract(L, spec, seed=0)
+    assert [d["stream"] for d in r["decisions"]] == ["clean", "poisoned", "corrective", "format_only"]
+    assert r["sequential_poison"] is None and r["consume_records"]["poisoned_sequential"] is None
+    assert r["acceptance"]["n_bad"] == 2 and r["compute"]["situations_consumed"] == 4 * L.consumed[0].situations
 
 
 def test_transfer_reports_the_first_situation_separately_from_the_rest():

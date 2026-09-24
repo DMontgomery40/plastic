@@ -71,7 +71,7 @@ class TextRuleLearner:
     def __init__(self, backend, *, mode: str = "frozen", target: str = "w0", lr: float = 1e-4, steps: int = 20,
                  verify_tolerance_exact: float = 0.05, verify_tolerance_nll: float = 0.1, verify_tolerance_chat_nll: float = 0.05,
                  chat_nll: Callable[[], dict[str, float]] | None = None, verify_seed: int = 7, verify_episodes: int = 6,
-                 log: Callable[[str], None] = lambda s: None) -> None:
+                 verify_adapt: bool = True, log: Callable[[str], None] = lambda s: None) -> None:
         if mode not in MODES:
             raise ValueError(f"unknown mode {mode!r}; expected one of {MODES}")
         if target not in ("w0", "all"):
@@ -79,6 +79,9 @@ class TextRuleLearner:
         self.backend, self.mode, self.target, self.lr, self.steps = backend, mode, target, float(lr), int(steps)
         self.tol_exact, self.tol_nll, self.tol_chat = verify_tolerance_exact, verify_tolerance_nll, verify_tolerance_chat_nll
         self.chat_nll, self.verify_seed, self.verify_episodes, self.log = chat_nll, verify_seed, verify_episodes, log
+        # verifier v2 scores the held-in checks with the fast path adapting (v1 scored it frozen, where exact was 0 on this
+        # model before and after: a vacuous check) and adds the first-situation exact, which no example precedes
+        self.verify_adapt = bool(verify_adapt)
         self.context: list[Episode] = []          # in_context mode: the stream's episodes, prepended at scoring time
         self.context_situations_measured = 0
         self.train_compositions: list[tuple[str, ...]] | None = None  # set by the caller for verification material
@@ -170,7 +173,23 @@ class TextRuleLearner:
 
     def _summ(self, scores) -> dict[str, float]:
         flat = [s for ep in scores for s in ep]
-        return {"exact": sum(s["exact"] for s in flat) / len(flat), "nll": sum(s["nll"] for s in flat) / len(flat)}
+        first = [ep[0] for ep in scores if ep]
+        return {"exact": sum(s["exact"] for s in flat) / len(flat), "nll": sum(s["nll"] for s in flat) / len(flat),
+                "exact_first": sum(s["exact"] for s in first) / len(first), "nll_first": sum(s["nll"] for s in first) / len(first)}
+
+    @property
+    def verifier_version(self) -> str:
+        return "v2" if self.verify_adapt else "v1"
+
+    def _verify_checks(self, before: dict[str, float], after: dict[str, float]) -> list[dict[str, Any]]:
+        checks = [
+            {"name": "train_exact_drop", "value": before["exact"] - after["exact"], "limit": self.tol_exact, "passed": before["exact"] - after["exact"] <= self.tol_exact},
+            {"name": "train_nll_rise", "value": after["nll"] - before["nll"], "limit": self.tol_nll, "passed": after["nll"] - before["nll"] <= self.tol_nll},
+        ]
+        if self.verify_adapt:
+            drop = before["exact_first"] - after["exact_first"]
+            checks.append({"name": "train_exact_first_drop", "value": drop, "limit": self.tol_exact, "passed": drop <= self.tol_exact})
+        return checks
 
     def consume(self, stream: RuleBatch) -> dict[str, Any]:
         rec: dict[str, Any] = {"mode": self.mode, "stream_poisoned": stream.poisoned, "episodes": len(stream.episodes), "situations": stream.situations}
@@ -188,22 +207,21 @@ class TextRuleLearner:
         # replay_verify: propose, then verify on held-in material only
         snapshot = self.snapshot_slow()
         vb = self._verify_batch()
-        before = self._summ(self.score(vb, adapt=False))
+        before = self._summ(self.score(vb, adapt=self.verify_adapt))
         chat_before = self.chat_nll() if self.chat_nll else None
         rec.update(self._train_on(stream))
-        after = self._summ(self.score(vb, adapt=False))
+        after = self._summ(self.score(vb, adapt=self.verify_adapt))
         chat_after = self.chat_nll() if self.chat_nll else None
-        checks = [
-            {"name": "train_exact_drop", "value": before["exact"] - after["exact"], "limit": self.tol_exact, "passed": before["exact"] - after["exact"] <= self.tol_exact},
-            {"name": "train_nll_rise", "value": after["nll"] - before["nll"], "limit": self.tol_nll, "passed": after["nll"] - before["nll"] <= self.tol_nll},
-        ]
+        checks = self._verify_checks(before, after)
         if chat_before is not None and chat_after is not None:
             rise = float(chat_after["mean"]) - float(chat_before["mean"])
             checks.append({"name": "chat_nll_rise", "value": rise, "limit": self.tol_chat, "passed": rise <= self.tol_chat})
         accepted = all(c["passed"] for c in checks)
         if not accepted:
             self.restore_slow(snapshot)
-        rec.update(accepted=accepted, verify={"before": before, "after": after, "chat_before": chat_before, "chat_after": chat_after, "checks": checks},
-                   note="held-in verification only: training compositions with fresh inputs, never the held-out compositions")
-        self.log(f"[text-learner] {self.mode}: {'accepted' if accepted else 'refused'} " + ", ".join(f"{c['name']} {c['value']:+.3f}/{c['limit']}" for c in checks))
+        rec.update(accepted=accepted, verifier=self.verifier_version,
+                   verify={"adapt": self.verify_adapt, "before": before, "after": after, "chat_before": chat_before, "chat_after": chat_after, "checks": checks},
+                   note="held-in verification only: training compositions with fresh inputs, never the held-out compositions; "
+                        + ("scored with the fast path adapting, first-situation exact included (v2)" if self.verify_adapt else "scored with the fast path frozen (v1)"))
+        self.log(f"[text-learner] {self.mode} ({self.verifier_version}): {'accepted' if accepted else 'refused'} " + ", ".join(f"{c['name']} {c['value']:+.3f}/{c['limit']}" for c in checks))
         return rec

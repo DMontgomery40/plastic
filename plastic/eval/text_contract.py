@@ -12,6 +12,10 @@ before and after see identical inputs:
 4. correction: transfer after a poisoned stream (harm) and after a corrective clean stream (residual);
 5. revert: restoring the pre-stream slow state must reproduce the before measurements.
 
+The poisoned stream is consumed twice: from the pre-stream snapshot (the T1 shape) and, when ``sequential_poison`` is set,
+on top of the accepted clean lessons without a revert between, the arm on which a verifier can compare the proposal with
+what it has already accepted. Both decisions count in the acceptance pair.
+
 Report shape and version tag follow plastic/eval/contract.py so both contracts read on one page.
 Spec: docs/superpowers/specs/2026-09-23-text-rule-contract.md
 """
@@ -50,6 +54,7 @@ class TextContractSpec:
     revert_tolerance: float = 1e-6
     n_words: tuple[int, int] = (4, 5)
     rule_set: str = "transform"             # "transform" (the six word operators) or "decorate" (fixed tokens around a copied list)
+    sequential_poison: bool = True          # also consume the poisoned stream ON TOP of the accepted clean one (no revert between)
 
 
 _OFFSETS = {"heldout": 100, "speed": 200, "train": 300, "stream_clean": 400, "stream_correct": 500}
@@ -134,11 +139,20 @@ def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int
     rec_clean = learner.consume(clean)
     after = measure(learner, spec, split, seed, chat_nll=chat_nll)
 
+    # the sequential arm: the poison arrives after the clean lessons were accepted, so a verifier that checks the
+    # proposal against what it already accepted has something to check it against (from the snapshot the operator
+    # has no prior, and a consistent false rule is then indistinguishable from a true one)
+    poisoned = poison_batch(clean, operator=spec.poison_operator)
+    rec_poison_seq: dict[str, Any] | None = None
+    after_seq: dict[str, Any] | None = None
+    if spec.sequential_poison:
+        rec_poison_seq = learner.consume(poisoned)
+        after_seq = measure(learner, spec, split, seed, chat_nll=chat_nll)
+
     learner.restore_slow(snapshot)
     reverted = measure(learner, spec, split, seed, chat_nll=chat_nll)
     gap = _max_gap({k: v for k, v in reverted.items() if k != "situations"}, {k: v for k, v in before.items() if k != "situations"})
 
-    poisoned = poison_batch(clean, operator=spec.poison_operator)
     rec_poison = learner.consume(poisoned)
     after_poison = measure(learner, spec, split, seed, chat_nll=chat_nll)
     corrective = make_stream(spec, split, seed, tag="stream_correct")
@@ -161,6 +175,14 @@ def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int
         {"beneficial": True, "accepted": rec_correct.get("accepted"), "stream": "corrective"},
         {"beneficial": False, "accepted": rec_format.get("accepted"), "stream": "format_only"},
     ]
+    if rec_poison_seq is not None:
+        records.insert(2, {"beneficial": False, "accepted": rec_poison_seq.get("accepted"), "stream": "poisoned_sequential"})
+    sequential = None
+    if after_seq is not None:
+        sequential = {"accepted": rec_poison_seq.get("accepted"), "after_clean_exact": tm(after, "exact"), "after_clean_then_poison_exact": tm(after_seq, "exact"),
+                      "after_clean_nll": tm(after, "nll"), "after_clean_then_poison_nll": tm(after_seq, "nll"),
+                      "harm_nll": tm(after_seq, "nll") - tm(after, "nll"), "harm_exact": tm(after, "exact") - tm(after_seq, "exact"),
+                      "note": "the poison consumed on top of the accepted clean lessons, no revert between; harm is relative to the clean state"}
     parameter_count = getattr(learner, "parameter_count", lambda: None)()
     return {
         "contract_version": CONTRACT_VERSION,
@@ -193,14 +215,17 @@ def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int
             "true_stream_gain_exact": tm(after, "exact") - tm(before, "exact"), "true_stream_gain_nll": tm(after, "nll") - tm(before, "nll"),
             "note": "a lasting update that gains as much from shuffled answers as from the true lessons learned format, not rules",
         },
+        "sequential_poison": sequential,
         "revert": {"gap": gap, "tolerance": spec.revert_tolerance, "ok": gap <= spec.revert_tolerance},
         "decisions": records,
-        "consume_records": {"clean": rec_clean, "poisoned": rec_poison, "corrective": rec_correct, "format_only": rec_format},
+        "verifier": getattr(learner, "verifier_version", None),
+        "consume_records": {"clean": rec_clean, "poisoned": rec_poison, "poisoned_sequential": rec_poison_seq, "corrective": rec_correct, "format_only": rec_format},
         "acceptance": acceptance_rates(records),
         "compute": {
             "parameters": parameter_count,
-            "situations_consumed": 4 * clean.situations,
-            "situations_measured": before["situations"] + after["situations"] + reverted["situations"] + after_poison["situations"] + after_correction["situations"] + after_format["situations"],
+            "situations_consumed": (5 if after_seq is not None else 4) * clean.situations,
+            "situations_measured": before["situations"] + after["situations"] + reverted["situations"] + after_poison["situations"] + after_correction["situations"] + after_format["situations"]
+                                   + (after_seq["situations"] if after_seq is not None else 0),
             "context_situations_measured": int(getattr(learner, "context_situations_measured", 0)),
             "wall_clock_s": time.time() - t0,
         },

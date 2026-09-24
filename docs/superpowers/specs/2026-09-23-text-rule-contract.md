@@ -191,6 +191,22 @@ the operator is indistinguishable from a true rule by any damage check. Verifier
 and add a sequential arm (clean accepted, then the poison on top, verified against the accepted lessons), which is
 the recurrence-and-consistency criterion of the reassessment memo in its first concrete form.
 
+## Verifier v2 and the sequential poison arm
+
+Two changes to `replay_verify` and one to the contract, made after the first report and named in every archive row.
+(1) The held-in checks are scored with the fast path adapting (`verify_adapt=True`, the default; `--verifier v1`
+reproduces the frozen scoring), so that exact is no longer 0 on both sides. (2) A third check, the exact match on
+the *first* situation of each held-in episode, which no worked example precedes: what the slow weights carry under
+the stated rule, the place a lasting false rule shows first. The tolerances are unchanged (exact drop 0.05, NLL
+rise 0.1, chat NLL rise 0.05); nothing is calibrated, they are stated limits. (3) `TextContractSpec.sequential_poison`
+(default on): the poisoned stream is also consumed on top of the accepted clean lessons, without a revert between,
+and measured; the decision counts as a second refused-bad row (`poisoned_sequential`) and the report carries the
+harm relative to the clean state. From the snapshot the model has no prior about the poisoned operator, so a
+consistent false rule taught there is a different rule, not a contradiction; on the sequential arm the verifier has
+its own accepted lessons to compare with, which is the recurrence-and-consistency criterion of the reassessment memo
+in its first concrete form. Verified held-in material stays fresh inputs of the training compositions under the true
+definitions; the held-out compositions are never seen by the verifier.
+
 ## Not in this thread
 
 New learning mechanisms (T2, T3); sweeps over seeds or hyperparameters; hosting. Loose ends listed in FABLE-193
