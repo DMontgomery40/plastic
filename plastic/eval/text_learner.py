@@ -19,6 +19,22 @@
   ``replay_verify``: propose = the same cross-entropy update; verify on training-distribution material only
   (exact and nll on fresh training compositions must not fall by more than a tolerance; held-out chat NLL, when a
   corpus is given, must not rise by more than a tolerance); accept installs, refuse restores the snapshot.
+Sleep's consolidation operators as lasting updates (step 2 of OPUS-LEAD-001; ungated like ``continued``, the same
+AdamW settings, one step per stream episode in the same order):
+
+  ``anchor``: forward-only. Each stream episode is read from a fresh state with the fast path writing; W0 moves
+  ``anchor_lambda`` of the way to the mean final fast weights (the Sleep anchor; a Reptile-form update whose inner
+  optimizer is the TTT reconstruction loop, not the task loss, so Reptile's rationale is not assumed).
+  ``distill``: context distillation. The teacher is the model before this consume reading each whole episode, so every
+  answer after the first is predicted with the earlier worked examples in its fast weights; its answer-token
+  distributions are fixed before the student moves (W0 is shared). The student reads each situation alone (the
+  preface and that one prompt) from a fresh state and is trained on KL(teacher || student) over the answer tokens.
+  The chat Sleep distill reads a saved session state with the fast path frozen; this is the in-context form.
+  ``dream``: new inputs, generated programmatically for the stream's compositions; the teacher, after reading the
+  stream episode, answers each greedily; the student trains on those episodes like ``continued``. No stream answer
+  is used as a label, and the record states how often the teacher's answers match the stream's labelling and the
+  true rule. ``dream_truth``: the same new inputs with the stream's own labelling (the teacher-accuracy control).
+
 - ``snapshot_slow`` / ``restore_slow`` copy the initial fast weights W0 (target ``w0``) or every parameter
   (target ``all``) to CPU.
 - ``choice(batch)``: for the first situation of each episode (no worked example before it), the summed log-probability
@@ -34,15 +50,17 @@ from __future__ import annotations
 
 import math
 import random
+from dataclasses import replace
 from typing import Any, Callable
 
 import torch
 import torch.nn.functional as F
 
-from plastic.data.rules import Episode, RuleBatch, all_compositions, apply, rule_batch
+from plastic.data.rules import Episode, RuleBatch, Situation, all_compositions, apply, normalize_output, poison_batch, rule_batch, shuffle_answers
 from plastic.sleep.ttt import fast_weight_parameters, select_target
 
-MODES = ("frozen", "continued", "in_context", "replay_verify")
+MODES = ("frozen", "continued", "in_context", "replay_verify", "anchor", "distill", "dream", "dream_truth")
+SLEEP_MODES = ("anchor", "distill", "dream", "dream_truth")
 SAMPLING = ("passes", "draws")
 
 
@@ -79,7 +97,8 @@ class TextRuleLearner:
     def __init__(self, backend, *, mode: str = "frozen", target: str = "w0", lr: float = 1e-4, steps: int = 20,
                  verify_tolerance_exact: float = 0.05, verify_tolerance_nll: float = 0.1, verify_tolerance_chat_nll: float = 0.05,
                  chat_nll: Callable[[], dict[str, float]] | None = None, verify_seed: int = 7, verify_episodes: int = 6,
-                 verify_adapt: bool = True, sampling: str = "passes", passes: int = 1, log: Callable[[str], None] = lambda s: None) -> None:
+                 verify_adapt: bool = True, sampling: str = "passes", passes: int = 1, anchor_lambda: float = 0.5, dream_seed: int = 11,
+                 dream_max_new_tokens: int = 32, log: Callable[[str], None] = lambda s: None) -> None:
         if mode not in MODES:
             raise ValueError(f"unknown mode {mode!r}; expected one of {MODES}")
         if sampling not in SAMPLING:
@@ -87,6 +106,7 @@ class TextRuleLearner:
         if passes < 1:
             raise ValueError("passes must be at least 1")
         self.sampling, self.passes = sampling, int(passes)
+        self.anchor_lambda, self.dream_seed, self.dream_max_new_tokens = float(anchor_lambda), int(dream_seed), int(dream_max_new_tokens)
         if target not in ("w0", "all"):
             raise ValueError(f"unknown target {target!r}")
         self.backend, self.mode, self.target, self.lr, self.steps = backend, mode, target, float(lr), int(steps)
@@ -211,6 +231,153 @@ class TextRuleLearner:
             self.context_situations_measured += len(batch.episodes) * sum(len(e.situations) for e in self.context)
         return out
 
+    # ---------------------------------------------------------------- Sleep operators on the rule task
+    @staticmethod
+    def _coverage(stream: RuleBatch, order: list[int]) -> dict[str, Any]:
+        trained: dict[str, int] = {}
+        for i in order:
+            key = " ".join(stream.episodes[i].ops)
+            trained[key] = trained.get(key, 0) + 1
+        all_keys = {" ".join(e.ops) for e in stream.episodes}
+        return {"trained": trained, "compositions_trained": len(trained), "compositions_in_stream": len(all_keys),
+                "untrained": sorted(all_keys - set(trained)), "poisoned_steps": sum(1 for i in order if stream.episodes[i].poisoned)}
+
+    @torch.no_grad()
+    def _anchor_on(self, stream: RuleBatch) -> dict[str, Any]:
+        from plastic.backends.ttt_lm.backend import encode_conversation
+        from plastic.sleep.ttt import anchor_update, w0_relative_change, w0_snapshot
+
+        be = self.backend
+        w0_before = w0_snapshot(be.model)
+        leaves = []
+        for e in stream.episodes:
+            ids, _ = encode_conversation(be.tokenizer, e.messages())
+            _, st, _ = be.forward(ids, be.init_state(), freeze=False, beta_scale=1.0)
+            leaves.append([t.detach().clone() for t in st.effective_leaves(be._c15)])
+        anchor_update(be.model, leaves, self.anchor_lambda)
+        return {"sessions": len(leaves), "lambda": self.anchor_lambda, "w0_relative_change": w0_relative_change(be.model, w0_before)["total"], "forward_only": True,
+                "steps": 0, "sampling": "every episode once, averaged", **self._coverage(stream, list(range(len(stream.episodes))))}
+
+    def _single_situation(self, e: Episode, s: Situation) -> list[dict[str, str]]:
+        """One situation as its own chat: the preface and that prompt, as the first situation of a measurement reads."""
+        return replace(e, situations=(s,)).messages()
+
+    def _distill_on(self, stream: RuleBatch) -> dict[str, Any]:
+        from plastic.backends.ttt_lm.backend import encode_conversation
+
+        model, tok, dev = self.backend.model, self.backend.tokenizer, self.backend.device
+        pad = int(tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id)
+        teacher: list[list[torch.Tensor]] = []
+        students: list[list[tuple[list[int], list[int]]]] = []
+        with torch.no_grad():
+            for e in stream.episodes:
+                ids, labels = encode_conversation(tok, e.messages())
+                logits = model(torch.tensor([ids], dtype=torch.long, device=dev), use_cache=False).logits[0].float()
+                spans = answer_spans(labels)
+                teacher.append([torch.log_softmax(logits[a - 1:b - 1], dim=-1) for a, b in spans])
+                rows = [encode_conversation(tok, self._single_situation(e, s)) for s in e.situations]
+                for (a, b), (sids, slabels) in zip(spans, rows):
+                    sa, sb = answer_spans(slabels)[-1]
+                    if labels[a:b] != slabels[sa:sb]:
+                        raise RuntimeError("teacher and student answer tokens differ; the renderings must tokenize the answer alike")
+                students.append(rows)
+        params = select_target(model, self.target)
+        opt = torch.optim.AdamW(params, lr=self.lr, betas=(0.9, 0.95), weight_decay=0.0)
+        order = self.training_order(len(stream.episodes))
+        losses: list[float] = []
+        model.eval()
+        for i in order:
+            rows = students[i]
+            L = max(len(r[0]) for r in rows)
+            x = torch.full((len(rows), L), pad, dtype=torch.long, device=dev)
+            for j, (sids, _) in enumerate(rows):
+                x[j, :len(sids)] = torch.tensor(sids, dtype=torch.long, device=dev)
+            with torch.enable_grad():
+                s_logits = model(x, use_cache=False).logits.float()
+                terms = []
+                for j, (sids, slabels) in enumerate(rows):
+                    a, b = answer_spans(slabels)[-1]
+                    s_lp = torch.log_softmax(s_logits[j, a - 1:b - 1], dim=-1)
+                    t_lp = teacher[i][j]
+                    terms.append((t_lp.exp() * (t_lp - s_lp)).sum(-1))
+                loss = torch.cat(terms).mean()
+                if not math.isfinite(float(loss.detach())):
+                    raise RuntimeError("non-finite loss")
+                opt.zero_grad(set_to_none=True)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(params, 1.0)
+                opt.step()
+            losses.append(float(loss.detach()))
+        model.requires_grad_(False)
+        if self.backend.device.type == "mps":
+            torch.mps.synchronize()
+        return {"steps": len(order), "lr": self.lr, "target": self.target, "loss_first": losses[0], "loss_last": losses[-1], "sampling": self.sampling,
+                "teacher": "the pre-consume model reading each whole episode (in-context); fixed before the student moves",
+                "objective": "KL(teacher || student) over answer tokens, student reads one situation alone", **self._coverage(stream, order)}
+
+    def _dream_inputs(self, stream: RuleBatch) -> RuleBatch:
+        """New word lists for the stream's compositions, labelled by the stream's own generating process (poison and
+        format-only included), from a seed of the learner's own that no measurement uses."""
+        n_sit = len(stream.episodes[0].situations)
+        fresh = rule_batch([e.ops for e in stream.episodes], episodes=len(stream.episodes), n_situations=n_sit, seed=self.dream_seed,
+                           split_tag="dream", rule_set=stream.rule_set, stated=stream.stated)
+        if stream.poisoned:
+            fresh = poison_batch(fresh, operator=stream.poisoned_operator, kind=stream.poison_kind or "consistent")
+        if stream.format_only:
+            fresh = shuffle_answers(fresh, seed=self.dream_seed)
+        return fresh
+
+    @torch.no_grad()
+    def _teacher_answers(self, lesson: Episode, prompts: list[Situation]) -> list[str]:
+        """The model after reading ``lesson`` (fast path writing) answers each prompt greedily as the next turn of that
+        episode, each from the same post-lesson state."""
+        from plastic.backends.ttt_lm.backend import encode_conversation
+
+        be, tok = self.backend, self.backend.tokenizer
+        msgs = lesson.messages()
+        lesson_ids, _ = encode_conversation(tok, msgs)
+        _, st, _ = be.forward(lesson_ids, be.init_state(), freeze=False, beta_scale=1.0)
+        eos = int(tok.eos_token_id)
+        out: list[str] = []
+        for s in prompts:
+            full, _ = encode_conversation(tok, msgs + [{"role": "user", "content": s.prompt}, {"role": "assistant", "content": ""}])
+            if full[:len(lesson_ids)] != lesson_ids or full[-1] != eos:
+                raise RuntimeError("the next-turn rendering does not extend the lesson's ids")
+            logits, st2, _ = be.forward(full[len(lesson_ids):-1], st.clone(), freeze=False, beta_scale=1.0)
+            gen: list[int] = []
+            for _ in range(self.dream_max_new_tokens):
+                nxt = int(logits[-1].argmax())
+                if nxt == eos:
+                    break
+                gen.append(nxt)
+                logits, st2, _ = be.forward([nxt], st2, freeze=False, beta_scale=1.0)
+            out.append(tok.decode(gen, skip_special_tokens=True))
+        return out
+
+    def _dream_on(self, stream: RuleBatch) -> dict[str, Any]:
+        truth = self._dream_inputs(stream)
+        rec: dict[str, Any] = {"dream_seed": self.dream_seed, "labels": "stream labelling" if self.mode == "dream_truth" else "teacher"}
+        if self.mode == "dream_truth":
+            dreams = truth
+        else:
+            eps, match_stream, match_true, empty, n = [], 0, 0, 0, 0
+            for lesson, fresh in zip(stream.episodes, truth.episodes):
+                answers = self._teacher_answers(lesson, list(fresh.situations))
+                sits = []
+                for s, a in zip(fresh.situations, answers):
+                    words = tuple(normalize_output(a).split())
+                    n += 1
+                    empty += not words
+                    match_stream += " ".join(words) == s.answer_text
+                    match_true += " ".join(words) == " ".join(apply(s.ops, list(s.words), rule_set=stream.rule_set))
+                    sits.append(Situation(s.ops, s.words, words))
+                eps.append(replace(fresh, situations=tuple(sits), poisoned=lesson.poisoned))
+            dreams = replace(truth, episodes=eps)
+            rec.update(teacher_matches_stream=match_stream / n, teacher_matches_true_rule=match_true / n, teacher_empty=empty, teacher_answers=n)
+            self.log(f"[text-learner] dream teacher: {match_stream}/{n} match the stream's labelling, {match_true}/{n} the true rule, {empty} empty")
+        rec.update(self._train_on(dreams))
+        return rec
+
     # ---------------------------------------------------------------- the lasting update
     def _train_on(self, stream: RuleBatch) -> dict[str, Any]:
         from plastic.backends.ttt_lm.backend import encode_conversation
@@ -310,6 +477,10 @@ class TextRuleLearner:
             return rec
         if self.mode == "continued":
             rec.update(self._train_on(stream), accepted=True, note="continued training, no verification")
+            return rec
+        if self.mode in SLEEP_MODES:
+            fn = {"anchor": self._anchor_on, "distill": self._distill_on, "dream": self._dream_on, "dream_truth": self._dream_on}[self.mode]
+            rec.update(fn(stream), accepted=True, note=f"Sleep operator {self.mode}, ungated")
             return rec
         # replay_verify: propose, then verify on held-in material only
         snapshot = self.snapshot_slow()

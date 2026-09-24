@@ -28,8 +28,11 @@ def test_span_scores_uses_the_previous_position_logits_and_reports_teacher_force
     assert s[1]["exact"] == 0.0 and s[1]["nll"] > 1.0
 
 
-def test_modes_are_the_contract_baselines_plus_propose_and_verify():
-    assert MODES == ("frozen", "continued", "in_context", "replay_verify")
+def test_modes_are_the_contract_baselines_propose_and_verify_and_the_sleep_operators():
+    from plastic.eval.text_learner import SLEEP_MODES
+
+    assert MODES == ("frozen", "continued", "in_context", "replay_verify") + SLEEP_MODES
+    assert SLEEP_MODES == ("anchor", "distill", "dream", "dream_truth")
 
 
 def _verifier(adapt: bool):
@@ -108,6 +111,9 @@ class _CharTokenizer:
         r.input_ids = [3 + (ord(c) % 250) for c in text]
         return r
 
+    def decode(self, ids, skip_special_tokens=True):
+        return "".join(chr(i - 3) for i in ids if i >= 3)
+
 
 def _tiny_backend():
     import pytest
@@ -119,13 +125,10 @@ def _tiny_backend():
     cfg = M.TTTConfig(vocab_size=256, hidden_size=64, intermediate_size=128, num_hidden_layers=2, num_attention_heads=4, ttt_layer_type="mlp",
                       pre_conv=True, share_qk=True, use_gate=True, ttt_base_lr=0.1, mini_batch_size=16, max_position_embeddings=4096)
     model = M.TTTForCausalLM(cfg).eval()
+    model.requires_grad_(False)
+    from plastic.backends.ttt_lm.backend import TTTBackend
 
-    class _B:
-        pass
-
-    b = _B()
-    b.model, b.tokenizer, b.device = model, _CharTokenizer(), torch.device("cpu")
-    return b
+    return TTTBackend(model, _CharTokenizer(), cfg, device=torch.device("cpu"))
 
 
 def test_choice_ranks_every_composition_output_and_padding_does_not_move_a_rows_score():
@@ -169,3 +172,42 @@ def test_continued_training_records_the_compositions_it_actually_trained():
     rec_d = few.consume(stream)
     assert rec_d["steps"] == 2 and rec_d["compositions_trained"] + len(rec_d["untrained"]) == 4 and rec_d["sampling"] == "draws"
     full.restore_slow(snap)
+
+
+def test_sleep_operators_on_the_rule_task_move_w0_and_record_what_they_consumed():
+    """Step 2 of OPUS-LEAD-001: anchor, distill, dream and dream_truth are lasting updates on the same stream as
+    continued; each moves W0, names the compositions it consumed, and the dream states its teacher's accuracy."""
+    from plastic.data.rules import rule_batch
+    from plastic.eval.text_learner import SLEEP_MODES, TextRuleLearner
+
+    be = _tiny_backend()
+    stream = rule_batch([("#P",), ("#Q",), ("#B", "#Q")], episodes=3, n_situations=2, seed=1, split_tag="train", rule_set="decorate", stated=False)
+    base = TextRuleLearner(be, mode="frozen").snapshot_slow()
+    for mode in SLEEP_MODES:
+        L = TextRuleLearner(be, mode=mode, lr=1e-3, dream_max_new_tokens=4)
+        L.restore_slow(base)
+        rec = L.consume(stream)
+        assert rec["accepted"] is True and rec["compositions_trained"] == 3 and rec["untrained"] == [], mode
+        assert max(float((p.detach().cpu() - base[n]).abs().max()) for n, p in L._slow_params()) > 0, mode
+        if mode == "dream":
+            assert rec["teacher_answers"] == 6 and 0.0 <= rec["teacher_matches_stream"] <= 1.0 and rec["labels"] == "teacher"
+        if mode == "anchor":
+            assert rec["forward_only"] and rec["steps"] == 0 and rec["w0_relative_change"] > 0
+        L.restore_slow(base)
+
+
+def test_dream_inputs_are_new_word_lists_labelled_by_the_streams_own_process():
+    from plastic.data.rules import apply, poison_batch, rule_batch, shuffle_answers
+    from plastic.eval.text_learner import TextRuleLearner
+
+    L = TextRuleLearner.__new__(TextRuleLearner)
+    L.dream_seed = 11
+    stream = rule_batch([("#P",), ("#B", "#P")], episodes=2, n_situations=3, seed=1, split_tag="train", rule_set="decorate", stated=False)
+    fresh = L._dream_inputs(stream)
+    assert [e.ops for e in fresh.episodes] == [e.ops for e in stream.episodes] and not fresh.poisoned
+    assert any(a.words != b.words for e, f in zip(stream.episodes, fresh.episodes) for a, b in zip(e.situations, f.situations))
+    assert all(s.answer_text == " ".join(apply(s.ops, list(s.words), rule_set="decorate")) for e in fresh.episodes for s in e.situations)
+    pois = L._dream_inputs(poison_batch(stream, operator="#P"))
+    assert pois.poisoned and all(s.answer[-1] == "thanks" and s.answer[0] != "please" for s in pois.episodes[0].situations)
+    fmt = L._dream_inputs(shuffle_answers(stream, seed=0))
+    assert fmt.format_only and any(s.answer_text != " ".join(apply(s.ops, list(s.words), rule_set="decorate")) for e in fmt.episodes for s in e.situations)

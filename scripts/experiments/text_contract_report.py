@@ -52,7 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--out", required=True)
     ap.add_argument("--device", default="mps")
     ap.add_argument("--rule-set", default="decorate", choices=["transform", "decorate"])
-    ap.add_argument("--modes", default=",".join(MODES))
+    ap.add_argument("--modes", default="frozen,continued,in_context,replay_verify", help=f"comma-separated, from {', '.join(MODES)}")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--n-heldout", type=int, default=8)
     ap.add_argument("--min-reversed-heldout", type=int, default=6, help="the contract default; every archived decorate report measures on the seed-0 split with 6")
