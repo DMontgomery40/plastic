@@ -225,6 +225,40 @@ its own accepted lessons to compare with, which is the recurrence-and-consistenc
 in its first concrete form. Verified held-in material stays fresh inputs of the training compositions under the true
 definitions; the held-out compositions are never seen by the verifier.
 
+### Verifier v2 result: nothing refused, and why that is a finding about the poison, not only the verifier
+
+[Results](../../research/results/text-rules-2026-09-23/contract_decorate_s0_verifier_v2/README.md). The v2 checks
+measure something now (held-in exact 0.17 → 0.61 for the clean stream, first-situation exact 0 → 0.17, NLL
+0.885 → 0.141), and every stream was still accepted: accepted-good 1.0, refused-bad 0 of 3. The snapshot poison
+produces the same held-in gain as the clean stream; the sequential poison, consumed on top of the accepted clean
+lessons, raises held-in exact further (0.61 → 0.67) and costs the held-out transfer +0.009 NLL; the format-only
+stream gains less (0.50 exact, no first-situation gain) but gains. A verifier that checks for damage cannot refuse a
+lesson that helps by every measure it has, and on this learner all three "bad" streams help.
+
+Why they help. Each stream's preface states its definitions (true, or false for the poisoned operator). The lasting
+update taught the learner to apply whatever definition the preface states to the copied list from the first example
+on (the format-only control's reading above). Verification and measurement state the true definitions, so a learner
+that follows the stated rule is correct there whatever the poisoned stream's answers were. The poisoned stream is
+therefore a consistent lesson under a different stated rule, not a false belief about `#P`, and the sequential arm
+has nothing to contradict: the accepted lessons are "follow the preface", which the poison also teaches. Held-out
+harm is real but small (+0.019 NLL from the snapshot, +0.009 sequential), the residue of the answer strings.
+
+What this decides. Under stated rules, refused-bad cannot be earned by a damage verifier, and a comparative verifier
+(gain relative to a matched clean control, or the first-situation gain that separates the format-only stream) would
+refuse "less useful", not "false". To test correction of a false belief, the poison has to be one. Two variants,
+both small changes to `plastic/data/rules.py` and the learner's encoding, are the next report, one row each:
+
+1. **Unstated rules.** The preface names the task but no definitions, in streams and in measurement; the rule can
+   come only from the worked examples, and the poisoned stream's wrong examples are then the only source about
+   `#P`. This is the "learn the rule from experience" setting the redirect asks for; the in-context gate must be
+   re-read first, since the stated rule was part of what made decorations learnable in context.
+2. **Inconsistent poison.** The true definitions stated, the answers for the poisoned operator wrong: a lesson whose
+   preface and outcomes disagree, which a learner that follows the preface must either ignore or absorb against it.
+
+Neither is a fix to the verifier. If the unstated setting is learnable and the poison there is still accepted with
+no held-out harm, the propose-and-verify design as built does not protect against false rules on this learner, and
+the thread reports that.
+
 ## Not in this thread
 
 New learning mechanisms (T2, T3); sweeps over seeds or hyperparameters; hosting. Loose ends listed in FABLE-193

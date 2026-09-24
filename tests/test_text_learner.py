@@ -36,7 +36,7 @@ def _verifier(adapt: bool):
     from plastic.eval.text_learner import TextRuleLearner
 
     L = TextRuleLearner.__new__(TextRuleLearner)
-    L.tol_exact, L.tol_nll, L.verify_adapt = 0.05, 0.1, adapt
+    L.tol_exact, L.tol_nll, L.verify_adapt, L.mode = 0.05, 0.1, adapt, "replay_verify"
     return L
 
 
@@ -45,6 +45,9 @@ def test_verifier_v2_checks_the_first_situation_and_v1_does_not():
     (a vacuous check, FABLE-41B-206). v2 scores with adaptation on and adds the first-situation exact."""
     v1, v2 = _verifier(False), _verifier(True)
     assert v1.verifier_version == "v1" and v2.verifier_version == "v2"
+    v2.mode = "continued"
+    assert v2.verifier_version is None  # the baselines do not verify, so no verifier is named for them
+    v2.mode = "replay_verify"
     good = [[{"exact": 1.0, "nll": 0.2}, {"exact": 1.0, "nll": 0.1}], [{"exact": 1.0, "nll": 0.3}, {"exact": 1.0, "nll": 0.1}]]
     poisoned = [[{"exact": 0.0, "nll": 0.4}, {"exact": 1.0, "nll": 0.1}], [{"exact": 0.0, "nll": 0.5}, {"exact": 1.0, "nll": 0.1}]]
     before, after = v2._summ(good), v2._summ(poisoned)

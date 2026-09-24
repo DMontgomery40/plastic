@@ -178,7 +178,10 @@ class TextRuleLearner:
                 "exact_first": sum(s["exact"] for s in first) / len(first), "nll_first": sum(s["nll"] for s in first) / len(first)}
 
     @property
-    def verifier_version(self) -> str:
+    def verifier_version(self) -> str | None:
+        """Named only for the mode that verifies; the baselines have no verifier."""
+        if self.mode != "replay_verify":
+            return None
         return "v2" if self.verify_adapt else "v1"
 
     def _verify_checks(self, before: dict[str, float], after: dict[str, float]) -> list[dict[str, Any]]:
