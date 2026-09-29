@@ -211,11 +211,36 @@ the source record, derivation, ablations, and review are the auditable evidence.
   automatically syncs its committed source, documentation, README body, and shared
   agent rules to BOTH Hugging Face repositories using the official Hub sync action.
   Keep that workflow working; do not replace it with ad hoc one-sided publishing.
-- Hugging Face owns the published `text/` and `physics/` checkpoint bundles and
-  destination-specific README metadata. The export preserves those bundles and
-  metadata and supplies the Space's root Dockerfile from `deploy/huggingface/`.
-  New model artifacts require an explicit compatible release; a source sync does
-  not publish local checkpoints or prove the deployed model learned anything.
+- **Upload the weights to Hugging Face.** A checkpoint release is incomplete until
+  its actual `.safetensors`/`.pt` files, required configuration/tokenizer, license
+  and checksum manifest are downloadable from the model repository. Git-ignoring
+  `artifacts/` keeps large files out of GitHub; it is never a reason to leave release
+  weights local or exclude them from Hub publication. Source sync alone does not
+  upload a new local checkpoint. Publish it explicitly, verify the remote file
+  sizes and hashes, and give a direct download link plus a pinned revision/tag.
+- Hugging Face owns the published `text/`, `physics/`, `text-chat/`, `qwen/` and
+  `checkpoints/` bundles and
+  destination-specific README metadata. Preserve every released checkpoint bundle
+  through subsequent source syncs, including any new release directory; a mirror
+  must not delete weights merely because GitHub does not track them. Keep the
+  preservation rules current when adding a bundle. The Space may fetch weights
+  from a pinned model-repository revision; uploading weights does not require
+  switching the hosted model or duplicating every large checkpoint in the Space.
+- For an unchanged-weight upload, do the upload and bounded delivery checks;
+  do not delay it behind a full test suite, training run or research review.
+  Check configuration/tokenizer completeness and remote integrity. Run focused
+  publication checks if export code changes. Keep private session state and
+  credentials out of checkpoint bundles. Publication does not establish learning
+  or safety efficacy.
+- **Space Dev Mode is available.** The user enabled Dev Mode on
+  `dmontgomery40/plastic` for future direct development and debugging. Use its
+  current supported SSH/dev connection when useful for runtime files, logs and
+  diagnosis; inspect the Space's current connection instructions and status before
+  connecting. Do not assume an old hostname, port or Dev Mode session still works.
+  When asked to validate in the Space, run the full Python/dashboard checks there
+  through SSH with a disposable test store; do not substitute local-Mac tests.
+  Bring any source/config changes made through Dev Mode back into GitHub and the
+  normal publication workflow; a live development edit is not a durable release.
 - After a `main` push, verify BOTH sync jobs and their `source_snapshot.json`
   identities. For runtime/UI changes, also verify the Space build and affected live
   journey. A GitHub push alone is not completion of a public release. If a target

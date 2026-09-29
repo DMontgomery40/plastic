@@ -58,12 +58,15 @@ snapshot_download(
 PY
 ```
 
-The step-50 and step-100 SFT checkpoints used in the saved results are **not
-published**. Their full digests are in the result JSON. Exact reruns of those tables
+The step-50 and step-100 SFT checkpoints used in the saved results are published in
+[`checkpoints/`](https://huggingface.co/dmontgomery40/plastic/tree/main/checkpoints).
+Their full digests are in the result JSON. Exact reruns of those tables
 require those weights and the execution version; newer code changes the method.
-The planned chat release will be pinned in
-[`TTT_CHAT`](../../deploy/huggingface/pretrained.py); empty revision/digest fields
-mean it has not been released. Do not substitute the hosted Qwen comparison model.
+The final step-250 checkpoint is [published with download instructions and
+checksums](../checkpoints.md); use it for the final-checkpoint reports. The
+[`TTT_CHAT`](../../deploy/huggingface/pretrained.py) spec remains unpinned for hosted
+selection, which is a separate deployment choice. Do not substitute the hosted
+Qwen comparison model.
 
 This example runs the current synthetic-fact protocol, with all arms starting from
 the same parent. Choose a **new output directory**: the script removes an existing
