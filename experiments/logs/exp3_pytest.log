@@ -1,0 +1,134 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0
+rootdir: /workspace/plastic-exp
+configfile: pyproject.toml
+plugins: anyio-4.15.1, hypothesis-6.168.5
+collected 13 items
+
+experiments/exp3_invariants/test_invariants.py .F.....F..x..             [100%]
+
+=================================== FAILURES ===================================
+_ test_I1_strict_forced_rollback_restores_fast_state_incl_pending_chunk_stats __
+
+    @SETTINGS
+>   @given(rule=st.sampled_from(["delta", "chunk"]), prefix=st.lists(token_chunk(1, 20), max_size=3),
+                   ^^^
+           x=token_chunk(1, 40), flush=st.booleans())
+
+experiments/exp3_invariants/test_invariants.py:250: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rule = 'chunk', prefix = [], x = [0], flush = True
+
+    @SETTINGS
+    @given(rule=st.sampled_from(["delta", "chunk"]), prefix=st.lists(token_chunk(1, 20), max_size=3),
+           x=token_chunk(1, 40), flush=st.booleans())
+    def test_I1_strict_forced_rollback_restores_fast_state_incl_pending_chunk_stats(rule, prefix, x, flush):
+        """Stricter reading of I1: also the chunk rule's pending-chunk statistics (they turn into an S write at the
+        next model-chunk boundary, so they are part of the learned-at-inference state)."""
+        cfg, lm = tiny(rule)
+        r = TransactionRunner(lm, cfg, HarnessConfig(enable_projection=False), suite=tiny_suite(), device=CPU)
+        for p in prefix:
+            r.feed_tokens(p)
+        before = fast_strict(r.committed)
+        with forced("rollback"):
+            r.feed_tokens(x)
+            if flush:
+                r.flush()
+>       assert bit_equal(before, fast_strict(r.committed)), "fast state incl. pending chunk stats changed across rollback"
+E       AssertionError: fast state incl. pending chunk stats changed across rollback
+E       assert False
+E        +  where False = bit_equal([tensor([[[[0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],\n          [0., 0., 0., 0., 0., 0., 0., 0...., 0., 0., 0., 0., 0., 0., 0., 0.],\n          [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.]]]]), ...], [tensor([[[[0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],\n          [0., 0., 0., 0., 0., 0., 0., 0...., 0., 0., 0., 0., 0., 0., 0., 0.],\n          [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.]]]]), ...])
+E        +    where [tensor([[[[0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],\n          [0., 0., 0., 0., 0., 0., 0., 0...., 0., 0., 0., 0., 0., 0., 0., 0.],\n          [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.]]]]), ...] = fast_strict(SessionState(layers=[LayerState(h=tensor([[-0.0294, -0.0364,  0.0127, -0.0035, -0.0061, -0.0437,  0.0034, -0.0170,\n   ... [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.]]]]), alpha_sum=tensor([[1., 1.]]), count=1))], pos=1))
+E        +      where SessionState(layers=[LayerState(h=tensor([[-0.0294, -0.0364,  0.0127, -0.0035, -0.0061, -0.0437,  0.0034, -0.0170,\n   ... [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.]]]]), alpha_sum=tensor([[1., 1.]]), count=1))], pos=1) = <plastic.harness.transaction.TransactionRunner object at 0x7fab7ef76850>.committed
+E       Failing test case: test_I1_strict_forced_rollback_restores_fast_state_incl_pending_chunk_stats(
+E           rule='chunk',
+E           prefix=[],
+E           x=[0],
+E           flush=True,
+E       )
+E       Explanation:
+E           These lines were always and only run by failing test cases:
+E               /workspace/plastic-exp/.venv/lib/python3.13/site-packages/torch/_tensor.py:559
+E               /workspace/plastic-exp/.venv/lib/python3.13/site-packages/torch/_tensor_str.py:138
+E               /workspace/plastic-exp/.venv/lib/python3.13/site-packages/torch/_tensor_str.py:140
+E               /workspace/plastic-exp/.venv/lib/python3.13/site-packages/torch/utils/_python_dispatch.py:392
+E               /workspace/plastic-exp/.venv/lib/python3.13/site-packages/torch/utils/_python_dispatch.py:441
+E       
+E       You can reproduce this test case by temporarily adding @reproduce_failure('6.168.5', b'AEEBAEEBQQBBAAE=') as a decorator on your test function
+
+experiments/exp3_invariants/test_invariants.py:264: AssertionError
+_________________ test_I5_scale_and_project_stay_within_bounds _________________
+
+    @SETTINGS
+>   @given(rule=st.sampled_from(["delta", "chunk"]), kind=st.sampled_from(["scale", "project"]),
+                   ^^^
+           scale=st.floats(1e-3, 1.0), budget_chunk=st.one_of(st.none(), st.floats(1e-4, 2.0)),
+           budget_session=st.one_of(st.none(), st.floats(1e-3, 5.0)),
+           prefix=st.lists(token_chunk(1, 16), max_size=2), chunks=st.lists(token_chunk(1, 16), min_size=1, max_size=4))
+
+experiments/exp3_invariants/test_invariants.py:386: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+rule = 'delta', kind = 'scale', scale = 0.5, budget_chunk = None
+budget_session = None, prefix = [[0, 0, 0, 0, 0, 0, ...]], chunks = [[0]]
+
+    @SETTINGS
+    @given(rule=st.sampled_from(["delta", "chunk"]), kind=st.sampled_from(["scale", "project"]),
+           scale=st.floats(1e-3, 1.0), budget_chunk=st.one_of(st.none(), st.floats(1e-4, 2.0)),
+           budget_session=st.one_of(st.none(), st.floats(1e-3, 5.0)),
+           prefix=st.lists(token_chunk(1, 16), max_size=2), chunks=st.lists(token_chunk(1, 16), min_size=1, max_size=4))
+    def test_I5_scale_and_project_stay_within_bounds(rule, kind, scale, budget_chunk, budget_session, prefix, chunks):
+        cfg, lm = tiny(rule)
+        hc = HarnessConfig(budget_chunk=budget_chunk, budget_session=budget_session, project_max_removed=1.0,
+                           canary_delta_max=1e9, poison_delta_min=-1e9)
+        r = AuditRunner(lm, cfg, hc, suite=tiny_suite(), device=CPU)
+        for p in prefix:
+            r.feed_tokens(p)
+        n0 = len(r.audit)
+        with forced(kind, scale):
+            for c in chunks:
+                r.feed_tokens(c)
+            r.flush()
+        for a in r.audit[n0:]:
+            applied = a["rec"]["decision"]["kind"]
+            acc = s_norm(a["post"], a["pre"])
+            proposal = a["rec"]["signals"]["delta_norm"]
+            if a["cap"] is not None:
+                assert acc <= a["cap"] * (1 + TOL) + 1e-12, f"{describe(a)} accepted={acc:.6g} cap={a['cap']:.6g}"
+            if applied in ("scale", "project"):
+                # both actions are documented as shrinking the proposed update
+>               assert acc <= proposal * (1 + 1e-5) + 1e-12, f"{describe(a)} accepted={acc:.6g} > proposal={proposal:.6g}"
+E               AssertionError: tx1 requested=scale applied=scale reasons=['forced_scale'] accepted=0.0247147 > proposal=0.00621358
+E               assert 0.02471473698321264 <= ((0.0062135825774262896 * (1 + 1e-05)) + 1e-12)
+E               Failing test case: test_I5_scale_and_project_stay_within_bounds(
+E                   rule='delta',
+E                   kind='scale',
+E                   scale=0.5,
+E                   budget_chunk=None,
+E                   budget_session=None,
+E                   prefix=[[0, 0, 0, 0, 0, 0, 0, 0]],
+E                   chunks=[[0]],
+E               )
+E               
+E               You can reproduce this test case by temporarily adding @reproduce_failure('6.168.5', b'AXicc2RwZNCwf8AABo5AyOjI4cjoyACkGUFcBgBLYwPe') as a decorator on your test function
+
+experiments/exp3_invariants/test_invariants.py:410: AssertionError
+==================================== PASSES ====================================
+- generated xml file: /workspace/plastic-exp/experiments/results/exp3/pytest_junit.xml -
+=========================== short test summary info ============================
+PASSED experiments/exp3_invariants/test_invariants.py::test_I1_forced_rollback_restores_fast_state_bit_exact
+PASSED experiments/exp3_invariants/test_invariants.py::test_I1_every_natural_rollback_restores_fast_state
+PASSED experiments/exp3_invariants/test_invariants.py::test_I2_committed_update_never_exceeds_budget
+PASSED experiments/exp3_invariants/test_invariants.py::test_I3_nonfinite_state_never_committed
+PASSED experiments/exp3_invariants/test_invariants.py::test_I4_frozen_and_readonly_never_change_fast_weights
+PASSED experiments/exp3_invariants/test_invariants.py::test_I4_backend_freeze_is_bit_exact
+PASSED experiments/exp3_invariants/test_invariants.py::test_I5_project_delta_is_a_contraction_onto_the_half_space
+PASSED experiments/exp3_invariants/test_invariants.py::test_N1_rollback_does_not_restore_activations_DOCUMENTED_LIMITATION
+PASSED experiments/exp3_invariants/test_invariants.py::test_N2_rollback_plus_activation_restore_equals_never_seen
+PASSED experiments/exp3_invariants/test_invariants.py::test_real_I1_N1_N2
+XFAIL experiments/exp3_invariants/test_invariants.py::test_N1_xfail_claim_rollback_equals_never_seen - documented limitation: rollback restores memory, not activation/SSM state
+FAILED experiments/exp3_invariants/test_invariants.py::test_I1_strict_forced_rollback_restores_fast_state_incl_pending_chunk_stats
+FAILED experiments/exp3_invariants/test_invariants.py::test_I5_scale_and_project_stay_within_bounds
+============= 2 failed, 10 passed, 1 xfailed in 297.26s (0:04:57) ==============
+EXIT 1

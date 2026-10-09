@@ -1,0 +1,770 @@
+[
+ {
+  "scale": 0.25,
+  "session": 0,
+  "chunk": 0,
+  "applied": "scale",
+  "proposal": 13.942368687169841,
+  "accepted": 6.141319014716962
+ },
+ {
+  "scale": 0.25,
+  "session": 0,
+  "chunk": 1,
+  "applied": "scale",
+  "proposal": 10.696269913559405,
+  "accepted": 3.448442408938305
+ },
+ {
+  "scale": 0.25,
+  "session": 0,
+  "chunk": 2,
+  "applied": "scale",
+  "proposal": 8.955885028520301,
+  "accepted": 3.18857682665569
+ },
+ {
+  "scale": 0.25,
+  "session": 0,
+  "chunk": 3,
+  "applied": "scale",
+  "proposal": 8.827687189657164,
+  "accepted": 2.741523200242612
+ },
+ {
+  "scale": 0.25,
+  "session": 0,
+  "chunk": 4,
+  "applied": "scale",
+  "proposal": 13.803280739762661,
+  "accepted": 6.424300967566133
+ },
+ {
+  "scale": 0.25,
+  "session": 0,
+  "chunk": 5,
+  "applied": "scale",
+  "proposal": 10.755580075083696,
+  "accepted": 4.833624304611792
+ },
+ {
+  "scale": 0.25,
+  "session": 0,
+  "chunk": 6,
+  "applied": "scale",
+  "proposal": 11.677812765942452,
+  "accepted": 5.565537624776758
+ },
+ {
+  "scale": 0.25,
+  "session": 0,
+  "chunk": 7,
+  "applied": "scale",
+  "proposal": 13.644359223138025,
+  "accepted": 7.122078619422729
+ },
+ {
+  "scale": 0.25,
+  "session": 1,
+  "chunk": 0,
+  "applied": "scale",
+  "proposal": 15.92539901667367,
+  "accepted": 6.920817424789533
+ },
+ {
+  "scale": 0.25,
+  "session": 1,
+  "chunk": 1,
+  "applied": "scale",
+  "proposal": 12.097102584932614,
+  "accepted": 4.52669147117288
+ },
+ {
+  "scale": 0.25,
+  "session": 1,
+  "chunk": 2,
+  "applied": "scale",
+  "proposal": 9.814010945165617,
+  "accepted": 3.488843913133952
+ },
+ {
+  "scale": 0.25,
+  "session": 1,
+  "chunk": 3,
+  "applied": "scale",
+  "proposal": 9.54286123203314,
+  "accepted": 3.1895787936135536
+ },
+ {
+  "scale": 0.25,
+  "session": 1,
+  "chunk": 4,
+  "applied": "scale",
+  "proposal": 9.482654641776344,
+  "accepted": 3.252502826347692
+ },
+ {
+  "scale": 0.25,
+  "session": 1,
+  "chunk": 5,
+  "applied": "scale",
+  "proposal": 9.92776602337793,
+  "accepted": 3.3356623962020646
+ },
+ {
+  "scale": 0.25,
+  "session": 1,
+  "chunk": 6,
+  "applied": "scale",
+  "proposal": 10.619588653210629,
+  "accepted": 4.055441720829547
+ },
+ {
+  "scale": 0.25,
+  "session": 1,
+  "chunk": 7,
+  "applied": "scale",
+  "proposal": 9.21746050383839,
+  "accepted": 3.145638404917321
+ },
+ {
+  "scale": 0.25,
+  "session": 2,
+  "chunk": 0,
+  "applied": "scale",
+  "proposal": 14.701793029924104,
+  "accepted": 6.023890747645196
+ },
+ {
+  "scale": 0.25,
+  "session": 2,
+  "chunk": 1,
+  "applied": "scale",
+  "proposal": 11.64916900032585,
+  "accepted": 4.528157094258004
+ },
+ {
+  "scale": 0.25,
+  "session": 2,
+  "chunk": 2,
+  "applied": "scale",
+  "proposal": 10.920049442088475,
+  "accepted": 3.847486763833443
+ },
+ {
+  "scale": 0.25,
+  "session": 2,
+  "chunk": 3,
+  "applied": "scale",
+  "proposal": 10.437881741417149,
+  "accepted": 4.362286655464112
+ },
+ {
+  "scale": 0.25,
+  "session": 2,
+  "chunk": 4,
+  "applied": "scale",
+  "proposal": 11.253016363582496,
+  "accepted": 4.463455973720295
+ },
+ {
+  "scale": 0.25,
+  "session": 2,
+  "chunk": 5,
+  "applied": "scale",
+  "proposal": 11.217693225335418,
+  "accepted": 3.9912200090230723
+ },
+ {
+  "scale": 0.25,
+  "session": 2,
+  "chunk": 6,
+  "applied": "scale",
+  "proposal": 10.048853536238171,
+  "accepted": 4.0086296314614565
+ },
+ {
+  "scale": 0.25,
+  "session": 2,
+  "chunk": 7,
+  "applied": "scale",
+  "proposal": 10.793749312765629,
+  "accepted": 3.7376723117594506
+ },
+ {
+  "scale": 0.25,
+  "session": 3,
+  "chunk": 0,
+  "applied": "scale",
+  "proposal": 12.682270800016667,
+  "accepted": 5.925897098044949
+ },
+ {
+  "scale": 0.25,
+  "session": 3,
+  "chunk": 1,
+  "applied": "scale",
+  "proposal": 11.111470243580461,
+  "accepted": 3.9126424801510713
+ },
+ {
+  "scale": 0.25,
+  "session": 3,
+  "chunk": 2,
+  "applied": "scale",
+  "proposal": 10.197657837634118,
+  "accepted": 3.648281886987653
+ },
+ {
+  "scale": 0.25,
+  "session": 3,
+  "chunk": 3,
+  "applied": "scale",
+  "proposal": 9.448054189642924,
+  "accepted": 2.5715816921478107
+ },
+ {
+  "scale": 0.25,
+  "session": 3,
+  "chunk": 4,
+  "applied": "scale",
+  "proposal": 10.912955520205935,
+  "accepted": 3.8731845732268995
+ },
+ {
+  "scale": 0.25,
+  "session": 3,
+  "chunk": 5,
+  "applied": "scale",
+  "proposal": 10.245823537266162,
+  "accepted": 3.5739481082611153
+ },
+ {
+  "scale": 0.25,
+  "session": 3,
+  "chunk": 6,
+  "applied": "scale",
+  "proposal": 10.583628283142414,
+  "accepted": 3.0927737258610786
+ },
+ {
+  "scale": 0.25,
+  "session": 3,
+  "chunk": 7,
+  "applied": "scale",
+  "proposal": 10.41589482529833,
+  "accepted": 4.990036532707769
+ },
+ {
+  "scale": 0.25,
+  "session": 4,
+  "chunk": 0,
+  "applied": "scale",
+  "proposal": 13.799059088976557,
+  "accepted": 6.092226863882663
+ },
+ {
+  "scale": 0.25,
+  "session": 4,
+  "chunk": 1,
+  "applied": "scale",
+  "proposal": 9.932356225933207,
+  "accepted": 3.5314655416027945
+ },
+ {
+  "scale": 0.25,
+  "session": 4,
+  "chunk": 2,
+  "applied": "scale",
+  "proposal": 10.3732466042183,
+  "accepted": 3.9472736989162183
+ },
+ {
+  "scale": 0.25,
+  "session": 4,
+  "chunk": 3,
+  "applied": "scale",
+  "proposal": 11.783933136830015,
+  "accepted": 3.623867586282488
+ },
+ {
+  "scale": 0.25,
+  "session": 4,
+  "chunk": 4,
+  "applied": "scale",
+  "proposal": 9.907280557187013,
+  "accepted": 3.4170463433969687
+ },
+ {
+  "scale": 0.25,
+  "session": 4,
+  "chunk": 5,
+  "applied": "scale",
+  "proposal": 11.423374933225334,
+  "accepted": 3.5350499491192444
+ },
+ {
+  "scale": 0.25,
+  "session": 4,
+  "chunk": 6,
+  "applied": "scale",
+  "proposal": 10.520184371622372,
+  "accepted": 2.9732929209624945
+ },
+ {
+  "scale": 0.25,
+  "session": 4,
+  "chunk": 7,
+  "applied": "scale",
+  "proposal": 10.571932317643235,
+  "accepted": 4.024501708313729
+ },
+ {
+  "scale": 0.25,
+  "session": 5,
+  "chunk": 0,
+  "applied": "scale",
+  "proposal": 13.359421175816065,
+  "accepted": 5.9928470829357465
+ },
+ {
+  "scale": 0.25,
+  "session": 5,
+  "chunk": 1,
+  "applied": "scale",
+  "proposal": 10.293571249983072,
+  "accepted": 4.15226170365171
+ },
+ {
+  "scale": 0.25,
+  "session": 5,
+  "chunk": 2,
+  "applied": "scale",
+  "proposal": 12.770950366138349,
+  "accepted": 5.217168914332098
+ },
+ {
+  "scale": 0.25,
+  "session": 5,
+  "chunk": 3,
+  "applied": "scale",
+  "proposal": 10.152698548412312,
+  "accepted": 3.3585285580454802
+ },
+ {
+  "scale": 0.25,
+  "session": 5,
+  "chunk": 4,
+  "applied": "scale",
+  "proposal": 10.132389068606896,
+  "accepted": 4.518434119520189
+ },
+ {
+  "scale": 0.25,
+  "session": 5,
+  "chunk": 5,
+  "applied": "scale",
+  "proposal": 10.23789294901751,
+  "accepted": 3.2562279774329568
+ },
+ {
+  "scale": 0.25,
+  "session": 5,
+  "chunk": 6,
+  "applied": "scale",
+  "proposal": 9.505189405925787,
+  "accepted": 3.4042880676956284
+ },
+ {
+  "scale": 0.25,
+  "session": 5,
+  "chunk": 7,
+  "applied": "scale",
+  "proposal": 9.17028030324888,
+  "accepted": 3.413629702633368
+ },
+ {
+  "scale": 0.5,
+  "session": 0,
+  "chunk": 0,
+  "applied": "scale",
+  "proposal": 15.38293524775879,
+  "accepted": 9.970228457686087
+ },
+ {
+  "scale": 0.5,
+  "session": 0,
+  "chunk": 1,
+  "applied": "scale",
+  "proposal": 11.504292163279468,
+  "accepted": 8.164478381303233
+ },
+ {
+  "scale": 0.5,
+  "session": 0,
+  "chunk": 2,
+  "applied": "scale",
+  "proposal": 11.359428018859552,
+  "accepted": 7.676227644279672
+ },
+ {
+  "scale": 0.5,
+  "session": 0,
+  "chunk": 3,
+  "applied": "scale",
+  "proposal": 9.95243715248994,
+  "accepted": 6.782256098515483
+ },
+ {
+  "scale": 0.5,
+  "session": 0,
+  "chunk": 4,
+  "applied": "scale",
+  "proposal": 10.200393653318667,
+  "accepted": 6.680019465910748
+ },
+ {
+  "scale": 0.5,
+  "session": 0,
+  "chunk": 5,
+  "applied": "scale",
+  "proposal": 10.304690412878859,
+  "accepted": 6.266378001767878
+ },
+ {
+  "scale": 0.5,
+  "session": 0,
+  "chunk": 6,
+  "applied": "scale",
+  "proposal": 9.616264535930108,
+  "accepted": 6.503683673822559
+ },
+ {
+  "scale": 0.5,
+  "session": 0,
+  "chunk": 7,
+  "applied": "scale",
+  "proposal": 11.02165948327927,
+  "accepted": 6.813998843124493
+ },
+ {
+  "scale": 0.5,
+  "session": 1,
+  "chunk": 0,
+  "applied": "scale",
+  "proposal": 12.202304035697445,
+  "accepted": 8.045819234818678
+ },
+ {
+  "scale": 0.5,
+  "session": 1,
+  "chunk": 1,
+  "applied": "scale",
+  "proposal": 10.852700387230852,
+  "accepted": 6.640336370775746
+ },
+ {
+  "scale": 0.5,
+  "session": 1,
+  "chunk": 2,
+  "applied": "scale",
+  "proposal": 9.50657843783447,
+  "accepted": 6.4888701772267705
+ },
+ {
+  "scale": 0.5,
+  "session": 1,
+  "chunk": 3,
+  "applied": "scale",
+  "proposal": 9.288801678074313,
+  "accepted": 6.347967489259336
+ },
+ {
+  "scale": 0.5,
+  "session": 1,
+  "chunk": 4,
+  "applied": "scale",
+  "proposal": 9.985400950735766,
+  "accepted": 6.137293058465347
+ },
+ {
+  "scale": 0.5,
+  "session": 1,
+  "chunk": 5,
+  "applied": "scale",
+  "proposal": 8.88591618294616,
+  "accepted": 5.789647371110066
+ },
+ {
+  "scale": 0.5,
+  "session": 1,
+  "chunk": 6,
+  "applied": "readonly",
+  "proposal": 0.0,
+  "accepted": 0.0
+ },
+ {
+  "scale": 0.5,
+  "session": 1,
+  "chunk": 7,
+  "applied": "readonly",
+  "proposal": 0.0,
+  "accepted": 0.0
+ },
+ {
+  "scale": 0.5,
+  "session": 2,
+  "chunk": 0,
+  "applied": "scale",
+  "proposal": 13.55387123968626,
+  "accepted": 8.977315604936944
+ },
+ {
+  "scale": 0.5,
+  "session": 2,
+  "chunk": 1,
+  "applied": "scale",
+  "proposal": 10.463972667701363,
+  "accepted": 6.5787736334976685
+ },
+ {
+  "scale": 0.5,
+  "session": 2,
+  "chunk": 2,
+  "applied": "scale",
+  "proposal": 11.099704777771205,
+  "accepted": 6.750084372908633
+ },
+ {
+  "scale": 0.5,
+  "session": 2,
+  "chunk": 3,
+  "applied": "scale",
+  "proposal": 12.527041884262738,
+  "accepted": 8.74374370206926
+ },
+ {
+  "scale": 0.5,
+  "session": 2,
+  "chunk": 4,
+  "applied": "scale",
+  "proposal": 11.712654719980256,
+  "accepted": 8.350221631359945
+ },
+ {
+  "scale": 0.5,
+  "session": 2,
+  "chunk": 5,
+  "applied": "scale",
+  "proposal": 10.8411120471945,
+  "accepted": 6.818109071216003
+ },
+ {
+  "scale": 0.5,
+  "session": 2,
+  "chunk": 6,
+  "applied": "scale",
+  "proposal": 9.927230900950704,
+  "accepted": 6.59039049730944
+ },
+ {
+  "scale": 0.5,
+  "session": 2,
+  "chunk": 7,
+  "applied": "scale",
+  "proposal": 11.836543250039954,
+  "accepted": 7.708774440001036
+ },
+ {
+  "scale": 0.5,
+  "session": 3,
+  "chunk": 0,
+  "applied": "scale",
+  "proposal": 13.954028227379935,
+  "accepted": 9.449270858895973
+ },
+ {
+  "scale": 0.5,
+  "session": 3,
+  "chunk": 1,
+  "applied": "scale",
+  "proposal": 11.479505656307715,
+  "accepted": 7.520033892055206
+ },
+ {
+  "scale": 0.5,
+  "session": 3,
+  "chunk": 2,
+  "applied": "scale",
+  "proposal": 11.752163403834981,
+  "accepted": 7.218529826070108
+ },
+ {
+  "scale": 0.5,
+  "session": 3,
+  "chunk": 3,
+  "applied": "scale",
+  "proposal": 9.484293796805852,
+  "accepted": 6.259422447808376
+ },
+ {
+  "scale": 0.5,
+  "session": 3,
+  "chunk": 4,
+  "applied": "scale",
+  "proposal": 9.995518482877616,
+  "accepted": 6.014258307962141
+ },
+ {
+  "scale": 0.5,
+  "session": 3,
+  "chunk": 5,
+  "applied": "scale",
+  "proposal": 11.287814937277318,
+  "accepted": 7.795334709567141
+ },
+ {
+  "scale": 0.5,
+  "session": 3,
+  "chunk": 6,
+  "applied": "scale",
+  "proposal": 9.745654814442542,
+  "accepted": 5.485822951580098
+ },
+ {
+  "scale": 0.5,
+  "session": 3,
+  "chunk": 7,
+  "applied": "scale",
+  "proposal": 9.522366111844343,
+  "accepted": 6.610893617449214
+ },
+ {
+  "scale": 0.5,
+  "session": 4,
+  "chunk": 0,
+  "applied": "scale",
+  "proposal": 13.763129812036258,
+  "accepted": 8.894001072581204
+ },
+ {
+  "scale": 0.5,
+  "session": 4,
+  "chunk": 1,
+  "applied": "scale",
+  "proposal": 10.416598323855986,
+  "accepted": 6.174083723055822
+ },
+ {
+  "scale": 0.5,
+  "session": 4,
+  "chunk": 2,
+  "applied": "scale",
+  "proposal": 9.596815742131877,
+  "accepted": 6.26671738457617
+ },
+ {
+  "scale": 0.5,
+  "session": 4,
+  "chunk": 3,
+  "applied": "scale",
+  "proposal": 9.801734400797127,
+  "accepted": 6.187372597051443
+ },
+ {
+  "scale": 0.5,
+  "session": 4,
+  "chunk": 4,
+  "applied": "scale",
+  "proposal": 9.54839428106484,
+  "accepted": 6.281392676602478
+ },
+ {
+  "scale": 0.5,
+  "session": 4,
+  "chunk": 5,
+  "applied": "scale",
+  "proposal": 11.449701838639237,
+  "accepted": 8.061476336477408
+ },
+ {
+  "scale": 0.5,
+  "session": 4,
+  "chunk": 6,
+  "applied": "scale",
+  "proposal": 10.160005955873162,
+  "accepted": 7.260968700749579
+ },
+ {
+  "scale": 0.5,
+  "session": 4,
+  "chunk": 7,
+  "applied": "scale",
+  "proposal": 10.593651296550743,
+  "accepted": 6.854836906960152
+ },
+ {
+  "scale": 0.5,
+  "session": 5,
+  "chunk": 0,
+  "applied": "scale",
+  "proposal": 13.059557038742158,
+  "accepted": 8.752787743548051
+ },
+ {
+  "scale": 0.5,
+  "session": 5,
+  "chunk": 1,
+  "applied": "scale",
+  "proposal": 9.544648825516244,
+  "accepted": 6.031791992739962
+ },
+ {
+  "scale": 0.5,
+  "session": 5,
+  "chunk": 2,
+  "applied": "scale",
+  "proposal": 9.765745350465302,
+  "accepted": 6.162525413516119
+ },
+ {
+  "scale": 0.5,
+  "session": 5,
+  "chunk": 3,
+  "applied": "scale",
+  "proposal": 10.12721089677105,
+  "accepted": 6.353291675388087
+ },
+ {
+  "scale": 0.5,
+  "session": 5,
+  "chunk": 4,
+  "applied": "scale",
+  "proposal": 9.570601598332237,
+  "accepted": 7.180976044314805
+ },
+ {
+  "scale": 0.5,
+  "session": 5,
+  "chunk": 5,
+  "applied": "scale",
+  "proposal": 9.85948660737582,
+  "accepted": 6.681805536507241
+ },
+ {
+  "scale": 0.5,
+  "session": 5,
+  "chunk": 6,
+  "applied": "scale",
+  "proposal": 8.10531640935086,
+  "accepted": 5.083201780052903
+ },
+ {
+  "scale": 0.5,
+  "session": 5,
+  "chunk": 7,
+  "applied": "readonly",
+  "proposal": 0.0,
+  "accepted": 0.0
+ }
+]

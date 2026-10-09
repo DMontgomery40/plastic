@@ -1,0 +1,8 @@
+records 64 (42s)
+records 128 (86s)
+records 192 (141s)
+records 256 (188s)
+records 320 (232s)
+records 384 (276s)
+records 448 (318s)
+done 512 256 525.5064141750336
