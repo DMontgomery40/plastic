@@ -1,0 +1,4 @@
+oracle exact on 18000 items; content-null answer differs from the true answer on 0.663
+no_adapt == fresh-state query: max |diff| = 0.0
+fw_reset with S zeroed == no_adapt: max |diff| = 0.0
+fw_reset vs no_adapt (random init, S written): max |diff| = 0.4444223642349243
