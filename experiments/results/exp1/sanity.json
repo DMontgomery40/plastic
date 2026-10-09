@@ -1,0 +1,29 @@
+{
+ "delta_chunk_vs_recurrent_maxabs_beta01": 5.960464477539062e-07,
+ "state_norm_beta01": 7.5641703605651855,
+ "delta_chunk_vs_recurrent_maxabs_beta02": 1.430511474609375e-06,
+ "state_norm_beta02": 13.019113540649414,
+ "delta_chunk_vs_recurrent_maxabs_beta_near2": 3.337860107421875e-06,
+ "state_norm_beta_near2": 28.395275115966797,
+ "transition_eig_range_betamax1.0": [
+  9.816497185966e-05,
+  0.9982399344444275
+ ],
+ "transition_eig_range_betamax2.0": [
+  -0.9411191344261169,
+  0.9990460276603699
+ ],
+ "signed_scan_vs_sequential_maxabs": 3.0994415283203125e-06,
+ "signed_scan_vs_repo_scan_positive_maxabs": 0.0,
+ "repo_scan_with_negative_decay_maxabs_error": 4.9597930908203125,
+ "B_betamax1_equals_A_losses_bitwise": true,
+ "B_betamax1_vs_A_param_maxabs": 0.0,
+ "B_betamax2_differs_from_A": true,
+ "s3_associative": true,
+ "s3_identity": true,
+ "s3_nonabelian": true,
+ "s5_associative": true,
+ "s5_identity": true,
+ "s5_nonabelian": true,
+ "parity_label_check": true
+}

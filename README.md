@@ -278,6 +278,37 @@ scripts/        Hugging Face Jobs launchers, training, experiments
 docs/           design specs, research notes and surveys, archived results
 ```
 
+## Experiments: eigenvalue ablation and rollback leakage
+
+Two small CPU-only experiments; full write-up, tables, plots and commands in
+[`report/REPORT.md`](report/REPORT.md). Code is in `experiments/exp1_eigen/` and
+`experiments/exp2_rollback/`, raw results and logs in `experiments/results/` and `experiments/logs/`.
+
+**Exp 1: eigenvalue range vs state tracking** (parity, mod-3, S3, MQAR; trained on lengths 8–32, 3 seeds).
+- Parity at length: the variants whose state transitions have only non-negative eigenvalues (A: delta rule
+  β∈(0,1); C: diagonal SSM a∈(0,1]; E: the repo's NS-chunk rule) fit parity in distribution but are at
+  chance from L ≥ 64.
+- Allowing negative eigenvalues (B: delta rule β∈(0,2); D: SSM with signed decay a∈(−1,1]) reaches 1.000 at
+  L = 32 and helps at L = 64 (parity B 0.981, D 0.859 vs A 0.535, C 0.566), but does not fix length
+  generalization: both are back at or near chance by L = 128–256.
+- Mod-3: essentially no gain from the extended range. S3: B and D help on some seeds, with high seed variance.
+- MQAR: no recall cost from extending the range was seen (B is best at every length); this is "no evidence of
+  a cost", not evidence of no cost.
+- The LSTM control does generalize (mod-3 and S3 perfect to L = 512; parity on 2 of 3 seeds), so the gap of
+  the linear variants is in extrapolation.
+
+**Exp 2: rollback leakage** (`TransactionRunner` on a small PlasticCore LM).
+- Rollback restores the fast-weight state bit for bit: 360/360 forced rollbacks and 238/238 of the harness's
+  own rollbacks.
+- A rolled-back chunk still leaks through the transient activation state (recurrent state, conv buffers);
+  the effect fades within about 64 tokens (frozen-memory leakage ≈ 5% of the commit effect).
+- Restoring the saved pre-chunk activations removes the leakage entirely (KL = 0 in all records); zeroing the
+  activations does not (only ≈ 8% lower than plain rollback).
+
+Caveats: small CPU-only models (exp 1 ~109–151k parameters, 4000 steps); 3 seeds per cell; exp 2 uses a weak
+locally trained LM (held-out loss 4.52) instead of the gated HF checkpoint, trained with AdamW instead of Muon
+(Muon gave NaN); S3 was used instead of S5 (the S5 pilot stayed at chance); variant E was run on parity only.
+
 ## Honest limits
 
 - PlasticCore is about 6M parameters on wikitext. Its generations are fluent-ish, not

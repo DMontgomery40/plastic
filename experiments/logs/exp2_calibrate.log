@@ -1,0 +1,16 @@
+[calibrate] lm_small_cpu: text, 512 chunks from artifacts/data/wikitext/validation.bin
+[calibrate] thresholds: chunk_loss=5.88, surprise_mean=1.991, log_delta_norm=2.824, log_write_norm=7.032, fisher_update=0.04267, canary_delta_coherence=0.7467, canary_delta_poison=-0.6496, cusum_h=5.549
+{
+  "model_id": "lm_small_cpu",
+  "n_chunks": 512,
+  "thresholds": {
+    "chunk_loss": 5.880339659750462,
+    "surprise_mean": 1.9905341863632202,
+    "log_delta_norm": 2.8242290285087552,
+    "log_write_norm": 7.032420825729211,
+    "fisher_update": 0.04266646906035021,
+    "canary_delta_coherence": 0.7466902732849121,
+    "canary_delta_poison": -0.6496028900146484,
+    "cusum_h": 5.549290472944583
+  }
+}

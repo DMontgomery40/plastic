@@ -1,0 +1,12 @@
+direct n 360 mean KL rollback 0.0179 rb_zero 0.0162 rb_rewind max 0 commit 0.0328
+  rb_zero/rollback mean 0.919 median 0.948; frac rb_zero<rollback 0.719
+  bucket 0_16 rollback 0.2832 rb_zero 0.2569 commit 0.4256
+  bucket 16_64 rollback 0.0008 rb_zero 0.0005 commit 0.0226
+  bucket 64_256 rollback 0.0000 rb_zero 0.0000 commit 0.0026
+  overall leakage mean 0.565 median 0.571 min 0.055 max 1.092
+frozen n 360 mean KL rollback 0.0176 rb_zero 0.0159 rb_rewind max 0 commit 0.3960
+  rb_zero/rollback mean 0.920 median 0.945; frac rb_zero<rollback 0.739
+  bucket 0_16 rollback 0.2794 rb_zero 0.2538 commit 0.6720
+  bucket 16_64 rollback 0.0006 rb_zero 0.0004 commit 0.3805
+  bucket 64_256 rollback 0.0000 rb_zero 0.0000 commit 0.3769
+  overall leakage mean 0.050 median 0.044 min 0.003 max 0.160
