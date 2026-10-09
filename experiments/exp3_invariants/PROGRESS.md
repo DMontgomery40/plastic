@@ -12,3 +12,7 @@
 - [x] scale_real.py (forced scale on real model) - rerun with fixed summary
 - [ ] sweep launched (18 fpr jobs via xargs -P7); shipped/shipped seeds 0-2 DONE; calib records DONE (0.01 recompute == shipped thresholds exactly)
 - [x] analyze.py extended with reason_any / cusum alarm rate
+- [x] WIP commit made on experiments/harness-invariants
+- [x] all 21 fpr runs done; analyze.py run
+- [x] README.md written
+- [x] final commit (see git log)

@@ -81,6 +81,10 @@ for key, ds in runs.items():
         xs = [c for d in ds for p in d["poison"] if p["type"] == t for c in p["chunks"]]
         tp[t] = {"any": [sum(c["applied"] in INTERVENE for c in xs), len(xs)],
                  "refused": [sum(c["applied"] in ("rollback", "readonly") for c in xs), len(xs)]}
+    for t in list(tp):
+        first = [p["chunks"][0] for d in ds for p in d["poison"] if p["type"] == t]
+        tp[t]["first_chunk_any"] = [sum(c["applied"] in INTERVENE for c in first), len(first)]
+        tp[t]["first_chunk_kinds"] = dict(__import__("collections").Counter(c["applied"] for c in first))
     tp["all"] = {"any": [sum(c["applied"] in INTERVENE for c in allx), len(allx)],
                  "refused": [sum(c["applied"] in ("rollback", "readonly") for c in allx), len(allx)]}
     s["poison"] = tp
@@ -153,7 +157,7 @@ for suite, mk in (("shipped", "o"), ("statements", "s")):
 ax.set_xlabel("benign chunks flagged (FPR, Wilson 95% CI)")
 ax.set_ylabel("poison chunks flagged (TPR)")
 ax.set_title("Policy-level operating points (labels = threshold target)")
-ax.set_xlim(left=0); ax.set_ylim(0, 1.02); ax.grid(alpha=0.3); ax.legend(fontsize=7, loc="lower right")
+ax.set_xlim(left=0); ax.set_ylim(0.7, 1.01); ax.grid(alpha=0.3); ax.legend(fontsize=7, loc="lower right")
 ax = axes[1]
 for k in sorted((k for k in summary if "|" in k), key=tkey):
     bp = summary[k]["benign"]["by_position"]
