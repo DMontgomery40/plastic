@@ -1,0 +1,3 @@
+d=64 done in 9.2s on NVIDIA A10G
+d=128 done in 18.8s on NVIDIA A10G
+d=256 done in 42.2s on NVIDIA A10G
