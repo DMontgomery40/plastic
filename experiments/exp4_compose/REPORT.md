@@ -65,7 +65,7 @@ Reading: the main models are at chance on compositions, with no difference betwe
 Chance is 0.16. Depth >= 2 is at or below chance. Depth-1 first-answer exact is 0.51 with the fast weights versus 0.02 with no adaptation and 0.20 with
 wrong lessons, so the model does use the lessons: with the null lessons it agrees with *the null lessons' own answers* 0.499 of the time.
 That is genuinely new, uncopyable first-answer knowledge, but only of a lookup, and only half of it (below). Depth >= 2: fw_reset minus content null -0.022 [-0.031, -0.013];
-fw_reset minus no_adapt +0.031 [+0.022, +0.040] (pooled depth 2-6; the plateau is not above no-adaptation per depth).
+fw_reset minus no_adapt +0.031 [+0.022, +0.040] (pooled depth 2-6; it varies by depth, above no-adaptation at depths 3 and 5 and below at 2, and not above one-hop lookup: +0.005 [-0.002, +0.012]; the no-adaptation arm itself sits below chance because it never answers a composition item sensibly, so this small gap is not evidence of composition).
 
 ## Why the curriculum stayed at depth 1 (bug or null?)
 Not an unlock-logic bug: the criterion (train accuracy >= 0.9 on the hardest unlocked depth, evaluated every 100 steps) behaved as written, and the run never exceeded
@@ -93,9 +93,9 @@ the memory must learn a shift before it can bind (x, g).
 - Model weights (`models*/`, 19 MB) are not committed; train logs are in `experiments/logs/exp4/`.
 
 ## One proposed fix (not run)
-Align lesson and query layouts so a single key form serves both: make a query a lesson line with the answer slot, `x g1 ?` for depth 1 (predict at the same position type as a lesson's y) and
-chain depth d as d such lines `x g1 y1 ; y1 g2 ?`... shown as an explicit scratch-free query only at test; and train with a longer budget (>= 20k steps) with the depth-1 stage run to >= 0.95 before unlocking.
-Falsifier: if depth-1 stays at 0.50 with aligned layouts, the binding failure is not about positions.
+Make the query layout match the lesson layout so one key form serves both: put the query's prediction at the generator token, as a lesson line's `y` is predicted at its `g`
+(e.g. depth 1 as `x g ?` with the answer predicted at `g`; depth d as the chain `x g1 g2 .. gd` with the answer predicted at `gd`), and train depth 1 to >= 0.95 (budget >= 20k steps) before unlocking depth 2.
+Falsifier: if depth-1 accuracy still plateaus at 0.50 with aligned layouts, the generator-binding failure is not about token positions.
 
 ## Reproduce
 ```
