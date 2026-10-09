@@ -21,12 +21,12 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 R = Path(sys.argv[1] if len(sys.argv) > 1 else "../results/exp4")
 ARMS = ["fw_reset", "continuous", "ssm_only", "no_adapt", "null_fw_reset", "null_continuous"]
-BASE = ["oracle", "one_hop", "copy_start", "last_line"]
+BASE = ["oracle", "one_hop", "other_gen", "copy_start", "last_line"]
 LABEL = {"fw_reset": "fast weights only (lessons -> S, activations reset)", "continuous": "in-context (S + activations carried)",
          "ssm_only": "lessons in context, fast-weight writes frozen (beta=0)", "no_adapt": "no adaptation (S = W0 = 0, no lessons)",
          "null_fw_reset": "content null, fast weights only", "null_continuous": "content null, in-context",
          "oracle": "oracle composer (lookup + compose)", "one_hop": "lookup without composition (x*w1)",
-         "copy_start": "copy the start element", "last_line": "copy the last lesson answer (template copier)", "chance": "uniform over the episode's elements"}
+         "other_gen": "lookup with the WRONG first generator (x*other)", "copy_start": "copy the start element", "last_line": "copy the last lesson answer (template copier)", "chance": "uniform over the episode's elements"}
 
 
 def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:

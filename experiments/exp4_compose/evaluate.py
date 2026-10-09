@@ -22,7 +22,7 @@ from plastic.config import ModelConfig
 from task import Query, baseline_predictions, query_tokens
 
 ARMS = ["fw_reset", "continuous", "no_adapt", "ssm_only", "null_fw_reset", "null_continuous"]
-BASELINES = ["oracle", "one_hop", "copy_start", "last_line"]
+BASELINES = ["oracle", "one_hop", "other_gen", "copy_start", "last_line"]
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--model", required=True)

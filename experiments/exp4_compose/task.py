@@ -173,5 +173,6 @@ def baseline_predictions(world: World, lesson: list[int], q: Query) -> dict[str,
         cur = look[(cur, world.gen_names[j])]
     return {"oracle": cur,
             "one_hop": look[(x, world.gen_names[q.word[0]])],
+            "other_gen": look[(x, world.gen_names[1 - q.word[0]])],
             "copy_start": x,
             "last_line": lines[-1][2]}
