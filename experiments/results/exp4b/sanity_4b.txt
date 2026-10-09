@@ -1,0 +1,2 @@
+max logit diff when the appended answer token changes: 0.0
+sanity_4b OK
