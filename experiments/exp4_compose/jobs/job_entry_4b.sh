@@ -27,17 +27,20 @@ run() {
 }
 case $MODE in
   smoke)
-    for s in 0 1 2; do run aligned_s$s aligned $s --steps 300 --min-depth1-steps 200 --log-every 50 & done
-    run old_s0 old 0 --steps 300 --min-depth1-steps 200 --log-every 50 &
-    wait
+    PIDS=()
+    for s in 0 1 2; do run aligned_s$s aligned $s --steps 300 --min-depth1-steps 200 --log-every 50 & PIDS+=($!); done
+    run old_s0 old 0 --steps 300 --min-depth1-steps 200 --log-every 50 & PIDS+=($!)
+    wait "${PIDS[@]}"
     ;;
   main)
+    PIDS=()
     for s in 0 1 2; do
-      run aligned_s$s aligned $s --steps ${STEPS:-60000} --min-depth1-steps ${MIN_D1:-20000} \
-         --abort-depth1-step ${ABORT_STEP:-40000} --abort-depth1-acc ${ABORT_ACC:-0.6} &
+      run aligned_s$s aligned $s --steps ${STEPS:-50000} --min-depth1-steps ${MIN_D1:-20000} \
+         --abort-depth1-step ${ABORT_STEP:-30000} --abort-depth1-acc ${ABORT_ACC:-0.6} & PIDS+=($!)
     done
-    run old_s0 old 0 --steps ${STEPS:-60000} --min-depth1-steps ${MIN_D1:-20000} &   # matched old-layout control: no early abort
-    wait
+    run old_s0 old 0 --steps ${STEPS:-50000} --min-depth1-steps ${MIN_D1:-20000} \
+         --abort-depth1-step ${ABORT_STEP:-30000} --abort-depth1-acc ${ABORT_ACC:-0.6} & PIDS+=($!)   # matched old-layout control
+    wait "${PIDS[@]}"
     ;;
 esac
 echo "=== $(date -u) finished mode=$MODE"

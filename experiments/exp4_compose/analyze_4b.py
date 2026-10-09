@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from aggregate_lib import wilson  # noqa
 
 R = Path(sys.argv[1])
-runs = sorted(p.name for p in R.iterdir() if p.is_dir() and (p / "train_log.json").exists())
+runs = sorted(p.name for p in R.iterdir() if p.is_dir() and (p / "model" / "train_log.json").exists())
 
 
 def items(run):
@@ -22,7 +22,7 @@ def items(run):
 res = {}
 fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
 for run in runs:
-    log = [r for r in json.load(open(R / run / "train_log.json")) if "acc_by_depth" in r]
+    log = [r for r in json.load(open(R / run / "model" / "train_log.json")) if "acc_by_depth" in r]
     steps = [r["step"] for r in log]
     d1 = [r["acc_by_depth"].get("1") for r in log]
     ls = "--" if run.startswith("old") else "-"
