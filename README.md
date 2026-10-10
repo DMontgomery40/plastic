@@ -324,6 +324,9 @@ of a random small group under random names. Item-level evaluation, 2,000 items p
   a template copier (0.15), one-hop lookup, and a successor-set-prior guesser (0.50 at depth 2, 0.33 at depth 3), not format adaptation.
 - Depth 4 is real in one seed only (0.530 [0.509, 0.552], +0.419 over the content null on discriminating items); seed 0's 0.212 is not distinguishable from the null
   (+0.040 [+0.011, +0.069]) and below a set-prior guesser. Seed 2 is slower (depth 3 at 0.296, below the set prior).
+- Warm-start follow-up (+~22.7k steps per seed, same items; section at the end of the report): depth 3 on seed 2 0.296 -> 0.725, depth 4 on seed 0 0.212 -> 0.428
+  (partial, still below the all-but-one-letter ceiling of 0.5) and on seed 1 0.530 -> 0.834 with a weak signal at the never-trained depth 5 (0.259); depth 6 stays at chance.
+  The fresh-seed variability run was skipped for budget.
 - Caveats: 3 seeds and CIs over items only; depth 4 was unlocked at 55-56k of 60k steps and seed 2 was still climbing (compute-limited, not evidence about
   the architecture); small model by design; in-episode fast-weight path, not a lasting weight update. The old-layout control learned depth 1 as fast
   as the aligned runs, so the exp 4 depth-1 plateau was largely a step budget; the layout helps at depths 2-3. No weights in the repo (private HF dataset).
