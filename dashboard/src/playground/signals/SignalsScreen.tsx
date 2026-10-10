@@ -188,9 +188,11 @@ export function SignalsScreen() {
         <StatTile label="Rolled back" value={fmtInt(meta.rollbacks)} tone={meta.rollbacks > 0 ? 'rollback' : 'default'} />
         <StatTile label="Scaled / projected / read-only" value={`${fmtInt(meta.scales)} / ${fmtInt(meta.projects)} / ${fmtInt(meta.readonly)}`} />
       </div>
-      <Panel title="Decisions" subtitle="oldest to newest · select a chunk for the reason">
-        <DecisionTimeline chunks={transactions} selected={selected} onSelect={selectChunk} limit={120} />
-      </Panel>
+      {transactions.length > 40 ? (
+        <Panel title="All decisions" subtitle="oldest to newest · select a chunk for the reason">
+          <DecisionTimeline chunks={transactions} selected={selected} onSelect={selectChunk} limit={400} />
+        </Panel>
+      ) : null}
       <Panel title="Memory change" subtitle={`${backendLabel(s.backend)} · proposed (measured before the decision) and accepted (measured after it)`}>
         <LineChartPanel
           data={data}

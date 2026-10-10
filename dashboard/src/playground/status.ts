@@ -52,7 +52,7 @@ export interface SessionStatus {
 
 export const LIGHT_LABEL: Record<Light, string> = {
   empty: 'Ready',
-  ok: 'Guarded',
+  ok: 'OK',
   watch: 'Watch',
   locked: 'Locked',
   unguarded: 'Not guarded',
@@ -149,7 +149,7 @@ export function sessionStatus(detail: SessionDetail | null, transactions: Transa
 
   if (lock) {
     const since = lock.sinceChunk !== null ? `since chunk ${lock.sinceChunk}` : '';
-    const counter = lock.refusedSince > 0 ? ` ${lock.refusedSince} chunk${lock.refusedSince === 1 ? '' : 's'} since ${lock.refusedSince === 1 ? 'has' : 'have'} been read without learning.` : '';
+    const counter = lock.refusedSince > 0 ? ` ${lock.refusedSince} chunk${lock.refusedSince === 1 ? ' has' : 's have'} been read without learning since.` : '';
     return { light: 'locked', label: LIGHT_LABEL.locked, sentence: `Learning is frozen ${since}. ${lock.sentence}${counter}`.replace(/\s+/g, ' ').trim(), ...base };
   }
   if (detail.meta.harness.log_only) {

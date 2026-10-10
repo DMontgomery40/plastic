@@ -125,7 +125,7 @@ export function explainReason(rawIn: string): ReasonInfo {
 export function explainLock(reason: string | null | undefined): { title: string; sentence: string; kind: ReasonInfo['kind'] } {
   if (!reason) return { title: 'Locked', sentence: 'The session was set to read-only.', kind: 'state' };
   if (reason === 'cusum_alarm') {
-    return { title: 'Update-size alarm', sentence: 'The update-size alarm (CUSUM) fired, so the harness froze learning for this session.', kind: 'cusum' };
+    return { title: 'Update-size alarm', sentence: 'The update-size alarm (CUSUM) fired.', kind: 'cusum' };
   }
   if (reason.startsWith('budget_session')) {
     const e = explainReason(reason);
