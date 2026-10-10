@@ -40,8 +40,8 @@ describe('status header', () => {
   it('calm session: OK, last chunk, both gauges, and a timeline', () => {
     useStore.setState({ detail: detailOf({ budget_session: 10, budget_used: 2 }), transactions: [tx(0, 'commit'), tx(1, 'commit')] });
     render(<StatusHeader />);
-    expect(screen.getByText('OK')).toBeTruthy();
-    expect(screen.getByRole('status').textContent).toContain('Last chunk committed in full');
+    expect(screen.getAllByText('OK').length).toBeGreaterThan(0);
+    expect(screen.getByRole('status').textContent).toContain('Last learning chunk committed in full');
     expect(screen.getByRole('meter', { name: 'Update-size alarm' }).getAttribute('aria-valuetext')).toContain('0.40 of 5.0');
     expect(screen.getByRole('meter', { name: 'Session budget' }).getAttribute('aria-valuenow')).toBe('20');
     expect(screen.getByRole('list', { name: /Decision timeline/ })).toBeTruthy();

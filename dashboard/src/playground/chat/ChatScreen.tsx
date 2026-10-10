@@ -112,6 +112,7 @@ export function ChatScreen() {
   const transactions = useStore((s) => s.transactions);
   const models = useStore((s) => s.models);
   const busy = useStore((s) => s.busy);
+  const healthChecked = useStore((s) => s.healthChecked);
   const bottom = useRef<HTMLDivElement>(null);
   const turns = detail ? turnsFromTrace(detail.trace, transactions) : [];
 
@@ -120,7 +121,7 @@ export function ChatScreen() {
   }, [turns.length, busy.chat]);
 
   if (!detail) {
-    return <Empty title="No text session selected." detail={busy.session ? 'Loading…' : 'Choose a session above, or create one under Sessions.'} />;
+    return <Empty title="No text session selected." detail={busy.session || !healthChecked ? 'Loading…' : 'Choose a session above, or create one under Sessions.'} />;
   }
   const model = models.find((m) => m.model_id === detail.meta.model_id);
   const summary = detail.summary;

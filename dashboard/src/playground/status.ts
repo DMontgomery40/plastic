@@ -119,8 +119,13 @@ export function budgetGauge(summary: RunnerSummary): Gauge {
   };
 }
 
+/** A chunk the harness actually judged: not a read-only observation (locked session, or tokens not eligible to learn). */
+export function wasJudged(tx: TransactionRecord): boolean {
+  return tx.decision.kind !== 'readonly';
+}
+
 export function recentCounts(transactions: TransactionRecord[], window = 16) {
-  const last = transactions.slice().sort((a, b) => a.index - b.index).slice(-window);
+  const last = transactions.filter(wasJudged).sort((a, b) => a.index - b.index).slice(-window);
   return {
     window: last.length,
     intervened: last.filter((t) => isIntervention(t.decision.kind)).length,
@@ -140,7 +145,9 @@ export function sessionStatus(detail: SessionDetail | null, transactions: Transa
   if (!detail) return null;
   const summary = detail.summary;
   const sorted = transactions.slice().sort((a, b) => a.index - b.index);
-  const last = sorted[sorted.length - 1] ?? null;
+  // a chat turn usually ends in generated-text chunks that are never learned (read-only, nothing eligible): the state
+  // of the memory is judged by the last chunk the harness actually decided on
+  const last = sorted.filter(wasJudged).slice(-1)[0] ?? null;
   const lock = lockInfo(summary, sorted);
   const cusum = cusumGauge(summary, lock !== null);
   const budget = budgetGauge(summary);
@@ -157,17 +164,19 @@ export function sessionStatus(detail: SessionDetail | null, transactions: Transa
     return {
       light: 'unguarded',
       label: LIGHT_LABEL.unguarded,
-      sentence: `Observational mode: every update is committed. ${n > 0 ? `The guard would have intervened on ${n} of the last ${recent.window} chunks.` : 'The guard has not flagged recent chunks.'}`,
+      sentence: `Observational mode: every update is committed. ${n > 0 ? `The guard would have intervened on ${n} of the last ${recent.window} learning chunks.` : 'The guard has not flagged recent chunks.'}`,
       ...base,
     };
   }
-  if (!last) return { light: 'empty', label: LIGHT_LABEL.empty, sentence: 'Guard is on. No chunks yet; send a message to start learning.', ...base };
+  if (!last) {
+    return { light: 'empty', label: LIGHT_LABEL.empty, sentence: sorted.length === 0 ? 'Guard is on. No chunks yet; send a message to start learning.' : 'Guard is on. No chunk has been eligible to learn yet.', ...base };
+  }
 
   if (last.decision.kind === 'rollback') {
-    return { light: 'watch', label: LIGHT_LABEL.watch, sentence: `Last chunk was rolled back. ${firstReason(last)}`, ...base };
+    return { light: 'watch', label: LIGHT_LABEL.watch, sentence: `Last learning chunk was rolled back. ${firstReason(last)}`, ...base };
   }
   if (last.decision.kind === 'scale' || last.decision.kind === 'project') {
-    return { light: 'watch', label: LIGHT_LABEL.watch, sentence: `Last chunk was ${last.decision.kind === 'scale' ? 'committed at reduced strength' : 'committed with part of the update removed'}. ${firstReason(last)}`, ...base };
+    return { light: 'watch', label: LIGHT_LABEL.watch, sentence: `Last learning chunk was ${last.decision.kind === 'scale' ? 'committed at reduced strength' : 'committed with part of the update removed'}. ${firstReason(last)}`, ...base };
   }
   if (cusum.level === 'watch') {
     return { light: 'watch', label: LIGHT_LABEL.watch, sentence: `Update sizes are trending up: the alarm reading is at ${Math.round((cusum.fraction ?? 0) * 100)}% of its limit. At the limit, learning freezes.`, ...base };
@@ -179,7 +188,7 @@ export function sessionStatus(detail: SessionDetail | null, transactions: Transa
   return {
     light: 'ok',
     label: LIGHT_LABEL.ok,
-    sentence: `Last chunk committed in full. ${flagged > 0 ? `${flagged} of the last ${recent.window} chunks were intervened on.` : 'No interventions in recent chunks.'}`,
+    sentence: `Last learning chunk committed in full. ${flagged > 0 ? `${flagged} of the last ${recent.window} were intervened on.` : 'No interventions in recent chunks.'}`,
     ...base,
   };
 }
@@ -241,7 +250,9 @@ export function verdictSentence(tx: TransactionRecord): string {
     case 'project':
       return 'Committed with the part of the update that pointed at the canaries removed.';
     case 'readonly':
-      return 'Read without learning: the session is locked.';
+      return tx.decision.reasons.includes('learning_ineligible')
+        ? 'Read without learning: no token in this chunk was eligible to write to memory.'
+        : 'Read without learning: the session is locked.';
     default:
       return DECISION_LABEL[tx.decision.kind];
   }

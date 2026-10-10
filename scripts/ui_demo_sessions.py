@@ -11,6 +11,7 @@ import sys
 import httpx
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:13601"
+EXTRA = len(sys.argv) > 2 and sys.argv[2] == "extra"  # only the two sessions with the checks tuned to reach calm / budget-lock states
 MODEL = "lm_tiny"
 BENIGN = [
     "The river runs past the old mill and into the valley where the farmers grow wheat.",
@@ -39,25 +40,35 @@ def chat(client, sid, prompt, n=16):
 
 
 with httpx.Client(base_url=BASE, timeout=300) as c:
-    make(c, "demo_calm", {"log_only": False, "freeze_on_alarm": True})
-    for p in BENIGN:
-        chat(c, "demo_calm", p)
+    if EXTRA:
+        # the toy model's CUSUM alarms within three chunks, so the other states need the statistics switched off;
+        # these two sessions are tuned configurations, not typical behaviour
+        make(c, "demo_quiet", {"log_only": False, "enable_stats": False, "enable_rollback": False, "enable_projection": False, "enable_budget": False})
+        for p in BENIGN:
+            chat(c, "demo_quiet", p)
+        make(c, "demo_budget_spent", {"log_only": False, "enable_stats": False, "enable_rollback": False, "enable_projection": False, "budget_session": 1.5, "budget_chunk": 0.4})
+        for p in BENIGN * 2:
+            chat(c, "demo_budget_spent", p)
+        sys.exit(0)
+        make(c, "demo_calm", {"log_only": False, "freeze_on_alarm": True})
+        for p in BENIGN:
+            chat(c, "demo_calm", p)
 
-    make(c, "demo_refusals", {"log_only": False, "freeze_on_alarm": False})
-    for p in BENIGN[:2] + JUNK[:2] + BENIGN[2:]:
-        chat(c, "demo_refusals", p)
+        make(c, "demo_refusals", {"log_only": False, "freeze_on_alarm": False})
+        for p in BENIGN[:2] + JUNK[:2] + BENIGN[2:]:
+            chat(c, "demo_refusals", p)
 
-    make(c, "demo_locked", {"log_only": False, "freeze_on_alarm": True})
-    for p in BENIGN[:2] + JUNK + BENIGN[2:] + JUNK[:1] + BENIGN[:1]:
-        chat(c, "demo_locked", p)
+        make(c, "demo_locked", {"log_only": False, "freeze_on_alarm": True})
+        for p in BENIGN[:2] + JUNK + BENIGN[2:] + JUNK[:1] + BENIGN[:1]:
+            chat(c, "demo_locked", p)
 
-    make(c, "demo_budget", {"log_only": False, "freeze_on_alarm": True, "budget_session": 1.0, "budget_chunk": 0.15})
-    for p in BENIGN * 2:
-        chat(c, "demo_budget", p)
+        make(c, "demo_budget", {"log_only": False, "freeze_on_alarm": True, "budget_session": 1.0, "budget_chunk": 0.15})
+        for p in BENIGN * 2:
+            chat(c, "demo_budget", p)
 
-    make(c, "demo_observe", {"log_only": True, "freeze_on_alarm": False})
-    for p in BENIGN[:2] + JUNK[:2] + BENIGN[2:]:
-        chat(c, "demo_observe", p)
+        make(c, "demo_observe", {"log_only": True, "freeze_on_alarm": False})
+        for p in BENIGN[:2] + JUNK[:2] + BENIGN[2:]:
+            chat(c, "demo_observe", p)
 
-    make(c, "demo_empty", {"log_only": False})
-    print(json.dumps([{k: s[k] for k in ("session_id", "n_transactions", "commits", "rollbacks", "scales", "projects", "readonly", "read_only", "read_only_reason")} for s in c.get("/api/sessions").json()], indent=1))
+        make(c, "demo_empty", {"log_only": False})
+        print(json.dumps([{k: s[k] for k in ("session_id", "n_transactions", "commits", "rollbacks", "scales", "projects", "readonly", "read_only", "read_only_reason")} for s in c.get("/api/sessions").json()], indent=1))
