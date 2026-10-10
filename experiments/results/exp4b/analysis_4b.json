@@ -1,0 +1,112 @@
+{
+ "aligned_s0": {
+  "steps_run": 60000,
+  "final_unlocked": [
+   1,
+   2,
+   3,
+   4
+  ],
+  "unlock_steps": {
+   "1": 0,
+   "2": 20000,
+   "3": 32300,
+   "4": 55100
+  },
+  "train_acc_d1_last1000steps_mean": 1.0,
+  "elapsed_s": 9275.6,
+  "max_train_acc_d1_100step_window": 1.0,
+  "depth1_eval": {
+   "n": 2000,
+   "exact": 1.0,
+   "wilson95": [
+    0.9980828823994873,
+    1.0
+   ],
+   "pred_in_two_successors": 1.0,
+   "pred_is_other_generator_successor": 0.0,
+   "ambiguous_two_succ_equal": 0.0
+  }
+ },
+ "aligned_s1": {
+  "steps_run": 60000,
+  "final_unlocked": [
+   1,
+   2,
+   3,
+   4
+  ],
+  "unlock_steps": {
+   "1": 0,
+   "2": 20000,
+   "3": 39600,
+   "4": 56400
+  },
+  "train_acc_d1_last1000steps_mean": 1.0,
+  "elapsed_s": 9270.8,
+  "max_train_acc_d1_100step_window": 1.0,
+  "depth1_eval": {
+   "n": 2000,
+   "exact": 1.0,
+   "wilson95": [
+    0.9980828823994873,
+    1.0
+   ],
+   "pred_in_two_successors": 1.0,
+   "pred_is_other_generator_successor": 0.0,
+   "ambiguous_two_succ_equal": 0.0
+  }
+ },
+ "aligned_s2": {
+  "steps_run": 60000,
+  "final_unlocked": [
+   1,
+   2,
+   3
+  ],
+  "unlock_steps": {
+   "1": 0,
+   "2": 20000,
+   "3": 56600
+  },
+  "train_acc_d1_last1000steps_mean": 1.0,
+  "elapsed_s": 9261.9,
+  "max_train_acc_d1_100step_window": 1.0,
+  "depth1_eval": {
+   "n": 2000,
+   "exact": 1.0,
+   "wilson95": [
+    0.9980828823994873,
+    1.0
+   ],
+   "pred_in_two_successors": 1.0,
+   "pred_is_other_generator_successor": 0.0,
+   "ambiguous_two_succ_equal": 0.0
+  }
+ },
+ "old_s0": {
+  "steps_run": 60000,
+  "final_unlocked": [
+   1,
+   2
+  ],
+  "unlock_steps": {
+   "1": 0,
+   "2": 20000
+  },
+  "train_acc_d1_last1000steps_mean": 0.9987,
+  "elapsed_s": 9270.6,
+  "max_train_acc_d1_100step_window": 1.0,
+  "depth1_eval": {
+   "n": 2000,
+   "exact": 0.999,
+   "wilson95": [
+    0.9963609898107715,
+    0.9997257268239166
+   ],
+   "pred_in_two_successors": 1.0,
+   "pred_is_other_generator_successor": 0.001,
+   "ambiguous_two_succ_equal": 0.0
+  }
+ }
+}
