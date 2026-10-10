@@ -143,6 +143,12 @@ describe('lockInfo and sessionStatus', () => {
     expect(s.recent.window).toBe(2);
     expect(verdictSentence(chunks[2])).toContain('no token in this chunk was eligible');
   });
+  it('says so when most recent learning chunks were refused', () => {
+    const many = Array.from({ length: 10 }, (_, i) => tx(i, i % 5 === 0 ? 'commit' : 'rollback', {}, i % 5 === 0 ? [] : ['chunk_loss(5>4)'], 1, i % 5 === 0 ? 1 : 0));
+    const s = sessionStatus(detail(summary()), many)!;
+    expect(s.light).toBe('watch');
+    expect(s.sentence).toContain('8 of the last 10 learning chunks were refused or reduced');
+  });
   it('is not locked just because the newest chunks were not eligible to learn', () => {
     expect(sessionStatus(detail(summary()), [tx(0, 'commit'), tx(1, 'readonly', {}, ['learning_ineligible'], 0, 0)])!.light).toBe('ok');
   });
@@ -156,6 +162,15 @@ describe('gauges', () => {
     expect(g.reading).toContain('no cap');
   });
   it('flags the budget at the cap', () => expect(budgetGauge(summary({ budget_session: 1, budget_used: 1 })).level).toBe('over'));
+  it('does not show the alarm at its limit when the lock came from the budget, and says when statistics are off', () => {
+    const locked = summary({ read_only: true, read_only_reason: 'budget_session(1.48>=1.5)', budget_session: 1.5, budget_used: 1.48 });
+    const s = sessionStatus(detail(locked), [tx(0, 'readonly', { read_only: true, read_only_reason: 'budget_session(1.48>=1.5)' }, ['session_read_only'], 0, 0)])!;
+    expect(s.light).toBe('locked');
+    expect(s.cusum.level).toBe('ok');
+    expect(s.budget.level).toBe('over');
+    expect(s.lock!.kind).toBe('budget');
+    expect(cusumGauge(summary(), false, false).reading).toBe('off for this session');
+  });
   it('reports a missing alarm limit as not reported', () => expect(cusumGauge(summary({ cusum: undefined as never }), false).reading).toBe('not reported'));
 });
 

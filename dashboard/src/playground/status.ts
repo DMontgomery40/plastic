@@ -85,8 +85,9 @@ export function lockInfo(summary: RunnerSummary, transactions: TransactionRecord
   };
 }
 
-export function cusumGauge(summary: RunnerSummary, locked: boolean): Gauge {
+export function cusumGauge(summary: RunnerSummary, locked: boolean, statsEnabled = true): Gauge {
   const c = summary.cusum;
+  if (!statsEnabled) return { label: 'Update-size alarm', fraction: null, reading: 'off for this session', atLimit: 'Statistical checks are disabled.', level: 'none' };
   if (!c || !isFinite_(c.h) || c.h <= 0) return { label: 'Update-size alarm', fraction: null, reading: 'not reported', atLimit: 'Learning freezes when the alarm fires.', level: 'none' };
   const top = Math.max(isFinite_(c.s_hi) ? c.s_hi : 0, isFinite_(c.s_lo) ? c.s_lo : 0);
   const fraction = top / c.h;
@@ -103,7 +104,7 @@ export function cusumGauge(summary: RunnerSummary, locked: boolean): Gauge {
   };
 }
 
-export function budgetGauge(summary: RunnerSummary): Gauge {
+export function budgetGauge(summary: RunnerSummary, spent = false): Gauge {
   const cap = summary.budget_session;
   const used = summary.budget_used;
   if (cap === null || cap === undefined || !isFinite_(cap) || cap <= 0) {
@@ -112,10 +113,10 @@ export function budgetGauge(summary: RunnerSummary): Gauge {
   const fraction = (isFinite_(used) ? used : 0) / cap;
   return {
     label: 'Session budget',
-    fraction,
+    fraction: spent ? Math.max(1, fraction) : fraction,
     reading: `${fmt(used)} of ${fmt(cap)} used`,
     atLimit: 'At the cap the session locks; resuming does not restore it.',
-    level: fraction >= 0.999 ? 'over' : fraction >= 0.8 ? 'watch' : 'ok',
+    level: spent || fraction >= 0.999 ? 'over' : fraction >= 0.8 ? 'watch' : 'ok',
   };
 }
 
@@ -149,8 +150,8 @@ export function sessionStatus(detail: SessionDetail | null, transactions: Transa
   // of the memory is judged by the last chunk the harness actually decided on
   const last = sorted.filter(wasJudged).slice(-1)[0] ?? null;
   const lock = lockInfo(summary, sorted);
-  const cusum = cusumGauge(summary, lock !== null);
-  const budget = budgetGauge(summary);
+  const cusum = cusumGauge(summary, lock?.kind === 'cusum', detail.meta.harness.enable_stats !== false);
+  const budget = budgetGauge(summary, lock?.kind === 'budget');
   const recent = recentCounts(sorted);
   const base = { lock, cusum, budget, recent };
 
@@ -172,6 +173,9 @@ export function sessionStatus(detail: SessionDetail | null, transactions: Transa
     return { light: 'empty', label: LIGHT_LABEL.empty, sentence: sorted.length === 0 ? 'Guard is on. No chunks yet; send a message to start learning.' : 'Guard is on. No chunk has been eligible to learn yet.', ...base };
   }
 
+  if (recent.window >= 8 && recent.intervened / recent.window >= 0.5) {
+    return { light: 'watch', label: LIGHT_LABEL.watch, sentence: `${recent.intervened} of the last ${recent.window} learning chunks were refused or reduced, so this session is barely learning. Latest: ${last.decision.kind === 'commit' ? 'committed' : DECISION_LABEL[last.decision.kind].toLowerCase()}${last.decision.reasons.length ? `, ${firstReason(last).toLowerCase()}` : '.'}`, ...base };
+  }
   if (last.decision.kind === 'rollback') {
     return { light: 'watch', label: LIGHT_LABEL.watch, sentence: `Last learning chunk was rolled back. ${firstReason(last)}`, ...base };
   }

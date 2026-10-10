@@ -61,6 +61,9 @@ export function DecisionTag({ tx }: { tx: TransactionRecord }) {
         <span aria-hidden>{DECISION_GLYPH[k]} </span>
         {DECISION_LABEL[k]}
       </span>
+      {k === 'readonly' ? (
+        <span className="text-xs text-ink-secondary">{tx.decision.reasons.includes('learning_ineligible') ? 'nothing eligible to learn' : 'session locked'}</span>
+      ) : null}
       {would ? (
         <span className="text-xs text-ink-secondary">
           guarded: would <span style={{ color: DECISION_COLOR[would] }}>{DECISION_LABEL[would].toLowerCase()}</span>
