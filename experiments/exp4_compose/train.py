@@ -51,15 +51,27 @@ ap.add_argument("--abort-depth1-acc", type=float, default=0.0,
                 help="budget guard: if depth 1 is still below this train accuracy (100-step mean) at --abort-depth1-step, stop (null result)")
 ap.add_argument("--abort-depth1-step", type=int, default=0)
 ap.add_argument("--time-limit-s", type=float, default=1e9, help="stop gracefully (saving) after this wall time")
+# --- exp 4c additions: warm start
+ap.add_argument("--init-from", default=None, help="checkpoint (model.pt) to warm-start from: weights are loaded, the optimizer is fresh, and the depth "
+                "curriculum resumes with the depths that checkpoint had unlocked (its unlock_steps keys)")
+ap.add_argument("--rng-offset", type=int, default=0, help="added to the training rng seed so a warm start does not replay the first run's episode stream")
+ap.add_argument("--time-decay", action="store_true", help="with --lr-sched const_decay and --time-limit-s: decay by elapsed wall time instead of step "
+                "(the run length is then set by the time budget, so the decay always happens before the stop)")
 args = ap.parse_args()
 
 torch.set_num_threads(args.threads)
 torch.manual_seed(args.seed)
-rng = random.Random(1000 + args.seed)  # training stream; eval uses seeds >= 10_000 (disjoint streams)
+rng = random.Random(1000 + args.seed + args.rng_offset)  # training stream; eval uses seeds >= 10_000 (disjoint streams)
 depths = [int(d) for d in args.train_depths.split(",")]
 cfg = model_config(args.d_model, args.layers)
 model = build(cfg).to(args.device)
 dev = torch.device(args.device)
+init_info = None
+if args.init_from:
+    ck = torch.load(args.init_from, map_location="cpu")
+    assert ck["cfg"] == cfg.to_dict(), "checkpoint config differs from the requested model config"
+    model.load_state_dict(ck["model"])
+    init_info = {"init_from": args.init_from, "init_step": ck.get("step"), "init_unlock_steps": ck.get("unlock_steps")}
 opt = torch.optim.AdamW(model.parameters(), lr=args.lr, betas=(0.9, 0.95), weight_decay=0.01)
 out = Path(args.out)
 out.mkdir(parents=True, exist_ok=True)
@@ -71,6 +83,12 @@ def lr_at(s: int) -> float:
     if s < args.warmup:
         return args.lr * (s + 1) / args.warmup
     if args.lr_sched == "const_decay":
+        if args.time_decay:
+            f = (time.time() - t0) / args.time_limit_s
+            if f < 1 - args.decay_frac:
+                return args.lr
+            t = min(1.0, (f - (1 - args.decay_frac)) / args.decay_frac)
+            return args.lr * (0.1 + 0.9 * 0.5 * (1 + math.cos(math.pi * t)))
         t0_ = args.steps * (1 - args.decay_frac)
         if s < t0_:
             return args.lr
@@ -85,7 +103,11 @@ t0 = time.time()
 acc_hist, loss_hist = [], []
 dep: dict[int, list] = {}
 unlocked = 1 if args.curriculum == "adaptive" else len(depths)
+if init_info and args.curriculum == "adaptive":
+    unlocked = max(1, min(len(depths), len(init_info["init_unlock_steps"] or {1: 0})))  # resume at the depth the checkpoint had reached
 unlock_steps = {depths[unlocked - 1]: 0}
+if init_info:
+    print(json.dumps({"warm_start": init_info, "resumed_unlocked_depths": depths[:unlocked]}), flush=True)
 for step in range(args.steps):
     for g in opt.param_groups:
         g["lr"] = lr_at(step)
@@ -113,6 +135,8 @@ for step in range(args.steps):
         rec = {"step": step + 1, "loss": sum(loss_hist) / len(loss_hist), "acc": sum(acc_hist) / len(acc_hist),
                "lr": lr_at(step), "gn": float(gn), "elapsed_s": round(time.time() - t0, 1), "acc_by_depth": {d: round(sum(v) / len(v), 3) for d, v in sorted(dep.items())}}
         rec["unlocked_depths"] = depths[:unlocked]
+        if init_info:
+            rec["init_step"] = init_info["init_step"]
         hardest = depths[unlocked - 1]
         thr = args.unlock_acc if (unlocked > 1 or args.unlock_acc1 is None) else args.unlock_acc1
         can = unlocked > 1 or step + 1 >= args.min_depth1_steps
