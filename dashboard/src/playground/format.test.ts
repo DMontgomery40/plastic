@@ -46,6 +46,12 @@ describe('turns', () => {
     expect(turns[1].chunks.map((c) => c.index)).toEqual([2, 3]);
   });
 
+  it('does not hand earlier turns’ chunks to the first turn shown when the trace was cut to its newest turns', () => {
+    const trace: TraceRecord[] = [{ t_unix: 9, kind: 'chat', prompt: 'late', completion: 'L', pos_end: 48, n_transactions: 2 }];
+    const turns = turnsFromTrace(trace, [tx(0, 0, 16), tx(1, 16, 32), tx(2, 32, 40), tx(3, 40, 48)]);
+    expect(turns[0].chunks.map((c) => c.index)).toEqual([2, 3]);
+  });
+
   it('totals distinguish applied interventions, would-have interventions and read-only observations', () => {
     const chunks = [
       tx(0, 0, 8, { sources: { user: 8, model: 0 } }),
