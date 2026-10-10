@@ -73,7 +73,7 @@ export function Header() {
       <div className="mx-auto flex max-w-[1500px] flex-wrap items-center gap-x-5 gap-y-3 px-4 py-3">
         <div className="flex items-center gap-3">
           <span className="text-lg font-bold tracking-tight text-ink-primary">plastic</span>
-          <StateChip tone={connected ? 'accent' : 'bad'}>{connected ? 'connected' : health ? 'stale' : 'offline'}</StateChip>
+          <StateChip tone={connected ? 'accent' : 'bad'}>{connected ? 'connected' : health ? 'connection lost' : 'offline'}</StateChip>
           {health?.public ? <StateChip>shared public session</StateChip> : null}
         </div>
         <nav aria-label="Screens" className="flex items-center gap-1">
@@ -115,7 +115,7 @@ export function Header() {
           )}
           {detail ? (
             <>
-              <StateChip tone={modeLabel(detail.meta.harness) === 'guarded' ? 'warn' : 'default'}>{modeLabel(detail.meta.harness)}</StateChip>
+              <StateChip tone={modeLabel(detail.meta.harness) === 'observational' ? 'warn' : 'default'}>{modeLabel(detail.meta.harness)}</StateChip>
               {model && model.chat_tuned === false ? <StateChip tone="warn">base model, not chat-tuned</StateChip> : null}
             </>
           ) : null}
