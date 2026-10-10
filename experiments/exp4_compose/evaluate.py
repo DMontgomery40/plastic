@@ -31,13 +31,17 @@ ap.add_argument("--batches", type=int, default=40)
 ap.add_argument("--batch", type=int, default=50)
 ap.add_argument("--depths", default="1,2,3,4,5,6")
 ap.add_argument("--threads", type=int, default=1)
+ap.add_argument("--device", default="cpu")
+ap.add_argument("--layout", default=None, help="old|aligned; default: the layout the checkpoint was trained with")
 ap.add_argument("--out", required=True)
 args = ap.parse_args()
 torch.set_num_threads(args.threads)
 
 ck = torch.load(args.model, map_location="cpu")
 cfg = ModelConfig.from_dict(ck["cfg"])
-model = build(cfg)
+model = build(cfg).to(args.device)
+layout = args.layout or ck["args"].get("layout", "old")
+print("layout", layout, flush=True)
 model.load_state_dict(ck["model"])
 model.eval()
 depths = [int(d) for d in args.depths.split(",")]
@@ -49,7 +53,7 @@ rows = []
 with torch.no_grad():
     for b in range(args.batches):
         # sample_batch draws random depths; we want one query per depth per episode, so rebuild the queries
-        worlds, lessons, _, _, null_worlds, null_lessons = sample_batch(rng, args.batch, 1, [1], null=True)
+        worlds, lessons, _, _, null_worlds, null_lessons = sample_batch(rng, args.batch, 1, [1], null=True, layout=layout)
         qrecs: list[tuple[int, Query]] = []
         for i, w in enumerate(worlds):
             for d in depths:
@@ -57,14 +61,15 @@ with torch.no_grad():
                 word = tuple(rng.randrange(2) for _ in range(d))
                 qrecs.append((i, Query(x, word, w.act(x, word))))
         k = len(depths)
-        qrows = [query_tokens(worlds[i], q) for i, q in qrecs]
+        qrows = [query_tokens(worlds[i], q, layout) for i, q in qrecs]
         qx, qpos = pad_queries(qrows)
+        qx, qpos = qx.to(args.device), qpos.to(args.device)
         preds = {}
         for arm in ARMS:
-            L = torch.tensor(null_lessons if arm.startswith("null_") else lessons)
+            L = torch.tensor(null_lessons if arm.startswith("null_") else lessons, device=args.device)
             proto = arm.removeprefix("null_")
             logits = run_protocol(model, L, qx, qpos, k, proto)
-            preds[arm] = logits.argmax(-1).tolist()
+            preds[arm] = logits.argmax(-1).cpu().tolist()
         for r, (i, q) in enumerate(qrecs):
             w, nw = worlds[i], null_worlds[i]
             ans = w.elem_names[q.answer]

@@ -309,6 +309,25 @@ Caveats: small CPU-only models (exp 1 ~109–151k parameters, 4000 steps); 3 see
 locally trained LM (held-out loss 4.52) instead of the gated HF checkpoint, trained with AdamW instead of Muon
 (Muon gave NaN); S3 was used instead of S5 (the S5 pilot stayed at chance); variant E was run on parity only.
 
+## Experiment 4b: first-answer composition of group actions (aligned layout, 60k GPU steps)
+
+Full write-up, tables, plots and commands: [`experiments/exp4_compose/REPORT_4b.md`](experiments/exp4_compose/REPORT_4b.md)
+(code in `experiments/exp4_compose/`, results in `experiments/results/exp4b/`). A 1.2M-parameter PlasticLM,
+meta-trained with an adaptive depth curriculum for 60k steps on one A10G (three seeds with the query laid out like a
+lesson line, plus one old-layout control), is asked the first and only query after lessons that show single generator steps
+of a random small group under random names. Item-level evaluation, 2,000 items per depth per run; Wilson and paired bootstrap 95% CIs.
+- Depth 1 is exact for every run (recall). Depth 2: 0.999 / 0.999 / 0.903 on the three aligned seeds, 0.695 on the old layout.
+  Depth 3: 0.953 / 0.919 / 0.296. Depth 4: 0.212 / 0.530 / not trained. Depths 5-6 (never trained): chance.
+- The control that matters is the content null (same format, wrong names). On items where the wrong lessons imply a different answer,
+  fast weights beat it by +0.998 [+0.996, +1.000] (depth 2, seed 0) and +0.944 [+0.932, +0.956] (depth 3, seed 0), +0.898 [+0.881, +0.914] (depth 3, seed 1);
+  and the same model answers what the wrong lessons imply (0.999 depth 2, 0.91-0.95 depth 3). So depth 2-3 on two seeds is content-dependent composition, above
+  a template copier (0.15), one-hop lookup, and a successor-set-prior guesser (0.50 at depth 2, 0.33 at depth 3), not format adaptation.
+- Depth 4 is real in one seed only (0.530 [0.509, 0.552], +0.419 over the content null on discriminating items); seed 0's 0.212 is not distinguishable from the null
+  (+0.040 [+0.011, +0.069]) and below a set-prior guesser. Seed 2 is slower (depth 3 at 0.296, below the set prior).
+- Caveats: 3 seeds and CIs over items only; depth 4 was unlocked at 55-56k of 60k steps and seed 2 was still climbing (compute-limited, not evidence about
+  the architecture); small model by design; in-episode fast-weight path, not a lasting weight update. The old-layout control learned depth 1 as fast
+  as the aligned runs, so the exp 4 depth-1 plateau was largely a step budget; the layout helps at depths 2-3. No weights in the repo (private HF dataset).
+
 ## Honest limits
 
 - PlasticCore is about 6M parameters on wikitext. Its generations are fluent-ish, not

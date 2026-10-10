@@ -154,9 +154,17 @@ def make_query(world: World, rng: random.Random, depth: int) -> Query:
     return Query(x, w, world.act(x, w))
 
 
-def query_tokens(world: World, q: Query) -> list[int]:
-    """Prompt tokens (ending with EQ); the answer token follows."""
-    return [Q, world.elem_names[q.start]] + [world.gen_names[j] for j in q.word] + [EQ]
+def query_tokens(world: World, q: Query, layout: str = "old") -> list[int]:
+    """Prompt tokens; the answer is predicted at the LAST prompt token.
+    layout "old" (exp 4): ``Q x w1..wd =`` predicts at the EQ token.
+    layout "aligned" (exp 4b): ``Q x w1..wd`` predicts at the last generator token wd, exactly as a lesson line
+    ``x g y ;`` predicts its result y at the generator token g (depth 1 is then the lesson line's prefix ``x g``)."""
+    body = [Q, world.elem_names[q.start]] + [world.gen_names[j] for j in q.word]
+    if layout == "old":
+        return body + [EQ]
+    if layout == "aligned":
+        return body
+    raise ValueError(layout)
 
 
 # ---------------------------------------------------------------- model-free baselines (per query)

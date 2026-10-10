@@ -55,7 +55,7 @@ def expand_state(st: SessionState, k: int, reset_activations: bool) -> SessionSt
     return SessionState(layers=layers, pos=st.pos)
 
 
-def sample_batch(rng: random.Random, batch: int, k: int, depths: list[int], null: bool = False):
+def sample_batch(rng: random.Random, batch: int, k: int, depths: list[int], null: bool = False, layout: str = "old"):
     """One size class per batch so lesson lengths match. Returns worlds, lesson tensor (B, L), query tensor (B*k, Lq),
     EQ positions (B*k,), answer tokens (B*k,), query records, and (if null) the null worlds/lessons."""
     n = rng.choice(sorted(SIZE_CLASSES))
@@ -71,7 +71,7 @@ def sample_batch(rng: random.Random, batch: int, k: int, depths: list[int], null
             null_lessons.append(lesson_tokens(nw, rng))
         for _ in range(k):
             q = make_query(w, rng, rng.choice(depths))
-            qrows.append(query_tokens(w, q))
+            qrows.append(query_tokens(w, q, layout))
             qrecs.append((len(worlds) - 1, q))
     return worlds, lessons, qrows, qrecs, null_worlds, null_lessons
 
@@ -82,7 +82,7 @@ def pad_queries(qrows: list[list[int]], answers: list[int] | None = None):
     pos = torch.empty(len(qrows), dtype=torch.long)
     for i, r in enumerate(qrows):
         x[i, :len(r)] = torch.tensor(r)
-        pos[i] = len(r) - 1  # the EQ position predicts the answer
+        pos[i] = len(r) - 1  # the last prompt token (EQ in the old layout, last generator in the aligned layout) predicts the answer
         if answers is not None:
             x[i, len(r)] = answers[i]
     return x, pos

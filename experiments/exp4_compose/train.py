@@ -38,6 +38,19 @@ ap.add_argument("--layers", type=int, default=4)
 ap.add_argument("--threads", type=int, default=1)
 ap.add_argument("--out", required=True)
 ap.add_argument("--log-every", type=int, default=100)
+# --- exp 4b additions
+ap.add_argument("--layout", default="old", choices=["old", "aligned"], help="query layout (see task.query_tokens)")
+ap.add_argument("--device", default="cpu")
+ap.add_argument("--min-depth1-steps", type=int, default=0, help="depth 2 cannot unlock before this many steps")
+ap.add_argument("--unlock-acc1", type=float, default=None, help="unlock threshold for leaving depth 1 (default: --unlock-acc)")
+ap.add_argument("--lr-sched", default="cosine", choices=["cosine", "const_decay"],
+                help="const_decay: constant lr after warmup, cosine decay to 0.1x over the last --decay-frac of --steps (the phases of a "
+                     "curriculum have no fixed length, so a whole-run cosine would have decayed before depth 2 unlocks)")
+ap.add_argument("--decay-frac", type=float, default=0.15)
+ap.add_argument("--abort-depth1-acc", type=float, default=0.0,
+                help="budget guard: if depth 1 is still below this train accuracy (100-step mean) at --abort-depth1-step, stop (null result)")
+ap.add_argument("--abort-depth1-step", type=int, default=0)
+ap.add_argument("--time-limit-s", type=float, default=1e9, help="stop gracefully (saving) after this wall time")
 args = ap.parse_args()
 
 torch.set_num_threads(args.threads)
@@ -45,7 +58,8 @@ torch.manual_seed(args.seed)
 rng = random.Random(1000 + args.seed)  # training stream; eval uses seeds >= 10_000 (disjoint streams)
 depths = [int(d) for d in args.train_depths.split(",")]
 cfg = model_config(args.d_model, args.layers)
-model = build(cfg)
+model = build(cfg).to(args.device)
+dev = torch.device(args.device)
 opt = torch.optim.AdamW(model.parameters(), lr=args.lr, betas=(0.9, 0.95), weight_decay=0.01)
 out = Path(args.out)
 out.mkdir(parents=True, exist_ok=True)
@@ -56,6 +70,12 @@ print(json.dumps({"params": nparams, "cfg": cfg.to_dict(), "args": vars(args)}),
 def lr_at(s: int) -> float:
     if s < args.warmup:
         return args.lr * (s + 1) / args.warmup
+    if args.lr_sched == "const_decay":
+        t0_ = args.steps * (1 - args.decay_frac)
+        if s < t0_:
+            return args.lr
+        t = min(1.0, (s - t0_) / max(1, args.steps - t0_))
+        return args.lr * (0.1 + 0.9 * 0.5 * (1 + math.cos(math.pi * t)))
     t = (s - args.warmup) / max(1, args.steps - args.warmup)
     return args.lr * (0.1 + 0.9 * 0.5 * (1 + math.cos(math.pi * t)))
 
@@ -69,14 +89,15 @@ unlock_steps = {depths[unlocked - 1]: 0}
 for step in range(args.steps):
     for g in opt.param_groups:
         g["lr"] = lr_at(step)
-    worlds, lessons, qrows, qrecs, _, _ = sample_batch(rng, args.batch, args.k, depths[:unlocked])
+    worlds, lessons, qrows, qrecs, _, _ = sample_batch(rng, args.batch, args.k, depths[:unlocked], layout=args.layout)
     answers = [worlds[i].elem_names[q.answer] for i, q in qrecs]
-    L = torch.tensor(lessons)
+    L = torch.tensor(lessons, device=dev)
     qx, qpos = pad_queries(qrows, answers)
+    qx, qpos = qx.to(dev), qpos.to(dev)
     protocol = "fw_reset" if rng.random() < args.p_reset else "continuous"
     model.train()
     logits = run_protocol(model, L, qx, qpos, args.k, protocol)
-    y = torch.tensor(answers)
+    y = torch.tensor(answers, device=dev)
     loss = F.cross_entropy(logits, y)
     opt.zero_grad(set_to_none=True)
     loss.backward()
@@ -93,15 +114,28 @@ for step in range(args.steps):
                "lr": lr_at(step), "gn": float(gn), "elapsed_s": round(time.time() - t0, 1), "acc_by_depth": {d: round(sum(v) / len(v), 3) for d, v in sorted(dep.items())}}
         rec["unlocked_depths"] = depths[:unlocked]
         hardest = depths[unlocked - 1]
-        if unlocked < len(depths) and hardest in dep and sum(dep[hardest]) / len(dep[hardest]) >= args.unlock_acc:
+        thr = args.unlock_acc if (unlocked > 1 or args.unlock_acc1 is None) else args.unlock_acc1
+        can = unlocked > 1 or step + 1 >= args.min_depth1_steps
+        if unlocked < len(depths) and can and hardest in dep and sum(dep[hardest]) / len(dep[hardest]) >= thr:
             unlocked += 1
             unlock_steps[depths[unlocked - 1]] = step + 1
         rec["unlock_steps"] = dict(unlock_steps)
         log.append(rec)
         print(json.dumps(rec), flush=True)
+        (out / "train_log.json").write_text(json.dumps(log))  # progress on disk at every log point
+        stop = None
+        if args.abort_depth1_step and step + 1 >= args.abort_depth1_step and unlocked == 1 and rec["acc"] < args.abort_depth1_acc:
+            stop = f"abort: depth-1 acc {rec['acc']:.3f} < {args.abort_depth1_acc} at step {step + 1} (budget guard)"
+        if time.time() - t0 > args.time_limit_s:
+            stop = f"time limit {args.time_limit_s}s reached at step {step + 1}"
         loss_hist, acc_hist = [], []
         dep = {}
+        if stop:
+            print(stop, flush=True)
+            log.append({"stopped": stop, "step": step + 1})
+            torch.save({"model": model.state_dict(), "cfg": cfg.to_dict(), "args": vars(args), "step": step + 1, "unlock_steps": unlock_steps, "stopped": stop}, out / "model.pt")
+            break
     if (step + 1) % 2000 == 0 or step + 1 == args.steps:
         torch.save({"model": model.state_dict(), "cfg": cfg.to_dict(), "args": vars(args), "step": step + 1, "unlock_steps": unlock_steps}, out / "model.pt")
-(out / "train_log.json").write_text(json.dumps(log, indent=1))
+(out / "train_log.json").write_text(json.dumps(log))
 print("done", flush=True)
