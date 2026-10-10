@@ -135,6 +135,17 @@ describe('lockInfo and sessionStatus', () => {
     expect(s.light).toBe('unguarded');
     expect(s.sentence).toContain('would have intervened on 1 of the last 1');
   });
+  it('judges memory by the last chunk that could learn, not by trailing generated-text chunks', () => {
+    const chunks = [tx(0, 'commit'), tx(1, 'rollback', {}, ['chunk_loss(5>4)'], 1, 0), tx(2, 'readonly', {}, ['learning_ineligible'], 0, 0)];
+    const s = sessionStatus(detail(summary()), chunks)!;
+    expect(s.light).toBe('watch');
+    expect(s.sentence).toContain('Last learning chunk was rolled back');
+    expect(s.recent.window).toBe(2);
+    expect(verdictSentence(chunks[2])).toContain('no token in this chunk was eligible');
+  });
+  it('is not locked just because the newest chunks were not eligible to learn', () => {
+    expect(sessionStatus(detail(summary()), [tx(0, 'commit'), tx(1, 'readonly', {}, ['learning_ineligible'], 0, 0)])!.light).toBe('ok');
+  });
   it('returns null without a session', () => expect(sessionStatus(null, [])).toBeNull());
 });
 

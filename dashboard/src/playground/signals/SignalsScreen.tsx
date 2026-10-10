@@ -171,8 +171,9 @@ export function SignalsScreen() {
   const state = useStore((s) => s.state);
   const stale = useStore((s) => s.stale);
   const selected = useStore((s) => s.selectedChunk);
+  const loading = useStore((s) => s.busy.session || !s.healthChecked);
   const selectChunk = useStore((s) => s.selectChunk);
-  if (!detail) return <Empty title="No text session selected." detail="Choose a session above, or create one under Sessions." />;
+  if (!detail) return <Empty title="No text session selected." detail={loading ? 'Loading…' : 'Choose a session above, or create one under Sessions.'} />;
   if (transactions.length === 0) return <Empty title="No chunks yet." detail="Send a message in Chat; every chunk it produces is measured here." />;
   const data = rows(transactions);
   const present = new Set(presentFields(transactions, CHARTS.map((c) => c.field)));

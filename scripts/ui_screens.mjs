@@ -15,8 +15,9 @@ const shoot = async (name, session, tab, vp = { width: 1440, height: 900 }, full
   await page.waitForSelector('header');
   // pick the session: the header shows a Session select when the model has several
   const sel = page.getByRole('combobox', { name: 'Session' });
-  if (await sel.count()) await sel.selectOption(session);
-  await page.waitForFunction(() => !document.body.innerText.includes('Loading'), null, { timeout: 120000 });
+  await sel.waitFor({ timeout: 120000 }); // sessions are loaded
+  await sel.selectOption(session);
+  await page.waitForFunction(() => !/Loading|No text session selected/.test(document.body.innerText), null, { timeout: 120000 });
   await page.waitForTimeout(800);
   if (tab) { await page.getByRole('button', { name: new RegExp(tab, 'i') }).first().click(); await page.waitForTimeout(800); }
   if (after) await after(page);
@@ -32,5 +33,19 @@ const shoot = async (name, session, tab, vp = { width: 1440, height: 900 }, full
 for (const s of sessions) {
   await shoot(`${s}_chat`, s, 'Chat');
   await shoot(`${s}_signals`, s, 'Signals');
+}
+// the why drawer: open the lock's first chunk (or the first non-commit chunk) from the header timeline
+if (process.env.DRAWER) {
+  for (const s of sessions) {
+    await shoot(`${s}_drawer`, s, 'Signals', { width: 1440, height: 1000 }, false, async (page) => {
+      const cell = page.getByRole('button', { name: /^Chunk \d+: (Rollback|Scale|Project)/ }).first();
+      if (await cell.count()) await cell.click();
+      await page.waitForTimeout(600);
+    });
+  }
+}
+// narrow layout
+if (process.env.NARROW) {
+  for (const s of sessions) await shoot(`${s}_narrow`, s, 'Chat', { width: 390, height: 1400 }, false);
 }
 await browser.close();

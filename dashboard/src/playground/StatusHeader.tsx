@@ -24,6 +24,7 @@ export function StatusHeader() {
 
   const sorted = transactions.slice().sort((a, b) => a.index - b.index);
   const last = sorted[sorted.length - 1] ?? null;
+  const lastLearned = sorted.filter((t) => t.decision.kind !== 'readonly').slice(-1)[0] ?? null;
   const norm = last ? normOutcome(last) : null;
   const turns = turnsFromTrace(detail.trace, transactions);
   const lastTurn = turns[turns.length - 1];
@@ -86,6 +87,9 @@ export function StatusHeader() {
                   proposed {fmt(norm.proposed)} · accepted {fmt(norm.accepted)}
                   {norm.ratio !== null && last.decision.kind !== 'readonly' ? ` (${Math.round(norm.ratio * 100)}%)` : ''}
                 </p>
+                {last.decision.kind === 'readonly' && lastLearned && !lock ? (
+                  <p className="mt-0.5 text-xs text-ink-secondary">Last learning chunk: #{lastLearned.index}, {lastLearned.decision.kind === 'commit' ? 'committed' : lastLearned.decision.kind}</p>
+                ) : null}
                 {totals && totals.chunks > 1 ? (
                   <p className="mt-0.5 text-xs text-ink-secondary">
                     This turn: {totals.chunks} chunks, {totals.committed} committed{totals.intervened > 0 ? `, ${totals.intervened} intervened` : ''}{totals.readOnly > 0 ? `, ${totals.readOnly} read-only` : ''}
@@ -99,9 +103,9 @@ export function StatusHeader() {
           <GaugeBar gauge={status.cusum} />
           <GaugeBar gauge={status.budget} />
           <div className="min-w-0">
-            <p className="text-label font-semibold uppercase tracking-wide text-ink-muted">Recent chunks</p>
+            <p className="text-label font-semibold uppercase tracking-wide text-ink-muted">Recent learning chunks</p>
             <p className="mt-1 font-mono text-sm text-ink-primary">
-              {status.recent.window === 0 ? 'none yet' : `${status.recent.intervened} of ${status.recent.window} intervened`}
+              {status.recent.window === 0 ? 'none yet' : `${status.recent.intervened} of ${status.recent.window} learning chunks intervened`}
             </p>
             {status.recent.wouldIntervene > 0 && detail.meta.harness.log_only ? (
               <p className="text-xs text-ink-secondary">{status.recent.wouldIntervene} would have been</p>
