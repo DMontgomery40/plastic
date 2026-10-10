@@ -7,6 +7,9 @@ RUN npm run build
 
 FROM python:3.12-slim
 WORKDIR /app
+# Spaces dev mode appends `git config --global ...` build steps, which fail with exit 127 without git
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+ && rm -rf /var/lib/apt/lists/*
 # the default PyPI wheel carries CUDA and falls back to CPU where no GPU exists
 RUN pip install --no-cache-dir torch==2.14.0
 COPY pyproject.toml README.md LICENSE ./
