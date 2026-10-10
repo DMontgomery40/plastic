@@ -2,6 +2,8 @@ import { lazy, Suspense, useEffect } from 'react';
 import { Empty } from '../components/panels/Empty';
 import { ChatScreen } from './chat/ChatScreen';
 import { Header } from './Header';
+import { StatusHeader } from './StatusHeader';
+import { WhyDrawer } from './WhyDrawer';
 import { SessionsScreen } from './sessions/SessionsScreen';
 import { SignalsScreen } from './signals/SignalsScreen';
 import { TABS, useStore } from './store';
@@ -55,6 +57,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-surface">
       <Header />
+      {tab !== 'sleep' && !offline ? <StatusHeader /> : null}
       <main className="mx-auto max-w-[1500px] px-4 py-4">
         {error ? (
           <div className="mb-4">
@@ -77,6 +80,7 @@ export default function App() {
           </div>
         )}
       </main>
+      {tab !== 'sleep' ? <WhyDrawer /> : null}
     </div>
   );
 }

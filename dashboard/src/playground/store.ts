@@ -27,6 +27,9 @@ function initialTab(): Tab {
   return typeof window !== 'undefined' && window.location.hash.startsWith('#sleep') ? 'sleep' : 'chat';
 }
 
+/** Most recent chunks kept in memory and drawn. */
+export const TX_WINDOW = 400;
+
 const NO_CAPABILITIES: Capabilities = { create_session: false, fork: false, reset: false, delete: false, resume: false, calibrate: false, sleep: false };
 
 export interface PlaygroundState {
@@ -41,6 +44,8 @@ export interface PlaygroundState {
   lastChat: ChatResult | null;
   /** True after a request failed since the last successful refresh: data shown may be stale. */
   stale: boolean;
+  /** Chunk index whose 'why' drawer is open, or null. */
+  selectedChunk: number | null;
   sampling: Sampling;
   tab: Tab;
   busy: { chat: boolean; session: boolean; mutation: boolean };
@@ -52,6 +57,7 @@ export interface PlaygroundState {
 
   capabilities: () => Capabilities;
   setTab: (tab: Tab) => void;
+  selectChunk: (index: number | null) => void;
   setSampling: (patch: Partial<Sampling>) => void;
   clearError: () => void;
   bootstrap: () => Promise<void>;
@@ -87,6 +93,7 @@ export const useStore = create<PlaygroundState>((set, get) => ({
   state: null,
   lastChat: null,
   stale: false,
+  selectedChunk: null,
   sampling: { max_new_tokens: 96, temperature: 0.7, top_k: 40, seed: null },
   tab: initialTab(),
   busy: { chat: false, session: false, mutation: false },
@@ -96,6 +103,7 @@ export const useStore = create<PlaygroundState>((set, get) => ({
 
   capabilities: () => get().health?.capabilities ?? NO_CAPABILITIES,
   setTab: (tab) => set({ tab }),
+  selectChunk: (index) => set({ selectedChunk: index }),
   setSampling: (patch) => set({ sampling: { ...get().sampling, ...patch } }),
   clearError: () => set({ error: null }),
 
@@ -133,7 +141,7 @@ export const useStore = create<PlaygroundState>((set, get) => ({
   },
 
   selectSession: async (sessionId) => {
-    set({ currentSessionId: sessionId, detail: null, transactions: [], state: null, lastChat: null });
+    set({ currentSessionId: sessionId, detail: null, transactions: [], state: null, lastChat: null, selectedChunk: null });
     if (!sessionId) return;
     await get().reloadCurrent();
   },
@@ -143,7 +151,9 @@ export const useStore = create<PlaygroundState>((set, get) => ({
     if (!id) return;
     set({ busy: { ...get().busy, session: true } });
     try {
-      const [detail, page, state] = await Promise.all([api.getSession(id), api.getTransactions(id), api.getSessionState(id)]);
+      const [detail, first, state] = await Promise.all([api.getSession(id), api.getTransactions(id, TX_WINDOW, 0), api.getSessionState(id)]);
+      // the API pages from the START of the log; a long session's latest decisions (and its lock) are at the end
+      const page = first.total > first.items.length ? await api.getTransactions(id, TX_WINDOW, first.total - TX_WINDOW) : first;
       if (get().currentSessionId !== id) return;
       set({ detail, transactions: page.items, state, stale: false, error: null });
     } catch (err) {

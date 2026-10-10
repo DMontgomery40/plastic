@@ -3,10 +3,10 @@
 import type { DecisionKind, HarnessConfig, RunnerSummary, TraceRecord, TransactionRecord, Turn } from './types';
 
 export const DECISION_COLOR: Record<DecisionKind, string> = {
-  commit: '#3fd17a',
-  rollback: '#ff6b6b',
-  scale: '#f0b429',
-  project: '#58a6ff',
+  commit: '#4ad6a7',
+  rollback: '#ff8466',
+  scale: '#f5d547',
+  project: '#8ab4ff',
   readonly: '#94a3b4',
 };
 
