@@ -14,7 +14,7 @@ function CreateSession() {
   const busy = useStore((s) => s.busy.mutation);
   const calibrating = useStore((s) => s.calibrating);
   const [modelId, setModelId] = useState(models[0]?.model_id ?? '');
-  const [guarded, setGuarded] = useState(false);
+  const [guarded, setGuarded] = useState(true);
   const model = models.find((m) => m.model_id === (modelId || models[0]?.model_id));
   if (!caps.create_session) return null;
   if (models.length === 0) return <Empty title="No text model registered." detail="Register or train a text model with the CLI, then reload." command="uv run plastic --help" />;
