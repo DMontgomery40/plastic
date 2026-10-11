@@ -37,6 +37,8 @@ function rows(transactions: TransactionRecord[]) {
     for (const c of CHARTS) row[c.field] = isFinite_(s[c.field]) ? (s[c.field] as number) : null;
     row.proposed = isFinite_(tx.signals.delta_norm) ? tx.signals.delta_norm : null;
     row.accepted = isFinite_(tx.accepted?.delta_norm) ? tx.accepted.delta_norm : null;
+    row.cusum_s_hi = isFinite_(tx.signals.cusum_s_hi) ? tx.signals.cusum_s_hi : null;
+    row.cusum_s_lo = isFinite_(tx.signals.cusum_s_lo) ? tx.signals.cusum_s_lo : null;
     return row;
   });
 }
@@ -150,6 +152,7 @@ function ChunkTable({ transactions }: { transactions: TransactionRecord[] }) {
                         <div>eligible: {tx.eligible === undefined ? 'n/a' : String(tx.eligible)} · read-only: {String(tx.read_only)}{tx.read_only_reason ? ` (${tx.read_only_reason})` : ''}</div>
                         <div>budget: used {fmt(tx.signals.budget_used)} · remaining {tx.signals.budget_remaining === null ? 'uncapped' : fmt(tx.signals.budget_remaining)}</div>
                         <div>positions {tx.pos_start}–{tx.pos_end} · {fmt(tx.seconds, 2)} s</div>
+                        <div>CUSUM state: s_hi {fmt(tx.signals.cusum_s_hi)} · s_lo {fmt(tx.signals.cusum_s_lo)}</div>
                         {isFinite_(tx.signals.canary_delta_coherence) ? <div>canary Δcoherence {fmt(tx.signals.canary_delta_coherence)} · Δpoison {fmt(tx.signals.canary_delta_poison)} · alignment {fmt(tx.signals.canary_alignment)}</div> : null}
                         {isFinite_(tx.signals.beta_mean) ? <div>step {fmt(tx.signals.beta_mean)} · alpha {fmt(tx.signals.alpha_mean)}</div> : null}
                       </div>
@@ -212,6 +215,11 @@ export function SignalsScreen() {
             <LineChartPanel data={data} xKey="chunk" series={[{ key: c.field, label: c.title, color: c.color }]} logScale={c.log} xLabel="chunk" showLegend={false} ariaLabel={`${c.title} per chunk`} />
           </Panel>
         ))}
+        {transactions.some((tx) => isFinite_(tx.signals.cusum_s_hi) || isFinite_(tx.signals.cusum_s_lo)) ? (
+          <Panel title="CUSUM state (update-size alarm)">
+            <LineChartPanel data={data} xKey="chunk" series={[{ key: 'cusum_s_hi', label: 'Upper', color: SERIES_A }, { key: 'cusum_s_lo', label: 'Lower', color: SERIES_B }]} xLabel="chunk" ariaLabel="CUSUM state (s_hi and s_lo)" />
+          </Panel>
+        ) : null}
       </div>
       <FastWeightPanel state={state} />
       <Panel title="Chunks" subtitle="newest first · select a chunk number for z-scores, reasons, budget and canaries">

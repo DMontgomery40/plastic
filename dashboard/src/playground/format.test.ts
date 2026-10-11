@@ -19,6 +19,8 @@ function tx(index: number, pos_start: number, pos_end: number, opts: Partial<Tra
       delta_norm: 10,
       z: {},
       cusum_alarm: false,
+      cusum_s_hi: 0,
+      cusum_s_lo: 0,
       budget_used: 0,
       budget_remaining: null,
       log_delta_norm: 2.3,
