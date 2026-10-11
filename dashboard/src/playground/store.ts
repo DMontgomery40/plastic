@@ -67,7 +67,7 @@ export interface PlaygroundState {
   selectSession: (sessionId: string | null) => Promise<void>;
   reloadCurrent: () => Promise<void>;
   sendChat: (prompt: string) => Promise<boolean>;
-  createSession: (modelId: string, guarded: boolean) => Promise<string | null>;
+  createSession: (modelId: string, guarded: boolean, cooldown?: number) => Promise<string | null>;
   resetSession: (sessionId: string) => Promise<void>;
   resumeSession: (sessionId: string) => Promise<void>;
   forkSession: (sessionId: string) => Promise<string | null>;
@@ -180,10 +180,13 @@ export const useStore = create<PlaygroundState>((set, get) => ({
     }
   },
 
-  createSession: async (modelId, guarded) => {
+  createSession: async (modelId, guarded, cooldown = 0) => {
     set({ busy: { ...get().busy, mutation: true }, error: null });
     try {
-      const created = await api.createSession({ model_id: modelId, harness: guarded ? { log_only: false } : { log_only: true, freeze_on_alarm: false } });
+      const harness = guarded
+        ? { log_only: false, alarm_cooldown: cooldown }
+        : { log_only: true, freeze_on_alarm: false };
+      const created = await api.createSession({ model_id: modelId, harness });
       await get().refreshSessions();
       await get().selectSession(created.session_id);
       set({ tab: 'chat' });
