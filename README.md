@@ -7,6 +7,11 @@ can learn lastingly from experience.
 [models on Hugging Face](https://huggingface.co/dmontgomery40/plastic) ·
 [live Space](https://huggingface.co/spaces/dmontgomery40/plastic)
 
+**Weights:** [TTT chat safetensors](https://huggingface.co/dmontgomery40/plastic/blob/main/text-chat/model.safetensors)
+· [PlasticCore text](https://huggingface.co/dmontgomery40/plastic/blob/main/text/checkpoint.pt)
+· [PlasticCore physics](https://huggingface.co/dmontgomery40/plastic/blob/main/physics/checkpoint.pt)
+· [Download instructions and checkpoint identities](docs/checkpoints.md)
+
 `plastic` studies models that learn while they read: their memory is a set of fast
 weights that take gradient steps on a self-supervised objective as tokens arrive, so
 context is compressed into weights instead of a growing cache. Three substrates share

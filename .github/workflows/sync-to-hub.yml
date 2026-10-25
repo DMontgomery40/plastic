@@ -50,10 +50,17 @@ jobs:
           out = Path(os.environ['EXPORT_DIR'])
           out.mkdir(parents=True, exist_ok=False)
           repo, kind = os.environ['HF_REPO_ID'], os.environ['HF_REPO_TYPE']
-          info = HfApi().repo_info(repo, repo_type=kind)
+          info = HfApi().repo_info(repo, repo_type=kind, files_metadata=True)
+          # Hub-owned weights are independent of Git source. Keep their content
+          # identities without downloading many gigabytes on every source push.
+          preserved = {f.rfilename: {'blob_id': f.blob_id, 'size': f.size}
+                       for f in info.siblings
+                       if f.rfilename.startswith(('text/', 'physics/', 'text-chat/', 'qwen/', 'checkpoints/'))
+                       or f.rfilename in ('weights-manifest.json', 'WEIGHTS.md')}
+          out.with_suffix('.preserved.json').write_text(json.dumps(preserved))
           saved = Path(snapshot_download(repo, repo_type=kind, revision=info.sha,
                        allow_patterns=['README.md', 'text/**', 'physics/**']))
-          # hub-sync mirrors deletions: include all Hub-owned checkpoint files.
+          # Small original bundles are retained in the Space's Docker context.
           for folder in ('text', 'physics'):
               assert (saved / folder / 'manifest.json').is_file(), folder
               shutil.copytree(saved / folder, out / folder)
@@ -77,15 +84,18 @@ jobs:
                         'preserved_hf_revision': info.sha, 'repo_type': kind}
           (out / 'source_snapshot.json').write_text(json.dumps(provenance, indent=2) + '\n')
           # Record every exported byte outside the upload directory for verification.
-          hashes = {p.relative_to(out).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+          def sha256(path):
+              with path.open('rb') as stream:
+                  return hashlib.file_digest(stream, 'sha256').hexdigest()
+          hashes = {p.relative_to(out).as_posix(): sha256(p)
                     for p in out.rglob('*') if p.is_file() and not p.name.startswith('.git')}
           out.with_suffix('.hashes.json').write_text(json.dumps(hashes))
           print(f'Prepared {len(hashes)} files for {kind}; checkpoint bundles preserved')
           PY
       - name: Sync with the official Hugging Face action
         # v0.1.0 called `hf repo create`, which the hf CLI 2.0.0 removed (2026-09-24 sync failure); v0.3.0 calls
-        # `hf repos create`. The CLI is pinned so an upstream release cannot break publication silently; with no
-        # include/exclude inputs v0.3.0 mirrors the export directory exactly as v0.1.0 did (--delete="*").
+        # `hf repos create`. Disable mirror deletion: Hub-owned weights are absent
+        # from GitHub by design. Source removals require explicit targeted cleanup.
         uses: huggingface/hub-sync@v0.3.0
         with:
           github_repo_id: ${{ github.repository }}
@@ -95,6 +105,7 @@ jobs:
           space_sdk: docker
           subdirectory: ${{ env.EXPORT_DIR }}
           hf_version: '2.0.0'
+          delete_removed: 'false'
       - name: Verify both source identity and preserved checkpoint bytes
         run: |
           python - <<'PY'
@@ -105,11 +116,17 @@ jobs:
           from huggingface_hub import HfApi, snapshot_download
 
           repo, kind = os.environ['HF_REPO_ID'], os.environ['HF_REPO_TYPE']
-          info = HfApi().repo_info(repo, repo_type=kind)
+          info = HfApi().repo_info(repo, repo_type=kind, files_metadata=True)
           expected = json.loads(Path(os.environ['EXPORT_DIR']).with_suffix('.hashes.json').read_text())
-          actual = Path(snapshot_download(repo, repo_type=kind, revision=info.sha))
+          actual = Path(snapshot_download(repo, repo_type=kind, revision=info.sha,
+                                         allow_patterns=list(expected)))
           for name, digest in expected.items():
-              assert hashlib.sha256((actual / name).read_bytes()).hexdigest() == digest, name
+              with (actual / name).open('rb') as stream:
+                  assert hashlib.file_digest(stream, 'sha256').hexdigest() == digest, name
+          preserved = json.loads(Path(os.environ['EXPORT_DIR']).with_suffix('.preserved.json').read_text())
+          published = {f.rfilename: {'blob_id': f.blob_id, 'size': f.size} for f in info.siblings}
+          for name, identity in preserved.items():
+              assert published.get(name) == identity, f'Published checkpoint changed or disappeared: {name}'
           forbidden = {'SHARED_SCRATCHPAD.md', 'artifacts', 'training_data', '.claude', '.codex'}
           assert not any(Path(f.rfilename).parts[0] in forbidden for f in info.siblings)
           print(f'Verified {kind} at {info.sha}: {len(expected)} exact files, including checkpoints')

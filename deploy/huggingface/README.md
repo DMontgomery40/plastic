@@ -9,10 +9,13 @@ for both the [model repository](https://huggingface.co/dmontgomery40/plastic) an
 The GitHub `HF_TOKEN` secret must have write access to both repositories.
 
 The workflow stages committed source and the shared README body, preserves each
-destination's README metadata and existing `text/` and `physics/` checkpoint bundles,
+destination's README metadata and existing model bundles (`text/`, `physics/`,
+`text-chat/`, `qwen/` and `checkpoints/`),
 and supplies the Space Dockerfile. It excludes local artifacts and the private
 scratchpad. Both jobs verify every exported file against the published bytes;
-`source_snapshot.json` records the originating GitHub commit. GitHub is the source
+`source_snapshot.json` records the originating GitHub commit. Mirror deletion is
+disabled so independently uploaded weights survive source publication; remove
+obsolete source files through explicit targeted cleanup. GitHub is the source
 for normal source/documentation edits; checkpoint releases remain explicit.
 
 Check both jobs in GitHub Actions after publishing. Runtime changes also require a
@@ -21,6 +24,14 @@ push is a backup and does not trigger deployment. To retry delivery, use the wor
 **Run workflow** control on `main`.
 
 ## Deployment
+
+Dev Mode is enabled for SSH development. The Docker image installs the required
+`bash`, `curl`, `wget`, `procps`, `git` and `git-lfs` packages and makes `/app`
+writable by UID 1000. Obtain the current SSH connection details from the Space's
+Dev Mode panel. Full validation requested for this deployment runs inside the
+Space over SSH, including Python tests, dashboard tests/build and checkpoint
+retrieval; do not substitute a run on the local Mac. Use a disposable validation
+directory and artifact store. Return source changes to GitHub before the next sync.
 
 The Space serves the existing React dashboard and Python model API on one port.
 The model picker opens one shared session for each hosted model:
@@ -47,8 +58,9 @@ runs at a time. Sessions reaching position 4,096 need an explicit reset. Trainin
 calibration, red-team execution, Sleep execution, and session creation/forking/deletion
 are unavailable in this deployment; use the local project for those workflows.
 The Sleep tab still shows the published research observatory. The fine-tuned
-TTT-MLP checkpoint is not yet published or selectable; its future integration is
-tracked in [current research status](../../docs/research/current-status.md).
+TTT-MLP checkpoint is [published for download](../../docs/checkpoints.md) but is not
+selectable in this deployment; its hosted integration is tracked in
+[current research status](../../docs/research/current-status.md).
 
 The served HTML marks public mode with `data-public-demo="true"` on its body.
 The API supplies the public capabilities, model/session catalogs and matching
