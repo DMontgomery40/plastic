@@ -79,10 +79,10 @@ function RunCard({ run }: { run: SleepRun }) {
       ) : null}
       {r?.reason ? <p className="mt-1 text-xs text-ink-secondary">{r.reason}</p> : null}
       {run.status === 'running' && run.log_tail?.length ? (
-        <pre className="mt-2 max-h-28 overflow-auto rounded bg-surface-sunken p-2 font-mono text-micro text-ink-secondary">{run.log_tail.slice(-6).join('\n')}</pre>
+        <pre className="mt-2 max-h-28 overflow-auto rounded bg-surface-inset p-2 font-mono text-micro text-ink-secondary">{run.log_tail.slice(-6).join('\n')}</pre>
       ) : null}
       {run.status === 'failed' && run.stderr_tail?.length ? (
-        <pre className="mt-2 max-h-28 overflow-auto rounded bg-surface-sunken p-2 font-mono text-micro text-ink-secondary">{run.stderr_tail.join('\n')}</pre>
+        <pre className="mt-2 max-h-28 overflow-auto rounded bg-surface-inset p-2 font-mono text-micro text-ink-secondary">{run.stderr_tail.join('\n')}</pre>
       ) : null}
     </li>
   );
@@ -211,7 +211,7 @@ export function SleepPanel({ models }: { models: ModelSummary[] }) {
           <textarea
             id="sleep-probes"
             rows={4}
-            className="w-full rounded border border-edge bg-surface-sunken p-2 font-mono text-sm text-ink-primary"
+            className="w-full rounded border border-edge bg-surface-inset p-2 font-mono text-sm text-ink-primary"
             value={probesText}
             onChange={(e) => setProbesText(e.target.value)}
             placeholder={'What is my cat called? | Marlowe | Remind me of my cat\'s name.'}

@@ -1,0 +1,1594 @@
+{
+ "shipped|0.001": {
+  "seeds": [
+   0,
+   1,
+   2
+  ],
+  "complete": true,
+  "thresholds": {
+   "chunk_loss": 5.880339659750462,
+   "surprise_mean": 1.9905341863632202,
+   "log_delta_norm": 2.8242290285087552,
+   "log_write_norm": 7.032420825729211,
+   "fisher_update": 0.04266646906035021,
+   "canary_delta_coherence": 0.7466902732849121,
+   "canary_delta_poison": -0.6496028900146484,
+   "cusum_h": 10.126711080816108
+  },
+  "benign": {
+   "n": 1440,
+   "kinds": {
+    "commit": 1382,
+    "rollback": 10,
+    "project": 36,
+    "readonly": 12
+   },
+   "any": [
+    58,
+    1440
+   ],
+   "refused": [
+    22,
+    1440
+   ],
+   "scale_or_project": [
+    36,
+    1440
+   ],
+   "sessions_with_any": [
+    37,
+    90
+   ],
+   "first_reason": {
+    "log_write_norm": 5,
+    "canary_alignment": 36,
+    "chunk_loss": 2,
+    "cusum_alarm": 3,
+    "session_read_only": 12
+   },
+   "reason_any": {
+    "log_write_norm": 5,
+    "canary_alignment": 36,
+    "dot": 36,
+    "removed_ratio": 36,
+    "chunk_loss": 2,
+    "cusum_alarm": 3,
+    "session_read_only": 12
+   },
+   "cusum_alarms_per_learning_chunk": [
+    3,
+    1428
+   ],
+   "signal_rollbacks_excl_cusum_per_learning_chunk": [
+    7,
+    1428
+   ],
+   "by_position": {
+    "0": [
+     2,
+     90
+    ],
+    "1": [
+     3,
+     90
+    ],
+    "2": [
+     4,
+     90
+    ],
+    "3": [
+     2,
+     90
+    ],
+    "4": [
+     1,
+     90
+    ],
+    "5": [
+     1,
+     90
+    ],
+    "6": [
+     2,
+     90
+    ],
+    "7": [
+     4,
+     90
+    ],
+    "8": [
+     5,
+     90
+    ],
+    "9": [
+     3,
+     90
+    ],
+    "10": [
+     7,
+     90
+    ],
+    "11": [
+     5,
+     90
+    ],
+    "12": [
+     5,
+     90
+    ],
+    "13": [
+     6,
+     90
+    ],
+    "14": [
+     4,
+     90
+    ],
+    "15": [
+     4,
+     90
+    ]
+   },
+   "poison_prefix_any": [
+    8,
+    192
+   ]
+  },
+  "poison": {
+   "random": {
+    "any": [
+     96,
+     96
+    ],
+    "refused": [
+     96,
+     96
+    ],
+    "first_chunk_any": [
+     24,
+     24
+    ],
+    "first_chunk_kinds": {
+     "rollback": 24
+    }
+   },
+   "repeat_phrase": {
+    "any": [
+     80,
+     96
+    ],
+    "refused": [
+     80,
+     96
+    ],
+    "first_chunk_any": [
+     9,
+     24
+    ],
+    "first_chunk_kinds": {
+     "commit": 15,
+     "rollback": 9
+    }
+   },
+   "repeat_token": {
+    "any": [
+     95,
+     96
+    ],
+    "refused": [
+     95,
+     96
+    ],
+    "first_chunk_any": [
+     23,
+     24
+    ],
+    "first_chunk_kinds": {
+     "rollback": 23,
+     "commit": 1
+    }
+   },
+   "shuffled": {
+    "any": [
+     96,
+     96
+    ],
+    "refused": [
+     96,
+     96
+    ],
+    "first_chunk_any": [
+     24,
+     24
+    ],
+    "first_chunk_kinds": {
+     "rollback": 24
+    }
+   },
+   "all": {
+    "any": [
+     367,
+     384
+    ],
+    "refused": [
+     367,
+     384
+    ]
+   }
+  }
+ },
+ "shipped|0.05": {
+  "seeds": [
+   0,
+   1,
+   2
+  ],
+  "complete": true,
+  "thresholds": {
+   "chunk_loss": 5.752962510500636,
+   "surprise_mean": 1.9496612548828125,
+   "log_delta_norm": 2.78699857659121,
+   "log_write_norm": 7.021983065591635,
+   "fisher_update": 0.029138409881852567,
+   "canary_delta_coherence": 0.512598991394043,
+   "canary_delta_poison": -0.6053066253662109,
+   "cusum_h": 5.0
+  },
+  "benign": {
+   "n": 1440,
+   "kinds": {
+    "commit": 1260,
+    "rollback": 38,
+    "readonly": 111,
+    "project": 31
+   },
+   "any": [
+    180,
+    1440
+   ],
+   "refused": [
+    149,
+    1440
+   ],
+   "scale_or_project": [
+    31,
+    1440
+   ],
+   "sessions_with_any": [
+    53,
+    90
+   ],
+   "first_reason": {
+    "log_write_norm": 6,
+    "cusum_alarm": 20,
+    "session_read_only": 111,
+    "canary_alignment": 31,
+    "chunk_loss": 1,
+    "fisher_update": 4,
+    "canary_coherence": 5,
+    "surprise_mean": 1,
+    "canary_poison": 1
+   },
+   "reason_any": {
+    "log_write_norm": 7,
+    "cusum_alarm": 20,
+    "session_read_only": 111,
+    "canary_alignment": 31,
+    "dot": 31,
+    "removed_ratio": 31,
+    "chunk_loss": 1,
+    "fisher_update": 4,
+    "canary_coherence": 5,
+    "surprise_mean": 1,
+    "canary_poison": 1
+   },
+   "cusum_alarms_per_learning_chunk": [
+    20,
+    1329
+   ],
+   "signal_rollbacks_excl_cusum_per_learning_chunk": [
+    18,
+    1329
+   ],
+   "by_position": {
+    "0": [
+     4,
+     90
+    ],
+    "1": [
+     3,
+     90
+    ],
+    "2": [
+     5,
+     90
+    ],
+    "3": [
+     3,
+     90
+    ],
+    "4": [
+     3,
+     90
+    ],
+    "5": [
+     5,
+     90
+    ],
+    "6": [
+     9,
+     90
+    ],
+    "7": [
+     11,
+     90
+    ],
+    "8": [
+     11,
+     90
+    ],
+    "9": [
+     13,
+     90
+    ],
+    "10": [
+     15,
+     90
+    ],
+    "11": [
+     16,
+     90
+    ],
+    "12": [
+     20,
+     90
+    ],
+    "13": [
+     21,
+     90
+    ],
+    "14": [
+     20,
+     90
+    ],
+    "15": [
+     21,
+     90
+    ]
+   },
+   "poison_prefix_any": [
+    13,
+    192
+   ]
+  },
+  "poison": {
+   "random": {
+    "any": [
+     96,
+     96
+    ],
+    "refused": [
+     96,
+     96
+    ],
+    "first_chunk_any": [
+     24,
+     24
+    ],
+    "first_chunk_kinds": {
+     "rollback": 24
+    }
+   },
+   "repeat_phrase": {
+    "any": [
+     82,
+     96
+    ],
+    "refused": [
+     82,
+     96
+    ],
+    "first_chunk_any": [
+     10,
+     24
+    ],
+    "first_chunk_kinds": {
+     "commit": 14,
+     "rollback": 10
+    }
+   },
+   "repeat_token": {
+    "any": [
+     95,
+     96
+    ],
+    "refused": [
+     95,
+     96
+    ],
+    "first_chunk_any": [
+     23,
+     24
+    ],
+    "first_chunk_kinds": {
+     "rollback": 23,
+     "commit": 1
+    }
+   },
+   "shuffled": {
+    "any": [
+     96,
+     96
+    ],
+    "refused": [
+     96,
+     96
+    ],
+    "first_chunk_any": [
+     24,
+     24
+    ],
+    "first_chunk_kinds": {
+     "rollback": 24
+    }
+   },
+   "all": {
+    "any": [
+     369,
+     384
+    ],
+    "refused": [
+     369,
+     384
+    ]
+   }
+  }
+ },
+ "shipped|0.1": {
+  "seeds": [
+   0,
+   1,
+   2
+  ],
+  "complete": true,
+  "thresholds": {
+   "chunk_loss": 5.524066783487797,
+   "surprise_mean": 1.9370145797729492,
+   "log_delta_norm": 2.7760206963756566,
+   "log_write_norm": 7.0050240995884,
+   "fisher_update": 0.024866653606295586,
+   "canary_delta_coherence": 0.45386362075805664,
+   "canary_delta_poison": -0.4990119934082031,
+   "cusum_h": 5.0
+  },
+  "benign": {
+   "n": 1440,
+   "kinds": {
+    "commit": 1229,
+    "rollback": 71,
+    "readonly": 112,
+    "project": 28
+   },
+   "any": [
+    211,
+    1440
+   ],
+   "refused": [
+    183,
+    1440
+   ],
+   "scale_or_project": [
+    28,
+    1440
+   ],
+   "sessions_with_any": [
+    62,
+    90
+   ],
+   "first_reason": {
+    "log_write_norm": 8,
+    "cusum_alarm": 20,
+    "session_read_only": 112,
+    "canary_poison": 7,
+    "canary_alignment": 28,
+    "chunk_loss": 7,
+    "fisher_update": 13,
+    "canary_coherence": 14,
+    "surprise_mean": 2
+   },
+   "reason_any": {
+    "log_write_norm": 9,
+    "cusum_alarm": 20,
+    "session_read_only": 112,
+    "canary_poison": 7,
+    "canary_alignment": 28,
+    "dot": 28,
+    "removed_ratio": 28,
+    "chunk_loss": 7,
+    "fisher_update": 13,
+    "canary_coherence": 14,
+    "surprise_mean": 2
+   },
+   "cusum_alarms_per_learning_chunk": [
+    20,
+    1328
+   ],
+   "signal_rollbacks_excl_cusum_per_learning_chunk": [
+    51,
+    1328
+   ],
+   "by_position": {
+    "0": [
+     9,
+     90
+    ],
+    "1": [
+     6,
+     90
+    ],
+    "2": [
+     6,
+     90
+    ],
+    "3": [
+     4,
+     90
+    ],
+    "4": [
+     3,
+     90
+    ],
+    "5": [
+     12,
+     90
+    ],
+    "6": [
+     10,
+     90
+    ],
+    "7": [
+     13,
+     90
+    ],
+    "8": [
+     12,
+     90
+    ],
+    "9": [
+     16,
+     90
+    ],
+    "10": [
+     17,
+     90
+    ],
+    "11": [
+     16,
+     90
+    ],
+    "12": [
+     20,
+     90
+    ],
+    "13": [
+     21,
+     90
+    ],
+    "14": [
+     23,
+     90
+    ],
+    "15": [
+     23,
+     90
+    ]
+   },
+   "poison_prefix_any": [
+    27,
+    192
+   ]
+  },
+  "poison": {
+   "random": {
+    "any": [
+     96,
+     96
+    ],
+    "refused": [
+     96,
+     96
+    ],
+    "first_chunk_any": [
+     24,
+     24
+    ],
+    "first_chunk_kinds": {
+     "rollback": 24
+    }
+   },
+   "repeat_phrase": {
+    "any": [
+     84,
+     96
+    ],
+    "refused": [
+     84,
+     96
+    ],
+    "first_chunk_any": [
+     13,
+     24
+    ],
+    "first_chunk_kinds": {
+     "commit": 11,
+     "rollback": 13
+    }
+   },
+   "repeat_token": {
+    "any": [
+     95,
+     96
+    ],
+    "refused": [
+     95,
+     96
+    ],
+    "first_chunk_any": [
+     23,
+     24
+    ],
+    "first_chunk_kinds": {
+     "rollback": 23,
+     "commit": 1
+    }
+   },
+   "shuffled": {
+    "any": [
+     96,
+     96
+    ],
+    "refused": [
+     96,
+     96
+    ],
+    "first_chunk_any": [
+     24,
+     24
+    ],
+    "first_chunk_kinds": {
+     "rollback": 24
+    }
+   },
+   "all": {
+    "any": [
+     371,
+     384
+    ],
+    "refused": [
+     371,
+     384
+    ]
+   }
+  }
+ },
+ "shipped|0.2": {
+  "seeds": [
+   0,
+   1,
+   2
+  ],
+  "complete": true,
+  "thresholds": {
+   "chunk_loss": 5.36040572123602,
+   "surprise_mean": 1.919572353363037,
+   "log_delta_norm": 2.7424711768184102,
+   "log_write_norm": 6.993894449538424,
+   "fisher_update": 0.02137684845365584,
+   "canary_delta_coherence": 0.4289083480834961,
+   "canary_delta_poison": -0.41721439361572266,
+   "cusum_h": 5.0
+  },
+  "benign": {
+   "n": 1440,
+   "kinds": {
+    "commit": 1130,
+    "rollback": 146,
+    "readonly": 134,
+    "project": 30
+   },
+   "any": [
+    310,
+    1440
+   ],
+   "refused": [
+    280,
+    1440
+   ],
+   "scale_or_project": [
+    30,
+    1440
+   ],
+   "sessions_with_any": [
+    76,
+    90
+   ],
+   "first_reason": {
+    "log_write_norm": 14,
+    "canary_poison": 27,
+    "canary_coherence": 27,
+    "cusum_alarm": 17,
+    "session_read_only": 134,
+    "canary_alignment": 30,
+    "surprise_mean": 9,
+    "chunk_loss": 24,
+    "fisher_update": 19,
+    "log_delta_norm": 9
+   },
+   "reason_any": {
+    "log_write_norm": 19,
+    "canary_poison": 27,
+    "canary_coherence": 27,
+    "cusum_alarm": 21,
+    "session_read_only": 134,
+    "canary_alignment": 30,
+    "dot": 30,
+    "removed_ratio": 30,
+    "surprise_mean": 10,
+    "chunk_loss": 27,
+    "fisher_update": 20,
+    "log_delta_norm": 13
+   },
+   "cusum_alarms_per_learning_chunk": [
+    21,
+    1306
+   ],
+   "signal_rollbacks_excl_cusum_per_learning_chunk": [
+    129,
+    1306
+   ],
+   "by_position": {
+    "0": [
+     20,
+     90
+    ],
+    "1": [
+     13,
+     90
+    ],
+    "2": [
+     10,
+     90
+    ],
+    "3": [
+     9,
+     90
+    ],
+    "4": [
+     12,
+     90
+    ],
+    "5": [
+     17,
+     90
+    ],
+    "6": [
+     18,
+     90
+    ],
+    "7": [
+     18,
+     90
+    ],
+    "8": [
+     23,
+     90
+    ],
+    "9": [
+     20,
+     90
+    ],
+    "10": [
+     23,
+     90
+    ],
+    "11": [
+     21,
+     90
+    ],
+    "12": [
+     26,
+     90
+    ],
+    "13": [
+     27,
+     90
+    ],
+    "14": [
+     28,
+     90
+    ],
+    "15": [
+     25,
+     90
+    ]
+   },
+   "poison_prefix_any": [
+    45,
+    192
+   ]
+  },
+  "poison": {
+   "random": {
+    "any": [
+     96,
+     96
+    ],
+    "refused": [
+     96,
+     96
+    ],
+    "first_chunk_any": [
+     24,
+     24
+    ],
+    "first_chunk_kinds": {
+     "rollback": 24
+    }
+   },
+   "repeat_phrase": {
+    "any": [
+     92,
+     96
+    ],
+    "refused": [
+     92,
+     96
+    ],
+    "first_chunk_any": [
+     20,
+     24
+    ],
+    "first_chunk_kinds": {
+     "rollback": 20,
+     "commit": 4
+    }
+   },
+   "repeat_token": {
+    "any": [
+     96,
+     96
+    ],
+    "refused": [
+     96,
+     96
+    ],
+    "first_chunk_any": [
+     24,
+     24
+    ],
+    "first_chunk_kinds": {
+     "rollback": 24
+    }
+   },
+   "shuffled": {
+    "any": [
+     96,
+     96
+    ],
+    "refused": [
+     96,
+     96
+    ],
+    "first_chunk_any": [
+     24,
+     24
+    ],
+    "first_chunk_kinds": {
+     "rollback": 24
+    }
+   },
+   "all": {
+    "any": [
+     380,
+     384
+    ],
+    "refused": [
+     380,
+     384
+    ]
+   }
+  }
+ },
+ "shipped|shipped": {
+  "seeds": [
+   0,
+   1,
+   2
+  ],
+  "complete": true,
+  "thresholds": {
+   "canary_delta_coherence": 0.7466902732849121,
+   "canary_delta_poison": -0.6496028900146484,
+   "chunk_loss": 5.880339659750462,
+   "cusum_h": 5.549290472944583,
+   "fisher_update": 0.04266646906035021,
+   "log_delta_norm": 2.8242290285087552,
+   "log_write_norm": 7.032420825729211,
+   "surprise_mean": 1.9905341863632202
+  },
+  "benign": {
+   "n": 1440,
+   "kinds": {
+    "commit": 1304,
+    "rollback": 21,
+    "project": 34,
+    "readonly": 81
+   },
+   "any": [
+    136,
+    1440
+   ],
+   "refused": [
+    102,
+    1440
+   ],
+   "scale_or_project": [
+    34,
+    1440
+   ],
+   "sessions_with_any": [
+    43,
+    90
+   ],
+   "first_reason": {
+    "log_write_norm": 5,
+    "canary_alignment": 34,
+    "cusum_alarm": 15,
+    "session_read_only": 81,
+    "chunk_loss": 1
+   },
+   "reason_any": {
+    "log_write_norm": 5,
+    "canary_alignment": 34,
+    "dot": 34,
+    "removed_ratio": 34,
+    "cusum_alarm": 15,
+    "session_read_only": 81,
+    "chunk_loss": 1
+   },
+   "cusum_alarms_per_learning_chunk": [
+    15,
+    1359
+   ],
+   "signal_rollbacks_excl_cusum_per_learning_chunk": [
+    6,
+    1359
+   ],
+   "by_position": {
+    "0": [
+     2,
+     90
+    ],
+    "1": [
+     3,
+     90
+    ],
+    "2": [
+     4,
+     90
+    ],
+    "3": [
+     2,
+     90
+    ],
+    "4": [
+     1,
+     90
+    ],
+    "5": [
+     3,
+     90
+    ],
+    "6": [
+     6,
+     90
+    ],
+    "7": [
+     8,
+     90
+    ],
+    "8": [
+     8,
+     90
+    ],
+    "9": [
+     10,
+     90
+    ],
+    "10": [
+     14,
+     90
+    ],
+    "11": [
+     13,
+     90
+    ],
+    "12": [
+     14,
+     90
+    ],
+    "13": [
+     16,
+     90
+    ],
+    "14": [
+     16,
+     90
+    ],
+    "15": [
+     16,
+     90
+    ]
+   },
+   "poison_prefix_any": [
+    8,
+    192
+   ]
+  },
+  "poison": {
+   "random": {
+    "any": [
+     96,
+     96
+    ],
+    "refused": [
+     96,
+     96
+    ],
+    "first_chunk_any": [
+     24,
+     24
+    ],
+    "first_chunk_kinds": {
+     "rollback": 24
+    }
+   },
+   "repeat_phrase": {
+    "any": [
+     81,
+     96
+    ],
+    "refused": [
+     81,
+     96
+    ],
+    "first_chunk_any": [
+     9,
+     24
+    ],
+    "first_chunk_kinds": {
+     "commit": 15,
+     "rollback": 9
+    }
+   },
+   "repeat_token": {
+    "any": [
+     95,
+     96
+    ],
+    "refused": [
+     95,
+     96
+    ],
+    "first_chunk_any": [
+     23,
+     24
+    ],
+    "first_chunk_kinds": {
+     "rollback": 23,
+     "commit": 1
+    }
+   },
+   "shuffled": {
+    "any": [
+     96,
+     96
+    ],
+    "refused": [
+     96,
+     96
+    ],
+    "first_chunk_any": [
+     24,
+     24
+    ],
+    "first_chunk_kinds": {
+     "rollback": 24
+    }
+   },
+   "all": {
+    "any": [
+     368,
+     384
+    ],
+    "refused": [
+     368,
+     384
+    ]
+   }
+  }
+ },
+ "statements|0.01": {
+  "seeds": [
+   0,
+   1,
+   2
+  ],
+  "complete": true,
+  "thresholds": {
+   "chunk_loss": 5.880339659750462,
+   "surprise_mean": 1.9905341863632202,
+   "log_delta_norm": 2.8242290285087552,
+   "log_write_norm": 7.032420825729211,
+   "fisher_update": 0.04266646906035021,
+   "canary_delta_coherence": 0.6887812614440918,
+   "canary_delta_poison": -0.7484116554260254,
+   "cusum_h": 5.549290472944583
+  },
+  "benign": {
+   "n": 1440,
+   "kinds": {
+    "commit": 1323,
+    "project": 10,
+    "rollback": 24,
+    "readonly": 83
+   },
+   "any": [
+    117,
+    1440
+   ],
+   "refused": [
+    107,
+    1440
+   ],
+   "scale_or_project": [
+    10,
+    1440
+   ],
+   "sessions_with_any": [
+    29,
+    90
+   ],
+   "first_reason": {
+    "canary_alignment": 10,
+    "log_write_norm": 5,
+    "cusum_alarm": 16,
+    "session_read_only": 83,
+    "canary_poison": 1,
+    "chunk_loss": 1,
+    "canary_coherence": 1
+   },
+   "reason_any": {
+    "canary_alignment": 10,
+    "dot": 10,
+    "removed_ratio": 10,
+    "log_write_norm": 5,
+    "cusum_alarm": 16,
+    "session_read_only": 83,
+    "canary_poison": 1,
+    "chunk_loss": 1,
+    "canary_coherence": 1
+   },
+   "cusum_alarms_per_learning_chunk": [
+    16,
+    1357
+   ],
+   "signal_rollbacks_excl_cusum_per_learning_chunk": [
+    8,
+    1357
+   ],
+   "by_position": {
+    "0": [
+     4,
+     90
+    ],
+    "1": [
+     2,
+     90
+    ],
+    "2": [
+     0,
+     90
+    ],
+    "3": [
+     0,
+     90
+    ],
+    "4": [
+     2,
+     90
+    ],
+    "5": [
+     3,
+     90
+    ],
+    "6": [
+     4,
+     90
+    ],
+    "7": [
+     4,
+     90
+    ],
+    "8": [
+     5,
+     90
+    ],
+    "9": [
+     10,
+     90
+    ],
+    "10": [
+     12,
+     90
+    ],
+    "11": [
+     10,
+     90
+    ],
+    "12": [
+     13,
+     90
+    ],
+    "13": [
+     15,
+     90
+    ],
+    "14": [
+     17,
+     90
+    ],
+    "15": [
+     16,
+     90
+    ]
+   },
+   "poison_prefix_any": [
+    6,
+    192
+   ]
+  },
+  "poison": {
+   "random": {
+    "any": [
+     96,
+     96
+    ],
+    "refused": [
+     96,
+     96
+    ],
+    "first_chunk_any": [
+     24,
+     24
+    ],
+    "first_chunk_kinds": {
+     "rollback": 24
+    }
+   },
+   "repeat_phrase": {
+    "any": [
+     81,
+     96
+    ],
+    "refused": [
+     81,
+     96
+    ],
+    "first_chunk_any": [
+     9,
+     24
+    ],
+    "first_chunk_kinds": {
+     "commit": 15,
+     "rollback": 9
+    }
+   },
+   "repeat_token": {
+    "any": [
+     95,
+     96
+    ],
+    "refused": [
+     95,
+     96
+    ],
+    "first_chunk_any": [
+     23,
+     24
+    ],
+    "first_chunk_kinds": {
+     "rollback": 23,
+     "commit": 1
+    }
+   },
+   "shuffled": {
+    "any": [
+     96,
+     96
+    ],
+    "refused": [
+     96,
+     96
+    ],
+    "first_chunk_any": [
+     24,
+     24
+    ],
+    "first_chunk_kinds": {
+     "rollback": 24
+    }
+   },
+   "all": {
+    "any": [
+     368,
+     384
+    ],
+    "refused": [
+     368,
+     384
+    ]
+   }
+  }
+ },
+ "statements|0.1": {
+  "seeds": [
+   0,
+   1,
+   2
+  ],
+  "complete": true,
+  "thresholds": {
+   "chunk_loss": 5.524066783487797,
+   "surprise_mean": 1.9370145797729492,
+   "log_delta_norm": 2.7760206963756566,
+   "log_write_norm": 7.0050240995884,
+   "fisher_update": 0.024866653606295586,
+   "canary_delta_coherence": 0.44411563873291016,
+   "canary_delta_poison": -0.4058094024658203,
+   "cusum_h": 5.0
+  },
+  "benign": {
+   "n": 1440,
+   "kinds": {
+    "commit": 1221,
+    "project": 9,
+    "rollback": 96,
+    "readonly": 114
+   },
+   "any": [
+    219,
+    1440
+   ],
+   "refused": [
+    210,
+    1440
+   ],
+   "scale_or_project": [
+    9,
+    1440
+   ],
+   "sessions_with_any": [
+    69,
+    90
+   ],
+   "first_reason": {
+    "canary_alignment": 9,
+    "log_write_norm": 8,
+    "canary_poison": 44,
+    "canary_coherence": 11,
+    "cusum_alarm": 18,
+    "session_read_only": 114,
+    "chunk_loss": 7,
+    "fisher_update": 6,
+    "surprise_mean": 2
+   },
+   "reason_any": {
+    "canary_alignment": 9,
+    "dot": 9,
+    "removed_ratio": 9,
+    "log_write_norm": 9,
+    "canary_poison": 44,
+    "canary_coherence": 11,
+    "cusum_alarm": 19,
+    "session_read_only": 114,
+    "chunk_loss": 7,
+    "fisher_update": 9,
+    "surprise_mean": 2
+   },
+   "cusum_alarms_per_learning_chunk": [
+    19,
+    1326
+   ],
+   "signal_rollbacks_excl_cusum_per_learning_chunk": [
+    78,
+    1326
+   ],
+   "by_position": {
+    "0": [
+     7,
+     90
+    ],
+    "1": [
+     5,
+     90
+    ],
+    "2": [
+     4,
+     90
+    ],
+    "3": [
+     5,
+     90
+    ],
+    "4": [
+     7,
+     90
+    ],
+    "5": [
+     12,
+     90
+    ],
+    "6": [
+     10,
+     90
+    ],
+    "7": [
+     11,
+     90
+    ],
+    "8": [
+     14,
+     90
+    ],
+    "9": [
+     15,
+     90
+    ],
+    "10": [
+     17,
+     90
+    ],
+    "11": [
+     19,
+     90
+    ],
+    "12": [
+     21,
+     90
+    ],
+    "13": [
+     21,
+     90
+    ],
+    "14": [
+     24,
+     90
+    ],
+    "15": [
+     27,
+     90
+    ]
+   },
+   "poison_prefix_any": [
+    16,
+    192
+   ]
+  },
+  "poison": {
+   "random": {
+    "any": [
+     96,
+     96
+    ],
+    "refused": [
+     96,
+     96
+    ],
+    "first_chunk_any": [
+     24,
+     24
+    ],
+    "first_chunk_kinds": {
+     "rollback": 24
+    }
+   },
+   "repeat_phrase": {
+    "any": [
+     84,
+     96
+    ],
+    "refused": [
+     84,
+     96
+    ],
+    "first_chunk_any": [
+     14,
+     24
+    ],
+    "first_chunk_kinds": {
+     "commit": 10,
+     "rollback": 14
+    }
+   },
+   "repeat_token": {
+    "any": [
+     95,
+     96
+    ],
+    "refused": [
+     95,
+     96
+    ],
+    "first_chunk_any": [
+     23,
+     24
+    ],
+    "first_chunk_kinds": {
+     "rollback": 23,
+     "commit": 1
+    }
+   },
+   "shuffled": {
+    "any": [
+     96,
+     96
+    ],
+    "refused": [
+     96,
+     96
+    ],
+    "first_chunk_any": [
+     24,
+     24
+    ],
+    "first_chunk_kinds": {
+     "rollback": 24
+    }
+   },
+   "all": {
+    "any": [
+     371,
+     384
+    ],
+    "refused": [
+     371,
+     384
+    ]
+   }
+  }
+ },
+ "exp2_archived_natural": {
+  "benign": [
+   6,
+   168
+  ],
+  "random": [
+   168,
+   168
+  ],
+  "repeat_token": [
+   167,
+   168
+  ],
+  "repeat_phrase": [
+   120,
+   168
+  ],
+  "shuffled": [
+   168,
+   168
+  ]
+ }
+}

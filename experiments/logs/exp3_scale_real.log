@@ -1,0 +1,2 @@
+scale=0.25: non-scale(readonly) chunks=0; n=48 accepted/proposal median=0.358 min=0.272 max=0.522 frac>1=0.000
+scale=0.5: non-scale(readonly) chunks=3; n=45 accepted/proposal median=0.655 min=0.563 max=0.750 frac>1=0.000

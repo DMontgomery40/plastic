@@ -7,7 +7,7 @@ import type { TransactionRecord } from '../types';
  * change), width = its token count. A thin bar marks accepted change where it differs from proposed. Hue is
  * always paired with a glyph, so nothing depends on color alone.
  */
-export function LearningStrip({ chunks, height = 44 }: { chunks: TransactionRecord[]; height?: number }) {
+export function LearningStrip({ chunks, height = 44, onSelect }: { chunks: TransactionRecord[]; height?: number; onSelect?: (index: number) => void }) {
   if (chunks.length === 0) return <p className="text-xs text-ink-muted">No chunks recorded for this turn.</p>;
   const sizes = chunks.map(chunkSize);
   const max = Math.max(1e-9, ...sizes.filter(isFinite_));
@@ -69,6 +69,14 @@ export function LearningStrip({ chunks, height = 44 }: { chunks: TransactionReco
             <span aria-hidden className="pointer-events-none absolute bottom-0 text-micro leading-none text-ink-inverse">
               {DECISION_GLYPH[applied]}
             </span>
+            {onSelect ? (
+              <button
+                type="button"
+                aria-label={`Why chunk ${tx.index}: ${DECISION_LABEL[applied]}`}
+                onClick={() => onSelect(tx.index)}
+                className="absolute inset-0 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              />
+            ) : null}
           </li>
         );
       })}
@@ -86,8 +94,9 @@ export function StripLegend() {
         </span>
       ))}
       <span>▲ prompt tokens · ● generated tokens</span>
-      <span>dashed outline = policy would have intervened</span>
-      <span>bar = accepted share of proposed change</span>
+      <span>dashed outline = guard would have intervened</span>
+      <span>white line = share of the proposed change kept</span>
+      <span>click a cell for why</span>
     </div>
   );
 }

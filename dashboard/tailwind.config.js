@@ -40,18 +40,21 @@ export default {
           soft: '#0c1726',
         },
         status: {
-          commit: '#3fd17a',
-          rollback: '#ff6b6b',
-          scale: '#f0b429',
-          project: '#58a6ff',
+          // Chosen for colour-vision deficiency: the smallest CIE76 distance between any two decision hues is
+          // 32 (normal), 21 (protan), 22 (deutan), 21 (tritan) -- scripts/cvd_check.py. The old green/red pair
+          // measured 8 under deuteranopia. Hue is still always paired with a glyph and a word.
+          commit: '#4ad6a7',
+          rollback: '#ff8466',
+          scale: '#f5d547',
+          project: '#8ab4ff',
           readonly: '#94a3b4',
           running: '#56d4dd',
-          failed: '#ff6b6b',
+          failed: '#ff8466',
         },
         statusFill: {
-          commit: '#1f7a45',
-          rollback: '#9c2b2b',
-          scale: '#8a6410',
+          commit: '#1b7a62',
+          rollback: '#a8412a',
+          scale: '#8a7a10',
           project: '#1f4f8f',
           readonly: '#48545f',
         },

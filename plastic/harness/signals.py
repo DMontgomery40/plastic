@@ -56,8 +56,11 @@ class ChunkSignals:
     compression_ratio: float | None = None
     z: dict[str, float | None] = field(default_factory=dict)
     cusum_alarm: bool = False
+    cusum_s_hi: float = 0.0
+    cusum_s_lo: float = 0.0
     budget_used: float = 0.0
     budget_remaining: float | None = None
+    calibrated_thresholds: dict[str, float | None] = field(default_factory=dict)
 
     @property
     def log_delta_norm(self) -> float:

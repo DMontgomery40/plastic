@@ -1,14 +1,16 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { LineChartPanel } from '../../components/charts/LineChartPanel';
 import { Empty } from '../../components/panels/Empty';
 import { Panel, StatTile } from '../../components/panels/Panel';
 import { DECISION_COLOR, DECISION_GLYPH, DECISION_LABEL, backendLabel, chunkSource, firedSignals, fmt, fmtInt, isFinite_, presentFields, wouldKind } from '../format';
 import { useStore } from '../store';
+import { DecisionTimeline } from '../DecisionTimeline';
+import { explainReason } from '../reasons';
 import type { SessionState, TransactionRecord } from '../types';
 
 const SERIES_A = '#58a6ff';
-const SERIES_B = '#3fd17a';
-const SERIES_C = '#f0b429';
+const SERIES_B = '#4ad6a7';
+const SERIES_C = '#f5d547';
 const SERIES_D = '#c792ea';
 
 interface ChartSpec {
@@ -35,6 +37,8 @@ function rows(transactions: TransactionRecord[]) {
     for (const c of CHARTS) row[c.field] = isFinite_(s[c.field]) ? (s[c.field] as number) : null;
     row.proposed = isFinite_(tx.signals.delta_norm) ? tx.signals.delta_norm : null;
     row.accepted = isFinite_(tx.accepted?.delta_norm) ? tx.accepted.delta_norm : null;
+    row.cusum_s_hi = isFinite_(tx.signals.cusum_s_hi) ? tx.signals.cusum_s_hi : null;
+    row.cusum_s_lo = isFinite_(tx.signals.cusum_s_lo) ? tx.signals.cusum_s_lo : null;
     return row;
   });
 }
@@ -91,6 +95,7 @@ function FastWeightPanel({ state }: { state: SessionState | null }) {
 
 function ChunkTable({ transactions }: { transactions: TransactionRecord[] }) {
   const [open, setOpen] = useState<number | null>(null);
+  const selectChunk = useStore((s) => s.selectChunk);
   const items = transactions.slice().sort((a, b) => b.index - a.index).slice(0, 60);
   const hasSurprise = presentFields(transactions, ['surprise_mean']).length > 0;
   const hasWrite = presentFields(transactions, ['write_norm_sum']).length > 0;
@@ -106,9 +111,9 @@ function ChunkTable({ transactions }: { transactions: TransactionRecord[] }) {
             <th className="py-1.5 pr-3">loss</th>
             {hasSurprise ? <th className="py-1.5 pr-3">surprise</th> : null}
             {hasWrite ? <th className="py-1.5 pr-3">write</th> : null}
-            <th className="py-1.5 pr-3">proposed Δ</th>
-            <th className="py-1.5 pr-3">accepted Δ</th>
-            <th className="py-1.5 pr-3">fired</th>
+            <th className="py-1.5 pr-3">proposed</th>
+            <th className="py-1.5 pr-3">accepted</th>
+            <th className="py-1.5 pr-3">checks that fired</th>
           </tr>
         </thead>
         <tbody className="text-ink-primary">
@@ -117,9 +122,11 @@ function ChunkTable({ transactions }: { transactions: TransactionRecord[] }) {
             const fired = firedSignals(tx);
             const src = chunkSource(tx);
             return (
-              <>
-                <tr key={tx.index} className="cursor-pointer border-t border-edge hover:bg-surface-overlay" onClick={() => setOpen(open === tx.index ? null : tx.index)}>
-                  <td className="py-1.5 pr-3 text-ink-muted">{tx.index}</td>
+              <Fragment key={tx.index}>
+                <tr className="cursor-pointer border-t border-edge hover:bg-surface-overlay" onClick={() => setOpen(open === tx.index ? null : tx.index)}>
+                  <td className="py-1.5 pr-3">
+                    <button type="button" aria-expanded={open === tx.index} aria-label={`Chunk ${tx.index}: show details`} onClick={(e) => { e.stopPropagation(); setOpen(open === tx.index ? null : tx.index); }} className="rounded px-1 text-ink-secondary underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">{tx.index}</button>
+                  </td>
                   <td className="py-1.5 pr-3">
                     <span style={{ color: DECISION_COLOR[tx.decision.kind] }}>{DECISION_GLYPH[tx.decision.kind]} {DECISION_LABEL[tx.decision.kind]}</span>
                     {wk ? <span className="ml-2 text-ink-secondary">would {DECISION_LABEL[wk].toLowerCase()}</span> : null}
@@ -139,18 +146,20 @@ function ChunkTable({ transactions }: { transactions: TransactionRecord[] }) {
                     <td colSpan={10} className="px-3 py-2 text-ink-secondary">
                       <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
                         <div>z: {Object.entries(tx.signals.z ?? {}).filter(([, v]) => isFinite_(v)).map(([k, v]) => `${k} ${fmt(v, 2)}`).join(' · ') || 'none'}</div>
-                        <div>reasons: {tx.decision.reasons.join('; ') || '—'}</div>
-                        <div>requested: {tx.requested.reasons.join('; ') || '—'}</div>
+                        <div>reasons: {tx.decision.reasons.map((r) => explainReason(r).title).join('; ') || '—'}</div>
+                        <div>requested: {tx.requested.reasons.map((r) => explainReason(r).title).join('; ') || '—'}</div>
+                        <div><button type="button" onClick={() => selectChunk(tx.index)} className="font-semibold text-accent underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Open the full explanation</button></div>
                         <div>eligible: {tx.eligible === undefined ? 'n/a' : String(tx.eligible)} · read-only: {String(tx.read_only)}{tx.read_only_reason ? ` (${tx.read_only_reason})` : ''}</div>
                         <div>budget: used {fmt(tx.signals.budget_used)} · remaining {tx.signals.budget_remaining === null ? 'uncapped' : fmt(tx.signals.budget_remaining)}</div>
                         <div>positions {tx.pos_start}–{tx.pos_end} · {fmt(tx.seconds, 2)} s</div>
+                        <div>CUSUM state: s_hi {fmt(tx.signals.cusum_s_hi)} · s_lo {fmt(tx.signals.cusum_s_lo)}</div>
                         {isFinite_(tx.signals.canary_delta_coherence) ? <div>canary Δcoherence {fmt(tx.signals.canary_delta_coherence)} · Δpoison {fmt(tx.signals.canary_delta_poison)} · alignment {fmt(tx.signals.canary_alignment)}</div> : null}
                         {isFinite_(tx.signals.beta_mean) ? <div>step {fmt(tx.signals.beta_mean)} · alpha {fmt(tx.signals.alpha_mean)}</div> : null}
                       </div>
                     </td>
                   </tr>
                 ) : null}
-              </>
+              </Fragment>
             );
           })}
         </tbody>
@@ -164,7 +173,10 @@ export function SignalsScreen() {
   const transactions = useStore((s) => s.transactions);
   const state = useStore((s) => s.state);
   const stale = useStore((s) => s.stale);
-  if (!detail) return <Empty title="No text session selected." detail="Choose a session above, or create one under Sessions." />;
+  const selected = useStore((s) => s.selectedChunk);
+  const loading = useStore((s) => s.busy.session || !s.healthChecked);
+  const selectChunk = useStore((s) => s.selectChunk);
+  if (!detail) return <Empty title="No text session selected." detail={loading ? 'Loading…' : 'Choose a session above, or create one under Sessions.'} />;
   if (transactions.length === 0) return <Empty title="No chunks yet." detail="Send a message in Chat; every chunk it produces is measured here." />;
   const data = rows(transactions);
   const present = new Set(presentFields(transactions, CHARTS.map((c) => c.field)));
@@ -180,13 +192,18 @@ export function SignalsScreen() {
         <StatTile label="Rolled back" value={fmtInt(meta.rollbacks)} tone={meta.rollbacks > 0 ? 'rollback' : 'default'} />
         <StatTile label="Scaled / projected / read-only" value={`${fmtInt(meta.scales)} / ${fmtInt(meta.projects)} / ${fmtInt(meta.readonly)}`} />
       </div>
+      {transactions.length > 40 ? (
+        <Panel title="All decisions" subtitle="oldest to newest · select a chunk for the reason">
+          <DecisionTimeline chunks={transactions} selected={selected} onSelect={selectChunk} limit={400} />
+        </Panel>
+      ) : null}
       <Panel title="Memory change" subtitle={`${backendLabel(s.backend)} · proposed (measured before the decision) and accepted (measured after it)`}>
         <LineChartPanel
           data={data}
           xKey="chunk"
           series={[
-            { key: 'proposed', label: 'Proposed Δ', color: SERIES_C },
-            { key: 'accepted', label: 'Accepted Δ', color: SERIES_B },
+            { key: 'proposed', label: 'Proposed change', color: SERIES_C, dashed: true },
+            { key: 'accepted', label: 'Accepted change', color: SERIES_B },
           ]}
           xLabel="chunk"
           ariaLabel="Proposed and accepted memory change per chunk"
@@ -198,9 +215,14 @@ export function SignalsScreen() {
             <LineChartPanel data={data} xKey="chunk" series={[{ key: c.field, label: c.title, color: c.color }]} logScale={c.log} xLabel="chunk" showLegend={false} ariaLabel={`${c.title} per chunk`} />
           </Panel>
         ))}
+        {transactions.some((tx) => isFinite_(tx.signals.cusum_s_hi) || isFinite_(tx.signals.cusum_s_lo)) ? (
+          <Panel title="CUSUM state (update-size alarm)">
+            <LineChartPanel data={data} xKey="chunk" series={[{ key: 'cusum_s_hi', label: 'Upper', color: SERIES_A }, { key: 'cusum_s_lo', label: 'Lower', color: SERIES_B }]} xLabel="chunk" ariaLabel="CUSUM state (s_hi and s_lo)" />
+          </Panel>
+        ) : null}
       </div>
       <FastWeightPanel state={state} />
-      <Panel title="Chunks" subtitle="newest first · click a row for z-scores, reasons, budget and canaries">
+      <Panel title="Chunks" subtitle="newest first · select a chunk number for z-scores, reasons, budget and canaries">
         <ChunkTable transactions={transactions} />
       </Panel>
     </div>

@@ -1,0 +1,4 @@
+2026-10-09 07:20:54 MDT 6ac8ea36fee2c90070178ba1 mode=bench tag=bench1 flavor=a10g-large timeout=30m env={'PYTHONUNBUFFERED': '1'}
+2026-10-09 07:22:12 MDT 6ac8ea84095c57808930640c mode=bench tag=bench2 flavor=a10g-large timeout=30m env={'PYTHONUNBUFFERED': '1'}
+2026-10-09 07:25:35 MDT 6ac8eb4efee2c90070178bff mode=A tag=jobA1 flavor=a10g-large timeout=4.5h env={'WORKERS': '10', 'STEPS': '10000', 'JOB_A_SECS': '15600', 'PYTHONUNBUFFERED': '1'}
+2026-10-09 07:25:38 MDT 6ac8eb52095c578089306442 mode=B tag=jobB1 flavor=a10g-large timeout=40m env={'JOB_B_SECS': '2100', 'PYTHONUNBUFFERED': '1'}

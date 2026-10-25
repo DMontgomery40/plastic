@@ -3,10 +3,10 @@
 import type { DecisionKind, HarnessConfig, RunnerSummary, TraceRecord, TransactionRecord, Turn } from './types';
 
 export const DECISION_COLOR: Record<DecisionKind, string> = {
-  commit: '#3fd17a',
-  rollback: '#ff6b6b',
-  scale: '#f0b429',
-  project: '#58a6ff',
+  commit: '#4ad6a7',
+  rollback: '#ff8466',
+  scale: '#f5d547',
+  project: '#8ab4ff',
   readonly: '#94a3b4',
 };
 
@@ -131,7 +131,10 @@ export function turnsFromTrace(trace: TraceRecord[], transactions: TransactionRe
   const out: Turn[] = [];
   let start = 0;
   chats.forEach((t, i) => {
-    const chunks = sorted.filter((tx) => tx.pos_start >= start && tx.pos_end <= t.pos_end);
+    let chunks = sorted.filter((tx) => tx.pos_start >= start && tx.pos_end <= t.pos_end);
+    // the trace and the chunk log are each cut to their newest records, so the first turn shown has no known start:
+    // its own chunk count says how many of the chunks that end before it belong to it
+    if (i === 0 && isFinite_(t.n_transactions) && chunks.length > t.n_transactions) chunks = chunks.slice(chunks.length - t.n_transactions);
     out.push({ index: i, prompt: t.prompt ?? '', completion: t.completion ?? '', t_unix: t.t_unix, pos_end: t.pos_end, chunks });
     start = t.pos_end;
   });

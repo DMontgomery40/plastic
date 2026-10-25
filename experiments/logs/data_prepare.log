@@ -1,0 +1,20 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[prepare] training tokenizer (vocab 4096) on 100000 lines of wikitext
+Generating test split:   0%|          | 0/4358 [00:00<?, ? examples/s]Generating test split: 100%|██████████| 4358/4358 [00:00<00:00, 123902.91 examples/s]
+Generating train split:   0%|          | 0/1801350 [00:00<?, ? examples/s]Generating train split:   2%|▏         | 29000/1801350 [00:00<00:06, 282272.33 examples/s]Generating train split:   8%|▊         | 139000/1801350 [00:00<00:02, 753981.88 examples/s]Generating train split:  14%|█▍        | 252000/1801350 [00:00<00:02, 759521.49 examples/s]Generating train split:  19%|█▉        | 340000/1801350 [00:00<00:01, 799061.89 examples/s]Generating train split:  25%|██▍       | 442000/1801350 [00:00<00:01, 799648.69 examples/s]Generating train split:  31%|███       | 557000/1801350 [00:00<00:01, 902838.62 examples/s]Generating train split:  39%|███▊      | 696000/1801350 [00:00<00:01, 875188.56 examples/s]Generating train split:  46%|████▌     | 830000/1801350 [00:00<00:01, 878408.15 examples/s]Generating train split:  53%|█████▎    | 961675/1801350 [00:01<00:00, 865893.67 examples/s]Generating train split:  60%|██████    | 1081675/1801350 [00:01<00:00, 941177.82 examples/s]Generating train split:  68%|██████▊   | 1228675/1801350 [00:01<00:00, 950162.44 examples/s]Generating train split:  75%|███████▍  | 1343675/1801350 [00:01<00:00, 897086.62 examples/s]Generating train split:  81%|████████▏ | 1466675/1801350 [00:01<00:00, 972606.35 examples/s]Generating train split:  89%|████████▊ | 1595675/1801350 [00:01<00:00, 927150.63 examples/s]Generating train split:  97%|█████████▋| 1740675/1801350 [00:01<00:00, 937517.78 examples/s]Generating train split: 100%|██████████| 1801350/1801350 [00:02<00:00, 888328.05 examples/s]
+Generating validation split:   0%|          | 0/3760 [00:00<?, ? examples/s]Generating validation split: 100%|██████████| 3760/3760 [00:00<00:00, 653621.64 examples/s]
+[prepare] tokenizer ready (24s)
+[prepare] train: 6,000,000 tokens -> artifacts/data/wikitext/train.bin (28s)
+[prepare] validation: 322,157 tokens -> artifacts/data/wikitext/validation.bin (29s)
+[prepare] test: 367,280 tokens -> artifacts/data/wikitext/test.bin (30s)
+{
+  "corpus": "wikitext",
+  "created_at_unix": 1791536933,
+  "splits": {
+    "test": 367280,
+    "train": 6000000,
+    "validation": 322157
+  },
+  "tokenizer_lines": 100000,
+  "vocab_size": 4096
+}

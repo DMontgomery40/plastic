@@ -120,10 +120,13 @@ export interface ChunkSignals {
   canary_alignment?: number | null;
   z: Record<string, number | null>;
   cusum_alarm: boolean;
+  cusum_s_hi: number;
+  cusum_s_lo: number;
   budget_used: number;
   budget_remaining: number | null;
   log_delta_norm: number | null;
   log_write_norm?: number | null;
+  calibrated_thresholds?: Record<string, number | null>;
 }
 
 /** ACCEPTED: measured on the committed state after the decision. */

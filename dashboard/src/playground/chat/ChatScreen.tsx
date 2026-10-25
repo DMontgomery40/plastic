@@ -10,6 +10,7 @@ import { LearningStrip, StripLegend } from './LearningStrip';
 
 function TurnCard({ turn }: { turn: Turn }) {
   const t = turnTotals(turn.chunks);
+  const selectChunk = useStore((s) => s.selectChunk);
   return (
     <article className="rounded border border-edge bg-surface-raised">
       <div className="border-b border-edge px-4 py-3">
@@ -18,18 +19,18 @@ function TurnCard({ turn }: { turn: Turn }) {
       </div>
       <div className="px-4 py-3">
         <p className="text-label font-semibold uppercase tracking-wide text-ink-muted">Model</p>
-        <p className="mt-1 whitespace-pre-wrap font-mono text-sm text-ink-primary [overflow-wrap:anywhere]">{turn.completion || <span className="text-ink-muted">(empty completion)</span>}</p>
+        <p className="mt-1 whitespace-pre-wrap font-mono text-sm text-ink-primary [overflow-wrap:anywhere]">{turn.completion || <span className="text-ink-muted">(the model produced no text)</span>}</p>
       </div>
       <div className="border-t border-edge px-4 py-3">
-        <LearningStrip chunks={turn.chunks} />
+        <LearningStrip chunks={turn.chunks} onSelect={selectChunk} />
         <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1 font-mono text-xs text-ink-secondary">
           <div><dt className="inline text-ink-muted">chunks </dt><dd className="inline">{t.chunks}</dd></div>
           <div><dt className="inline text-ink-muted">committed </dt><dd className="inline">{t.committed}</dd></div>
-          <div><dt className="inline text-ink-muted">intervened </dt><dd className="inline">{t.intervened}</dd></div>
+          <div><dt className="inline text-ink-muted">refused or reduced </dt><dd className="inline">{t.intervened}</dd></div>
           {t.wouldIntervene > 0 ? <div><dt className="inline text-ink-muted">would intervene </dt><dd className="inline">{t.wouldIntervene}</dd></div> : null}
           {t.readOnly > 0 ? <div><dt className="inline text-ink-muted">read-only </dt><dd className="inline">{t.readOnly}</dd></div> : null}
-          <div><dt className="inline text-ink-muted">proposed Δ </dt><dd className="inline">{fmt(t.proposed)}</dd></div>
-          <div><dt className="inline text-ink-muted">accepted Δ </dt><dd className="inline">{fmt(t.accepted)}</dd></div>
+          <div><dt className="inline text-ink-muted">proposed change </dt><dd className="inline">{fmt(t.proposed)}</dd></div>
+          <div><dt className="inline text-ink-muted">accepted </dt><dd className="inline">{fmt(t.accepted)}{t.proposed > 0 ? ` (${Math.round((t.accepted / t.proposed) * 100)}%)` : ''}</dd></div>
           <div><dt className="inline text-ink-muted">tokens </dt><dd className="inline">{t.promptTokens} prompt · {t.modelTokens} generated</dd></div>
         </dl>
       </div>
@@ -111,6 +112,7 @@ export function ChatScreen() {
   const transactions = useStore((s) => s.transactions);
   const models = useStore((s) => s.models);
   const busy = useStore((s) => s.busy);
+  const healthChecked = useStore((s) => s.healthChecked);
   const bottom = useRef<HTMLDivElement>(null);
   const turns = detail ? turnsFromTrace(detail.trace, transactions) : [];
 
@@ -119,7 +121,7 @@ export function ChatScreen() {
   }, [turns.length, busy.chat]);
 
   if (!detail) {
-    return <Empty title="No text session selected." detail={busy.session ? 'Loading…' : 'Choose a session above, or create one under Sessions.'} />;
+    return <Empty title="No text session selected." detail={busy.session || !healthChecked ? 'Loading…' : 'Choose a session above, or create one under Sessions.'} />;
   }
   const model = models.find((m) => m.model_id === detail.meta.model_id);
   const summary = detail.summary;
@@ -152,9 +154,7 @@ export function ChatScreen() {
             rows={[
               { label: 'Thresholds', value: thresholdSource(summary) },
               { label: 'Generated tokens', value: summary.writes_generation ? 'write to memory' : 'read-only' },
-              { label: 'CUSUM', value: `${fmt(summary.cusum?.s_hi, 2)} / ${fmt(summary.cusum?.s_lo, 2)}`, note: `h ${fmt(summary.cusum?.h, 2)} · ${summary.cusum?.alarms ?? 0} alarms` },
-              { label: 'Budget used', value: fmt(summary.budget_used), note: summary.budget_session === null ? 'no session cap' : `cap ${fmt(summary.budget_session)}` },
-              { label: 'Drift from anchor', value: fmt(summary.drift_from_anchor) },
+              { label: 'Drift from anchor', value: fmt(summary.drift_from_anchor), note: 'how far memory has moved from where the session started' },
               { label: 'Decision signals', value: present.length ? present.join(', ') : 'none' },
             ]}
             mono={false}

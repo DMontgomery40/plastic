@@ -1,0 +1,30 @@
+{
+ "curr": {
+  "n": 2000,
+  "pred_in_two_candidates": 0.9995,
+  "pred_correct": 0.5075,
+  "pred_wrong_generator": 0.492,
+  "null_pred_in_two_true_candidates": 0.415
+ },
+ "main_seed0": {
+  "n": 2000,
+  "pred_in_two_candidates": 0.3855,
+  "pred_correct": 0.1965,
+  "pred_wrong_generator": 0.189,
+  "null_pred_in_two_true_candidates": 0.389
+ },
+ "main_seed1": {
+  "n": 2000,
+  "pred_in_two_candidates": 0.357,
+  "pred_correct": 0.174,
+  "pred_wrong_generator": 0.183,
+  "null_pred_in_two_true_candidates": 0.369
+ },
+ "main_seed2": {
+  "n": 2000,
+  "pred_in_two_candidates": 0.382,
+  "pred_correct": 0.1915,
+  "pred_wrong_generator": 0.1905,
+  "null_pred_in_two_true_candidates": 0.372
+ }
+}

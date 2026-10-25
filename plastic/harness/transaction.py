@@ -250,6 +250,9 @@ class TransactionRunner:
             compression_ratio=compression_ratio(self.pending) if self.domain == "text" else None,
             budget_used=self.budget_used,
             budget_remaining=(None if self.hcfg.budget_session is None else self.hcfg.budget_session - self.budget_used),
+            cusum_s_hi=self.cusum.s_hi,
+            cusum_s_lo=self.cusum.s_lo,
+            calibrated_thresholds=(self.calibration.thresholds if self.calibration is not None else {}),
         )
         if self.read_only or not self.pending_eligible:
             # a chunk with no token permitted to learn has zero writes by construction:

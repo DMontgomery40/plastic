@@ -43,7 +43,7 @@ describe('sessions screen', () => {
 describe('calibrate action', () => {
   it('shows the running calibration as a state, disables mutations, then reports the model as calibrated', async () => {
     render(<SessionsScreen />);
-    expect(screen.getByText(/no calibration/)).toBeTruthy();
+    expect(screen.getByText(/759,000,000 params · no calibration/)).toBeTruthy();
     const button = screen.getByTitle('Fit thresholds on real chats with this model');
     expect(button.textContent).toBe('Calibrate');
     await act(async () => { fireEvent.click(button); });

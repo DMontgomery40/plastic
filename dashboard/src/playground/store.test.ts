@@ -19,3 +19,27 @@ describe('bootstrap', () => {
     expect(useStore.getState().currentSessionId).toBe('demo_text');
   });
 });
+
+describe('long sessions', () => {
+  it('loads the newest chunks, not the first page of the log', async () => {
+    const rec = (i: number) => ({ index: i });
+    const requested: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      requested.push(url);
+      if (url.includes('/transactions')) {
+        const q = new URL(url, 'http://x').searchParams;
+        const offset = Number(q.get('offset')), limit = Number(q.get('limit'));
+        const all = Array.from({ length: 650 }, (_, i) => rec(i));
+        return new Response(JSON.stringify({ total: 650, items: all.slice(offset, offset + limit) }));
+      }
+      if (url.endsWith('/state')) return new Response(JSON.stringify({ pos: 0 }));
+      return new Response(JSON.stringify({ meta: { session_id: 's' }, summary: {}, transactions: [], trace: [] }));
+    }));
+    useStore.setState({ currentSessionId: 's' });
+    await useStore.getState().reloadCurrent();
+    const tx = useStore.getState().transactions as unknown as { index: number }[];
+    expect(tx).toHaveLength(400);
+    expect(tx[0].index).toBe(250);
+    expect(tx[tx.length - 1].index).toBe(649);
+  });
+});

@@ -19,6 +19,8 @@ function tx(index: number, pos_start: number, pos_end: number, opts: Partial<Tra
       delta_norm: 10,
       z: {},
       cusum_alarm: false,
+      cusum_s_hi: 0,
+      cusum_s_lo: 0,
       budget_used: 0,
       budget_remaining: null,
       log_delta_norm: 2.3,
@@ -44,6 +46,12 @@ describe('turns', () => {
     expect(turns.map((t) => t.prompt)).toEqual(['a', 'b']);
     expect(turns[0].chunks.map((c) => c.index)).toEqual([0, 1]);
     expect(turns[1].chunks.map((c) => c.index)).toEqual([2, 3]);
+  });
+
+  it('does not hand earlier turns’ chunks to the first turn shown when the trace was cut to its newest turns', () => {
+    const trace: TraceRecord[] = [{ t_unix: 9, kind: 'chat', prompt: 'late', completion: 'L', pos_end: 48, n_transactions: 2 }];
+    const turns = turnsFromTrace(trace, [tx(0, 0, 16), tx(1, 16, 32), tx(2, 32, 40), tx(3, 40, 48)]);
+    expect(turns[0].chunks.map((c) => c.index)).toEqual([2, 3]);
   });
 
   it('totals distinguish applied interventions, would-have interventions and read-only observations', () => {
