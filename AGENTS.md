@@ -69,6 +69,13 @@ require their own task-specific readiness note before accepting their output.
 - Before concurrent work, read the latest `SHARED_SCRATCHPAD.md` entries. Respect
   the recorded ownership and agree on overlapping edits there. The user's current
   instructions can change scope or ownership.
+- Keep the canonical-checkout limits below. Serialize overlapping edits, generated
+  files and dependency changes; reviewers use a stable diff or snapshot. Every
+  delegated brief needs owned files, a finite tool-call/time budget, a stopping
+  condition and the integration owner. Return partial findings at the limit.
+- Run deterministic checks directly; use the configured Jev checker for bounded
+  semantic questions with relevant source and explicit criteria. Do not create
+  lint-only reasoning agents or use model confidence as experimental evidence.
 - The scratchpad is append-only. Reread its tail before appending a timestamped
   entry with findings, exact file/line references, verification, and open requests.
   Keep transient status and test counts there rather than in this file.
@@ -91,6 +98,12 @@ git diff --check
 ```
 
 There is no single cross-language quality gate. Use the relevant gates:
+
+Contributors run focused checks for owned changes and hand unrelated or concurrent
+failures to the integration owner. After writers pause, the integration owner runs
+the required combined gates below on stable work. Do not make every contributor
+repeat the full suite against other agents' unfinished edits. Rerun only after a
+relevant change or invalidated result; preserve required final verification.
 
 - Python changes: run focused tests and the full Python suite. The existing
   `.venv/bin/python -m pytest` is an equivalent runner when the environment is ready.

@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import copy
 
+import pytest
+
 from plastic.data.rules import OPERATORS, RuleBatch
 from plastic.eval.text_contract import TextContractSpec, measure, run_text_contract
 from plastic.eval.text_contract import split_pairs
@@ -296,3 +298,116 @@ def test_the_name_permuted_content_null_is_an_optional_bad_stream_with_its_own_c
     assert r["choice"]["after_names"]["train"]["items"] and r["choice"]["paired"]["names_vs_before"]["train"]["n"] == 2 * 17
     off = run_text_contract(ChoiceLearner(accept_poison=False), TextContractSpec(**{**spec.__dict__, "name_permuted_control": False}), seed=0)
     assert off["name_permuted"] is None and off["acceptance"]["n_bad"] == 3
+
+
+@pytest.mark.parametrize("arm", [
+    pytest.param(1, id="clean"), pytest.param(2, id="clean-again"),
+    pytest.param(3, id="sequential-poison"), pytest.param(4, id="snapshot-poison"),
+    pytest.param(5, id="corrective"), pytest.param(6, id="format-only"),
+    pytest.param(7, id="content-null"),
+])
+@pytest.mark.parametrize("failure_at", ["consume", "score"])
+def test_failed_contract_restores_entry_slow_state_from_every_arm(arm, failure_at):
+    """A partial update or failed measurement must not leak any arm's weights to the caller."""
+    failure = RuntimeError("injected failure after an update")
+
+    class FailingLearner(ChoiceLearner):
+        def consume(self, stream):
+            record = super().consume(stream)
+            self.known.add(("update", str(len(self.consumed))))
+            if failure_at == "consume" and len(self.consumed) == arm:
+                raise failure
+            return record
+
+        def score(self, batch, *, adapt):
+            if failure_at == "score" and len(self.consumed) == arm:
+                raise failure
+            return super().score(batch, adapt=adapt)
+
+    learner = FailingLearner(accept_poison=True)
+    learner.known = {("existing", "knowledge")}
+    spec = TextContractSpec(n_heldout=8, eval_episodes_per_composition=1, stream_episodes=17,
+                            rule_set="decorate", poison_operator="#P", stated_rules=False,
+                            name_permuted_control=True)
+    with pytest.raises(RuntimeError) as caught:
+        run_text_contract(learner, spec)
+    assert caught.value is failure
+    assert learner.known == {("existing", "knowledge")}
+
+
+@pytest.mark.parametrize("failure_at", ["choice", "chat", "interrupt"])
+def test_contract_recovers_from_optional_measurement_failure_and_interruption(failure_at):
+    failure = KeyboardInterrupt() if failure_at == "interrupt" else RuntimeError("measurement failed")
+
+    class FailingLearner(ChoiceLearner):
+        def score(self, batch, *, adapt):
+            if self.consumed and failure_at == "interrupt":
+                raise failure
+            return super().score(batch, adapt=adapt)
+
+        def choice(self, batch):
+            if self.consumed and failure_at == "choice":
+                raise failure
+            return super().choice(batch)
+
+    learner = FailingLearner(accept_poison=True)
+    learner.known = {("existing", "knowledge")}
+
+    def chat_nll():
+        if learner.consumed and failure_at == "chat":
+            raise failure
+        return {"mean": 1.0}
+
+    spec = TextContractSpec(n_heldout=8, eval_episodes_per_composition=1, stream_episodes=6)
+    with pytest.raises(type(failure)) as caught:
+        run_text_contract(learner, spec, chat_nll=chat_nll)
+    assert caught.value is failure
+    assert learner.known == {("existing", "knowledge")}
+
+
+def test_contract_elapsed_time_includes_snapshot_and_final_recovery(monkeypatch):
+    clock = [100.0]
+    monkeypatch.setattr("plastic.eval.text_contract.time.time", lambda: clock[0])
+
+    class TimedLearner(FakeLearner):
+        def snapshot_slow(self):
+            clock[0] += 2.0
+            return super().snapshot_slow()
+
+        def restore_slow(self, snapshot):
+            clock[0] += 3.0
+            super().restore_slow(snapshot)
+
+        def consume(self, stream):
+            clock[0] += 5.0
+            return super().consume(stream)
+
+    learner = TimedLearner(accept_poison=True)
+    learner.known = {("existing", "knowledge")}
+    spec = TextContractSpec(n_heldout=8, eval_episodes_per_composition=1, stream_episodes=6)
+    started = clock[0]
+    report = run_text_contract(learner, spec)
+    assert report["compute"]["wall_clock_s"] == clock[0] - started
+    assert learner.known == {("existing", "knowledge")}
+
+
+def test_contract_reports_failed_recovery_with_the_original_failure_attached():
+    """A broken restore must be visible, rather than returning a report or hiding the experiment error."""
+    failure = RuntimeError("measurement failed")
+    recovery_failure = ValueError("cannot restore slow state")
+
+    class UnrecoverableLearner(FakeLearner):
+        def score(self, batch, *, adapt):
+            if self.consumed:
+                raise failure
+            return super().score(batch, adapt=adapt)
+
+        def restore_slow(self, snapshot):
+            raise recovery_failure
+
+    learner = UnrecoverableLearner(accept_poison=True)
+    spec = TextContractSpec(n_heldout=8, eval_episodes_per_composition=1, stream_episodes=6)
+    with pytest.raises(ValueError) as caught:
+        run_text_contract(learner, spec)
+    assert caught.value is recovery_failure
+    assert caught.value.__context__ is failure
