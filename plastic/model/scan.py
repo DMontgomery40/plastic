@@ -28,6 +28,8 @@ def scan_sequential(a: Tensor, u: Tensor, h0: Tensor | None = None) -> tuple[Ten
     """
     B, T, D = u.shape
     h = torch.zeros(B, D, dtype=u.dtype, device=u.device) if h0 is None else h0
+    if T == 0:
+        return u, h
     out = []
     for t in range(T):
         h = a[:, t] * h + u[:, t]
@@ -45,11 +47,15 @@ def scan_chunked(
 
     Any ``T`` is accepted; the sequence is padded to a multiple of ``chunk``
     with ``a = 1, u = 0`` (state held constant) and the padding is sliced off.
+    An empty sequence returns empty outputs and preserves the initial state.
     """
     B, T, D = u.shape
     L = int(chunk)
     if L < 1:
         raise ValueError("chunk must be >= 1")
+    if T == 0:
+        h = torch.zeros(B, D, dtype=u.dtype, device=u.device) if h0 is None else h0
+        return u, h
     pad = (-T) % L
     if pad:
         a = torch.cat([a, torch.ones(B, pad, D, dtype=a.dtype, device=a.device)], dim=1)
