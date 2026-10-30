@@ -222,7 +222,24 @@ def contract_split(spec: TextContractSpec) -> tuple[list[tuple[str, ...]], list[
 
 
 def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int = 0, chat_nll: Any = None) -> dict[str, Any]:
+    """Evaluate the contract without retaining its experimental slow-weight updates.
+
+    The entry snapshot is restored on success, failure, or interruption. The learner
+    owns what its snapshot includes; this does not reset logs or measurement counters.
+    A restore failure propagates, with any experiment failure retained as its context.
+    """
     t0 = time.time()
+    snapshot = learner.snapshot_slow()
+    try:
+        report = _run_text_contract(learner, spec, snapshot, seed=seed, chat_nll=chat_nll)
+    finally:
+        learner.restore_slow(snapshot)
+    report["compute"]["wall_clock_s"] = time.time() - t0
+    return report
+
+
+def _run_text_contract(learner: TextLearner, spec: TextContractSpec, snapshot: Any, *, seed: int, chat_nll: Any) -> dict[str, Any]:
+    """Run the experiment arms inside the caller's slow-state lifetime."""
     split = contract_split(spec)
     train, heldout = split
     dups = output_duplicates(train, heldout, spec.rule_set)
@@ -231,8 +248,6 @@ def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int
         raise ValueError("the learner's held-in material (train_compositions) is not the contract's training split; build it with contract_split(spec)")
 
     before = measure(learner, spec, split, seed, chat_nll=chat_nll, with_choice="before" in spec.choice_at)
-    snapshot = learner.snapshot_slow()
-
     clean = make_stream(spec, split, seed, tag="stream_clean")
     rec_clean = learner.consume(clean)
     after = measure(learner, spec, split, seed, chat_nll=chat_nll, with_choice="after" in spec.choice_at)
@@ -410,6 +425,5 @@ def run_text_contract(learner: TextLearner, spec: TextContractSpec, *, seed: int
                                    + (after_seq["situations"] if after_seq is not None else 0) + (after_clean_again["situations"] if after_clean_again is not None else 0)
                                    + (after_names["situations"] if after_names is not None else 0),
             "context_situations_measured": int(getattr(learner, "context_situations_measured", 0)),
-            "wall_clock_s": time.time() - t0,
         },
     }
